@@ -23,6 +23,8 @@ use super::models::NetworkClient;
 use super::models::NetworkCreateProject;
 use super::models::NetworkCreateTag;
 use super::models::NetworkProject;
+use super::models::NetworkRenameProject;
+use super::models::NetworkRenameTag;
 use super::models::NetworkTag;
 use super::models::NetworkTask;
 use super::models::NetworkTimeEntry;
@@ -54,7 +56,21 @@ pub trait ApiClient {
 
     async fn create_tag(&self, workspace_id: i64, name: String) -> ResultWithDefaultError<Tag>;
 
+    async fn rename_tag(
+        &self,
+        workspace_id: i64,
+        tag_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<Tag>;
+
     async fn delete_tag(&self, workspace_id: i64, tag_id: i64) -> ResultWithDefaultError<()>;
+
+    async fn rename_project(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<Project>;
 }
 
 pub struct V9ApiClient {
@@ -258,12 +274,62 @@ impl ApiClient for V9ApiClient {
         })
     }
 
+    async fn rename_tag(
+        &self,
+        workspace_id: i64,
+        tag_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<Tag> {
+        let url = format!(
+            "{}/workspaces/{}/tags/{}",
+            self.base_url, workspace_id, tag_id
+        );
+        let body = NetworkRenameTag {
+            name: new_name,
+            workspace_id,
+        };
+        let network_tag = self.put::<NetworkTag, NetworkRenameTag>(url, &body).await?;
+        Ok(Tag {
+            id: network_tag.id,
+            name: network_tag.name,
+            workspace_id: network_tag.workspace_id,
+        })
+    }
+
     async fn delete_tag(&self, workspace_id: i64, tag_id: i64) -> ResultWithDefaultError<()> {
         let url = format!(
             "{}/workspaces/{}/tags/{}",
             self.base_url, workspace_id, tag_id
         );
         self.delete(url).await
+    }
+
+    async fn rename_project(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<Project> {
+        let url = format!(
+            "{}/workspaces/{}/projects/{}",
+            self.base_url, workspace_id, project_id
+        );
+        let body = NetworkRenameProject { name: new_name };
+        let network_project = self
+            .put::<NetworkProject, NetworkRenameProject>(url, &body)
+            .await?;
+        Ok(Project {
+            id: network_project.id,
+            name: network_project.name,
+            workspace_id: network_project.workspace_id,
+            client: None,
+            is_private: network_project.is_private,
+            active: network_project.active,
+            at: network_project.at,
+            created_at: network_project.created_at,
+            color: network_project.color,
+            billable: network_project.billable,
+        })
     }
 
     async fn get_entities(&self) -> ResultWithDefaultError<Entities> {

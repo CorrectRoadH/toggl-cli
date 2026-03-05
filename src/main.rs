@@ -19,6 +19,8 @@ use arguments::Command::CreateTag;
 use arguments::Command::Current;
 use arguments::Command::DeleteProject;
 use arguments::Command::DeleteTag;
+use arguments::Command::RenameProject;
+use arguments::Command::RenameTag;
 use arguments::Command::List;
 use arguments::Command::Logout;
 use arguments::Command::Running;
@@ -32,6 +34,8 @@ use commands::create_project::CreateProjectCommand;
 use commands::create_tag::CreateTagCommand;
 use commands::delete_project::DeleteProjectCommand;
 use commands::delete_tag::DeleteTagCommand;
+use commands::rename_project::RenameProjectCommand;
+use commands::rename_tag::RenameTagCommand;
 use commands::list::ListCommand;
 use commands::running::RunningTimeEntryCommand;
 use commands::start::StartCommand;
@@ -126,6 +130,14 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
 
             DeleteTag { name } => {
                 DeleteTagCommand::execute(get_default_api_client()?, name).await?
+            }
+
+            RenameTag { old_name, new_name } => {
+                RenameTagCommand::execute(get_default_api_client()?, old_name, new_name).await?
+            }
+
+            RenameProject { old_name, new_name } => {
+                RenameProjectCommand::execute(get_default_api_client()?, old_name, new_name).await?
             }
 
             Auth { api_token } => {

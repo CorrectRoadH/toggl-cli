@@ -94,6 +94,20 @@ pub enum Command {
         #[structopt(help = "Name of the tag to delete")]
         name: String,
     },
+    #[structopt(about = "Rename a tag in your workspace")]
+    RenameTag {
+        #[structopt(help = "Current name of the tag")]
+        old_name: String,
+        #[structopt(help = "New name for the tag")]
+        new_name: String,
+    },
+    #[structopt(about = "Rename a project in your workspace")]
+    RenameProject {
+        #[structopt(help = "Current name of the project")]
+        old_name: String,
+        #[structopt(help = "New name for the project")]
+        new_name: String,
+    },
     #[structopt(about = "Manage auto-tracking configuration")]
     Config {
         #[structopt(

@@ -5,6 +5,8 @@ pub mod create_tag;
 pub mod delete_project;
 pub mod delete_tag;
 pub mod list;
+pub mod rename_project;
+pub mod rename_tag;
 pub mod running;
 pub mod start;
 pub mod stop;
