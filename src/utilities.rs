@@ -3,10 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use chrono::{DateTime, Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use colored::Colorize;
 use directories::BaseDirs;
 
-use crate::{constants, models::ResultWithDefaultError};
+use crate::{constants, error::ArgumentError, models::ResultWithDefaultError};
 
 pub fn remove_trailing_newline(value: String) -> String {
     value.trim_end().to_string()
@@ -75,6 +76,46 @@ pub fn get_git_branch_for_dir(dir: &PathBuf) -> Option<String> {
     }
     let branch = String::from_utf8(output.stdout).ok()?;
     Some(branch.trim().to_string())
+}
+
+pub fn parse_datetime_input(input: &str) -> ResultWithDefaultError<DateTime<Utc>> {
+    let value = input.trim();
+    if value.is_empty() {
+        return Err(Box::new(ArgumentError::InvalidDateTime(input.to_string())));
+    }
+
+    if let Ok(parsed) = DateTime::parse_from_rfc3339(value) {
+        return Ok(parsed.with_timezone(&Utc));
+    }
+
+    let local_formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+    ];
+
+    for format in local_formats {
+        if let Ok(naive) = NaiveDateTime::parse_from_str(value, format) {
+            return match Local.from_local_datetime(&naive) {
+                LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc)),
+                _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+            };
+        }
+    }
+
+    if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        let naive = match date.and_hms_opt(0, 0, 0) {
+            Some(naive) => naive,
+            None => return Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+        };
+        return match Local.from_local_datetime(&naive) {
+            LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc)),
+            _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+        };
+    }
+
+    Err(Box::new(ArgumentError::InvalidDateTime(input.to_string())))
 }
 
 #[cfg(unix)]

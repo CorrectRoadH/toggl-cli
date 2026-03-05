@@ -90,6 +90,12 @@ toggl start "Consulting" -b
 # Combine options
 toggl start "Feature work" -p "ClientProject" -t "dev review" -b
 
+# Start from a specific start time (creates a running entry)
+toggl start "Backfill" --start "2026-03-05 09:00"
+
+# Create a closed time entry with explicit start/end
+toggl start "Sprint planning" --start "2026-03-05 09:00" --end "2026-03-05 10:30"
+
 # Interactive mode
 toggl start --interactive
 toggl start -i
@@ -99,7 +105,15 @@ toggl start "description" -i
 toggl --fzf start -i
 ```
 
-Behavior: starting a new entry stops any currently running entry.
+Behavior:
+- Starting a running entry stops any currently running entry.
+- If `--start` and `--end` are both provided, a stopped historical entry is created and running entries are not touched.
+- `--end` requires `--start`.
+
+Accepted datetime formats:
+- RFC3339: `2026-03-05T09:00:00+08:00`
+- Local time: `YYYY-MM-DD HH:MM[:SS]` or `YYYY-MM-DDTHH:MM[:SS]`
+- Date only: `YYYY-MM-DD` (interpreted as `00:00:00` local time)
 
 ---
 
@@ -129,13 +143,17 @@ toggl --fzf continue -i
 toggl edit -d "Updated description"
 toggl edit -p "New Project"
 toggl edit -t "tag1 tag2"
+toggl edit --start "2026-03-05 09:00"
+toggl edit --end "2026-03-05 10:30"
 
 # Remove project / clear tags on current entry
 toggl edit -p ""
 toggl edit -t ""
+toggl edit --end ""
 
 # Edit a specific entry by ID
 toggl edit 123456789 -d "Updated description" -p "Project" -t "tag1 tag2"
+toggl edit 123456789 --start "2026-03-05 09:00" --end "2026-03-05 11:00"
 
 # Delete by ID
 toggl delete 123456789

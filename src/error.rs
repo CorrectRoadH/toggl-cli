@@ -160,6 +160,8 @@ impl Error for ConfigError {}
 pub enum ArgumentError {
     DirectoryNotFound(PathBuf),
     NotADirectory(PathBuf),
+    InvalidDateTime(String),
+    InvalidTimeRange(String),
 }
 
 impl Display for ArgumentError {
@@ -178,6 +180,16 @@ impl Display for ArgumentError {
                     constants::NOT_A_DIRECTORY_ERROR.red(),
                     path.display()
                 )
+            }
+            ArgumentError::InvalidDateTime(value) => {
+                format!(
+                    "{}: {}\nAccepted formats: RFC3339 (e.g. 2026-03-05T09:00:00+08:00), YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD",
+                    "Invalid date/time value".red(),
+                    value
+                )
+            }
+            ArgumentError::InvalidTimeRange(message) => {
+                format!("{}: {}", "Invalid time range".red(), message)
             }
         };
         writeln!(f, "{summary}")

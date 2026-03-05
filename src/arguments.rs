@@ -72,6 +72,16 @@ pub enum Command {
         tags: Option<Vec<String>>,
         #[structopt(short, long)]
         billable: bool,
+        #[structopt(
+            long,
+            help = "Start date/time. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD"
+        )]
+        start: Option<String>,
+        #[structopt(
+            long,
+            help = "End date/time. Requires --start. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD"
+        )]
+        end: Option<String>,
     },
     Continue {
         #[structopt(short, long)]
@@ -97,6 +107,16 @@ pub enum Command {
             help = "New space-separated list of tags (use empty string \"\" to clear tags)"
         )]
         tags: Option<Vec<String>>,
+        #[structopt(
+            long,
+            help = "New start date/time. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD"
+        )]
+        start: Option<String>,
+        #[structopt(
+            long,
+            help = "New end date/time (use empty string \"\" to clear end time). Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD"
+        )]
+        end: Option<String>,
     },
     #[structopt(about = "Delete a time entry by ID")]
     Delete {

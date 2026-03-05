@@ -1,5 +1,8 @@
 use crate::api::client::ApiClient;
+use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
+use crate::utilities;
+use chrono::{DateTime, Utc};
 use colored::Colorize;
 
 pub struct EditCommand;
@@ -11,6 +14,8 @@ impl EditCommand {
         description: Option<String>,
         project_name: Option<String>,
         tags: Option<Vec<String>>,
+        start: Option<String>,
+        end: Option<String>,
     ) -> ResultWithDefaultError<()> {
         let entities = api_client.get_entities().await?;
 
@@ -22,6 +27,16 @@ impl EditCommand {
         match time_entry {
             None => println!("{}", "No matching time entry found".yellow()),
             Some(entry) => {
+                let parsed_start = match start {
+                    Some(value) => Some(utilities::parse_datetime_input(&value)?),
+                    None => None,
+                };
+                let parsed_end = match end {
+                    Some(value) if value.is_empty() => None,
+                    Some(value) => Some(utilities::parse_datetime_input(&value)?),
+                    None => entry.stop.clone(),
+                };
+
                 let project = match project_name.as_deref() {
                     Some("") => None,
                     Some(name) => entities
@@ -38,10 +53,16 @@ impl EditCommand {
                     None => entry.tags.clone(),
                 };
 
+                let start = parsed_start.unwrap_or(entry.start);
+                let (stop, duration) = compute_stop_and_duration(start, parsed_end)?;
+
                 let updated = crate::models::TimeEntry {
                     description: description.unwrap_or(entry.description.clone()),
                     project,
                     tags,
+                    start,
+                    stop,
+                    duration,
                     ..entry
                 };
 
@@ -53,5 +74,22 @@ impl EditCommand {
         }
 
         Ok(())
+    }
+}
+
+fn compute_stop_and_duration(
+    start: DateTime<Utc>,
+    stop: Option<DateTime<Utc>>,
+) -> ResultWithDefaultError<(Option<DateTime<Utc>>, i64)> {
+    match stop {
+        Some(end) => {
+            if end <= start {
+                return Err(Box::new(ArgumentError::InvalidTimeRange(
+                    "end must be later than start".to_string(),
+                )));
+            }
+            Ok((Some(end), (end - start).num_seconds()))
+        }
+        None => Ok((None, -start.timestamp())),
     }
 }

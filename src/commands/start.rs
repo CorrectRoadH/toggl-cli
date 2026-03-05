@@ -1,6 +1,7 @@
 use crate::api;
 use crate::commands;
 use crate::config;
+use crate::error::ArgumentError;
 use crate::models;
 use crate::models::Entities;
 use crate::picker::ItemPicker;
@@ -8,6 +9,7 @@ use crate::picker::PickableItem;
 use crate::picker::PickableItemKind;
 use crate::utilities;
 use api::client::ApiClient;
+use chrono::{DateTime, Utc};
 use colored::Colorize;
 use commands::stop::{StopCommand, StopCommandOrigin};
 use models::{ResultWithDefaultError, TimeEntry};
@@ -93,8 +95,35 @@ impl StartCommand {
         tags: Option<Vec<String>>,
         billable: bool,
         interactive: bool,
+        start: Option<String>,
+        end: Option<String>,
     ) -> ResultWithDefaultError<()> {
-        StopCommand::execute(&api_client, StopCommandOrigin::StartCommand).await?;
+        let parsed_start = match start {
+            Some(value) => Some(utilities::parse_datetime_input(&value)?),
+            None => None,
+        };
+        let parsed_end = match end {
+            Some(value) => Some(utilities::parse_datetime_input(&value)?),
+            None => None,
+        };
+
+        if parsed_end.is_some() && parsed_start.is_none() {
+            return Err(Box::new(ArgumentError::InvalidTimeRange(
+                "--end requires --start".to_string(),
+            )));
+        }
+
+        if let (Some(start), Some(end)) = (parsed_start, parsed_end) {
+            if end <= start {
+                return Err(Box::new(ArgumentError::InvalidTimeRange(
+                    "end must be later than start".to_string(),
+                )));
+            }
+        }
+
+        if parsed_end.is_none() {
+            StopCommand::execute(&api_client, StopCommandOrigin::StartCommand).await?;
+        }
 
         let workspace_id = (api_client.get_user().await?).default_workspace_id;
         let entities = api_client.get_entities().await?;
@@ -128,7 +157,7 @@ impl StartCommand {
 
         let description = description.unwrap_or(default_time_entry.description.clone());
 
-        let time_entry_to_create = {
+        let mut time_entry_to_create = {
             let initial_entry = TimeEntry {
                 description,
                 project,
@@ -144,6 +173,8 @@ impl StartCommand {
             }
         };
 
+        apply_custom_time_range(&mut time_entry_to_create, parsed_start, parsed_end)?;
+
         let started_entry_id = api_client
             .create_time_entry(time_entry_to_create.clone())
             .await;
@@ -156,4 +187,31 @@ impl StartCommand {
 
         Ok(())
     }
+}
+
+fn apply_custom_time_range(
+    time_entry: &mut TimeEntry,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> ResultWithDefaultError<()> {
+    if let Some(start) = start {
+        time_entry.start = start;
+        match end {
+            Some(end) => {
+                if end <= start {
+                    return Err(Box::new(ArgumentError::InvalidTimeRange(
+                        "end must be later than start".to_string(),
+                    )));
+                }
+                time_entry.stop = Some(end);
+                time_entry.duration = (end - start).num_seconds();
+            }
+            None => {
+                time_entry.stop = None;
+                time_entry.duration = -start.timestamp();
+            }
+        }
+    }
+
+    Ok(())
 }

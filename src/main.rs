@@ -119,6 +119,8 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 description,
                 project,
                 tags,
+                start,
+                end,
             } => {
                 StartCommand::execute(
                     get_default_api_client()?,
@@ -128,6 +130,8 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                     tags,
                     billable,
                     interactive,
+                    start,
+                    end,
                 )
                 .await?
             }
@@ -137,9 +141,19 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 description,
                 project,
                 tags,
+                start,
+                end,
             } => {
-                EditCommand::execute(get_default_api_client()?, id, description, project, tags)
-                    .await?
+                EditCommand::execute(
+                    get_default_api_client()?,
+                    id,
+                    description,
+                    project,
+                    tags,
+                    start,
+                    end,
+                )
+                .await?
             }
 
             Delete { id } => DeleteCommand::execute(get_default_api_client()?, id).await?,
