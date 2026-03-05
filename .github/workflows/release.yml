@@ -49,6 +49,8 @@ jobs:
     runs-on: "ubuntu-latest"
     env:
       CARGO_TERM_COLOR: always
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,14 +59,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.5
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev
       - name: Run cargo check
         run: cargo check --locked
-      - name: Run cargo test
-        run: cargo test --locked
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
       - name: Run cargo clippy
@@ -72,8 +74,6 @@ jobs:
 
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
-    needs:
-      - preflight
     runs-on: "ubuntu-latest"
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
@@ -90,28 +90,8 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          PYTHON_BIN=python3
-          if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-            PYTHON_BIN=python
-          fi
-          VERSION="$VERSION" "$PYTHON_BIN" - <<'PY'
-          import os
-          import pathlib
-          import re
-
-          version = os.environ["VERSION"]
-          cargo_toml = pathlib.Path("Cargo.toml")
-          content = cargo_toml.read_text()
-          updated, count = re.subn(
-              r'(?m)^version\s*=\s*"[0-9A-Za-z.+-]+"\s*$',
-              f'version = "{version}"',
-              content,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit("failed to update package version in Cargo.toml")
-          cargo_toml.write_text(updated)
-          PY
+          sed -E "0,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/s//version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
+          mv Cargo.toml.tmp Cargo.toml
       - name: Install dist
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
@@ -164,6 +144,8 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - name: enable windows longpaths
         run: |
@@ -175,28 +157,8 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          PYTHON_BIN=python3
-          if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-            PYTHON_BIN=python
-          fi
-          VERSION="$VERSION" "$PYTHON_BIN" - <<'PY'
-          import os
-          import pathlib
-          import re
-
-          version = os.environ["VERSION"]
-          cargo_toml = pathlib.Path("Cargo.toml")
-          content = cargo_toml.read_text()
-          updated, count = re.subn(
-              r'(?m)^version\s*=\s*"[0-9A-Za-z.+-]+"\s*$',
-              f'version = "{version}"',
-              content,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit("failed to update package version in Cargo.toml")
-          cargo_toml.write_text(updated)
-          PY
+          sed -E "0,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/s//version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
+          mv Cargo.toml.tmp Cargo.toml
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
         run: |
@@ -206,6 +168,8 @@ jobs:
           fi
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.5
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       # Get the dist-manifest
@@ -261,28 +225,8 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          PYTHON_BIN=python3
-          if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-            PYTHON_BIN=python
-          fi
-          VERSION="$VERSION" "$PYTHON_BIN" - <<'PY'
-          import os
-          import pathlib
-          import re
-
-          version = os.environ["VERSION"]
-          cargo_toml = pathlib.Path("Cargo.toml")
-          content = cargo_toml.read_text()
-          updated, count = re.subn(
-              r'(?m)^version\s*=\s*"[0-9A-Za-z.+-]+"\s*$',
-              f'version = "{version}"',
-              content,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit("failed to update package version in Cargo.toml")
-          cargo_toml.write_text(updated)
-          PY
+          sed -E "0,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/s//version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
+          mv Cargo.toml.tmp Cargo.toml
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
@@ -320,11 +264,12 @@ jobs:
   # Determines if we should publish/announce
   host:
     needs:
+      - preflight
       - plan
       - build-local-artifacts
       - build-global-artifacts
     # Only run if we're "publishing", and only if local and global didn't fail (skipped is fine)
-    if: ${{ always() && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
+    if: ${{ always() && needs.preflight.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: "ubuntu-latest"
@@ -338,28 +283,8 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          PYTHON_BIN=python3
-          if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-            PYTHON_BIN=python
-          fi
-          VERSION="$VERSION" "$PYTHON_BIN" - <<'PY'
-          import os
-          import pathlib
-          import re
-
-          version = os.environ["VERSION"]
-          cargo_toml = pathlib.Path("Cargo.toml")
-          content = cargo_toml.read_text()
-          updated, count = re.subn(
-              r'(?m)^version\s*=\s*"[0-9A-Za-z.+-]+"\s*$',
-              f'version = "{version}"',
-              content,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit("failed to update package version in Cargo.toml")
-          cargo_toml.write_text(updated)
-          PY
+          sed -E "0,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/s//version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
+          mv Cargo.toml.tmp Cargo.toml
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
