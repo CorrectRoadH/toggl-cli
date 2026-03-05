@@ -86,7 +86,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          sed -E "1,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/ s//version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
+          sed -E "1,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/ s/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
           mv Cargo.toml.tmp Cargo.toml
       - name: Install dist
         # we specify bash to get pipefail; it guards against the `curl` command
@@ -151,7 +151,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          sed -E "1,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/ s//version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
+          sed -E "1,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/ s/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
           mv Cargo.toml.tmp Cargo.toml
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
@@ -217,7 +217,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          sed -E "1,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/ s//version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
+          sed -E "1,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/ s/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
           mv Cargo.toml.tmp Cargo.toml
       - name: Install cached dist
         uses: actions/download-artifact@v4
@@ -275,7 +275,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          sed -E "1,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/ s//version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
+          sed -E "1,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/ s/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
           mv Cargo.toml.tmp Cargo.toml
       - name: Install cached dist
         uses: actions/download-artifact@v4
