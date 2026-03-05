@@ -15,7 +15,7 @@ This skill helps you manage Toggl Track from the command line using the `toggl` 
 
 ## Prerequisites
 
-- `toggl` binary installed (`cargo install toggl` or from releases)
+- `toggl` binary installed (`npm install -g @correctroadh/toggl-cli`)
 - Authenticated: `toggl auth <TOKEN>`
 
 ---
