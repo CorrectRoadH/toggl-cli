@@ -87,6 +87,7 @@ fn interactively_create_time_entry(
 }
 
 impl StartCommand {
+    #[allow(clippy::too_many_arguments)]
     pub async fn execute(
         api_client: impl ApiClient,
         picker: Box<dyn ItemPicker>,

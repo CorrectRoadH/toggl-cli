@@ -34,7 +34,7 @@ impl EditCommand {
                 let parsed_end = match end {
                     Some(value) if value.is_empty() => None,
                     Some(value) => Some(utilities::parse_datetime_input(&value)?),
-                    None => entry.stop.clone(),
+                    None => entry.stop,
                 };
 
                 let project = match project_name.as_deref() {
