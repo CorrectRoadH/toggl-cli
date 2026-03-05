@@ -49,8 +49,6 @@ jobs:
     runs-on: "ubuntu-latest"
     env:
       CARGO_TERM_COLOR: always
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: "true"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,26 +57,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.5
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev
       - name: Run cargo check
-        shell: bash
-        run: |
-          run_cargo_check() {
-            cargo check --locked
-          }
-
-          if ! run_cargo_check; then
-            echo "cargo check failed with sccache enabled; retrying without sccache"
-            unset RUSTC_WRAPPER
-            unset SCCACHE_GHA_ENABLED
-            unset SCCACHE_PATH
-            run_cargo_check
-          fi
+        run: cargo check --locked
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
       - name: Run cargo clippy
@@ -156,8 +140,6 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: "true"
     steps:
       - name: enable windows longpaths
         run: |
@@ -180,8 +162,6 @@ jobs:
           fi
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.5
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       # Get the dist-manifest
@@ -195,20 +175,9 @@ jobs:
         run: |
           ${{ matrix.packages_install }}
       - name: Build artifacts
-        shell: bash
         run: |
-          run_dist_build() {
-            dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
-          }
-
           # Actually do builds and make zips and whatnot
-          if ! run_dist_build; then
-            echo "dist build failed with sccache enabled; retrying without sccache"
-            unset RUSTC_WRAPPER
-            unset SCCACHE_GHA_ENABLED
-            unset SCCACHE_PATH
-            run_dist_build
-          fi
+          dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
       - id: cargo-dist
         name: Post-build
