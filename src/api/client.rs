@@ -5,9 +5,9 @@ use crate::error;
 use crate::models;
 use crate::models::Entities;
 use crate::models::Project;
+use crate::models::Tag;
 use crate::models::Task;
 use crate::models::TimeEntry;
-use crate::models::Tag;
 use crate::models::Workspace;
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
@@ -420,7 +420,9 @@ impl ApiClient for V9ApiClient {
     async fn create_tag(&self, workspace_id: i64, name: String) -> ResultWithDefaultError<Tag> {
         let url = format!("{}/workspaces/{}/tags", self.base_url, workspace_id);
         let body = NetworkCreateTag { name, workspace_id };
-        let network_tag = self.post::<NetworkTag, NetworkCreateTag>(url, &body).await?;
+        let network_tag = self
+            .post::<NetworkTag, NetworkCreateTag>(url, &body)
+            .await?;
         Ok(Tag {
             id: network_tag.id,
             name: network_tag.name,

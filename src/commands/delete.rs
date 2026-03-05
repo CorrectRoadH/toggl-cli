@@ -5,10 +5,7 @@ use colored::Colorize;
 pub struct DeleteCommand;
 
 impl DeleteCommand {
-    pub async fn execute(
-        api_client: impl ApiClient,
-        id: i64,
-    ) -> ResultWithDefaultError<()> {
+    pub async fn execute(api_client: impl ApiClient, id: i64) -> ResultWithDefaultError<()> {
         let user = api_client.get_user().await?;
         let workspace_id = user.default_workspace_id;
 
