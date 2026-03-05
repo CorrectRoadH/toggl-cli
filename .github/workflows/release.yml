@@ -86,6 +86,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Sync Cargo.toml version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PYTHON_BIN=python3
+          if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+            PYTHON_BIN=python
+          fi
+          VERSION="$VERSION" "$PYTHON_BIN" - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          version = os.environ["VERSION"]
+          cargo_toml = pathlib.Path("Cargo.toml")
+          content = cargo_toml.read_text()
+          updated, count = re.subn(
+              r'(?m)^version\s*=\s*"[0-9A-Za-z.+-]+"\s*$',
+              f'version = "{version}"',
+              content,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("failed to update package version in Cargo.toml")
+          cargo_toml.write_text(updated)
+          PY
       - name: Install dist
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
@@ -145,6 +171,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Sync Cargo.toml version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PYTHON_BIN=python3
+          if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+            PYTHON_BIN=python
+          fi
+          VERSION="$VERSION" "$PYTHON_BIN" - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          version = os.environ["VERSION"]
+          cargo_toml = pathlib.Path("Cargo.toml")
+          content = cargo_toml.read_text()
+          updated, count = re.subn(
+              r'(?m)^version\s*=\s*"[0-9A-Za-z.+-]+"\s*$',
+              f'version = "{version}"',
+              content,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("failed to update package version in Cargo.toml")
+          cargo_toml.write_text(updated)
+          PY
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
         run: |
@@ -205,6 +257,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Sync Cargo.toml version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PYTHON_BIN=python3
+          if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+            PYTHON_BIN=python
+          fi
+          VERSION="$VERSION" "$PYTHON_BIN" - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          version = os.environ["VERSION"]
+          cargo_toml = pathlib.Path("Cargo.toml")
+          content = cargo_toml.read_text()
+          updated, count = re.subn(
+              r'(?m)^version\s*=\s*"[0-9A-Za-z.+-]+"\s*$',
+              f'version = "{version}"',
+              content,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("failed to update package version in Cargo.toml")
+          cargo_toml.write_text(updated)
+          PY
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
@@ -256,6 +334,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Sync Cargo.toml version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PYTHON_BIN=python3
+          if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+            PYTHON_BIN=python
+          fi
+          VERSION="$VERSION" "$PYTHON_BIN" - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          version = os.environ["VERSION"]
+          cargo_toml = pathlib.Path("Cargo.toml")
+          content = cargo_toml.read_text()
+          updated, count = re.subn(
+              r'(?m)^version\s*=\s*"[0-9A-Za-z.+-]+"\s*$',
+              f'version = "{version}"',
+              content,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("failed to update package version in Cargo.toml")
+          cargo_toml.write_text(updated)
+          PY
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
