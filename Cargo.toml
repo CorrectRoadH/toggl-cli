@@ -54,3 +54,11 @@ skim = "0.10.4"
 # Testing
 mockall = "0.11.4"
 tokio-test = "0.4.2"
+
+[package.metadata.dist]
+# Config lives in dist-workspace.toml
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

@@ -1,0 +1,19 @@
+[workspace]
+members = ["cargo:."]
+
+[dist]
+cargo-dist-version = "0.28.0"
+ci = "github"
+installers = ["shell", "powershell", "npm"]
+publish-jobs = ["npm"]
+npm-scope = "@correctroadh"
+npm-package = "toggl-cli"
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+]
+pr-run-mode = "plan"
+windows-archive = ".tar.gz"
+unix-archive = ".tar.gz"
