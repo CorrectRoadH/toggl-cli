@@ -24,18 +24,16 @@ toggl --help
 
 ## Agent 一键安装（CLI + Skill）
 
-在仓库根目录执行（`git clone` 后）：
-
 ### Claude Code
 
 ```shell
-npm install -g @correctroadh/toggl-cli && mkdir -p ~/.claude/skills/toggl-cli && cp skills/toggl-cli/SKILL.md ~/.claude/skills/toggl-cli/SKILL.md
+npm install -g @correctroadh/toggl-cli && mkdir -p ~/.claude/skills/toggl-cli && wget -qO ~/.claude/skills/toggl-cli/SKILL.md https://raw.githubusercontent.com/CorrectRoadH/toggl-cli/main/skills/toggl-cli/SKILL.md
 ```
 
 ### OpenClaw
 
 ```shell
-npm install -g @correctroadh/toggl-cli && mkdir -p ~/.openclaw/skills/toggl-cli && cp skills/toggl-cli/SKILL.md ~/.openclaw/skills/toggl-cli/SKILL.md
+npm install -g @correctroadh/toggl-cli && mkdir -p ~/.openclaw/skills/toggl-cli && wget -qO ~/.openclaw/skills/toggl-cli/SKILL.md https://raw.githubusercontent.com/CorrectRoadH/toggl-cli/main/skills/toggl-cli/SKILL.md
 ```
 
 ### 首次配置
