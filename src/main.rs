@@ -15,7 +15,10 @@ use arguments::Command::Auth;
 use arguments::Command::Config;
 use arguments::Command::Continue;
 use arguments::Command::CreateProject;
+use arguments::Command::CreateTag;
 use arguments::Command::Current;
+use arguments::Command::DeleteProject;
+use arguments::Command::DeleteTag;
 use arguments::Command::List;
 use arguments::Command::Logout;
 use arguments::Command::Running;
@@ -26,6 +29,9 @@ use arguments::ConfigSubCommand;
 use commands::auth::AuthenticationCommand;
 use commands::cont::ContinueCommand;
 use commands::create_project::CreateProjectCommand;
+use commands::create_tag::CreateTagCommand;
+use commands::delete_project::DeleteProjectCommand;
+use commands::delete_tag::DeleteTagCommand;
 use commands::list::ListCommand;
 use commands::running::RunningTimeEntryCommand;
 use commands::start::StartCommand;
@@ -108,6 +114,18 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
 
             CreateProject { name, color } => {
                 CreateProjectCommand::execute(get_default_api_client()?, name, color).await?
+            }
+
+            DeleteProject { name } => {
+                DeleteProjectCommand::execute(get_default_api_client()?, name).await?
+            }
+
+            CreateTag { name } => {
+                CreateTagCommand::execute(get_default_api_client()?, name).await?
+            }
+
+            DeleteTag { name } => {
+                DeleteTagCommand::execute(get_default_api_client()?, name).await?
             }
 
             Auth { api_token } => {

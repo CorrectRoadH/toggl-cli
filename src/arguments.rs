@@ -79,6 +79,21 @@ pub enum Command {
         )]
         color: String,
     },
+    #[structopt(about = "Delete a project from your workspace by name")]
+    DeleteProject {
+        #[structopt(help = "Name of the project to delete")]
+        name: String,
+    },
+    #[structopt(about = "Create a new tag in your workspace")]
+    CreateTag {
+        #[structopt(help = "Name of the tag to create")]
+        name: String,
+    },
+    #[structopt(about = "Delete a tag from your workspace by name")]
+    DeleteTag {
+        #[structopt(help = "Name of the tag to delete")]
+        name: String,
+    },
     #[structopt(about = "Manage auto-tracking configuration")]
     Config {
         #[structopt(

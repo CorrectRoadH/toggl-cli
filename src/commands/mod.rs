@@ -1,6 +1,9 @@
 pub mod auth;
 pub mod cont;
 pub mod create_project;
+pub mod create_tag;
+pub mod delete_project;
+pub mod delete_tag;
 pub mod list;
 pub mod running;
 pub mod start;

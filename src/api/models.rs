@@ -71,6 +71,12 @@ pub struct NetworkCreateProject {
     pub active: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NetworkCreateTag {
+    pub name: String,
+    pub workspace_id: i64,
+}
+
 impl From<TimeEntry> for NetworkTimeEntry {
     fn from(value: TimeEntry) -> Self {
         NetworkTimeEntry {

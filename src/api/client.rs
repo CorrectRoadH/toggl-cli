@@ -21,6 +21,7 @@ use serde::{de, Serialize};
 
 use super::models::NetworkClient;
 use super::models::NetworkCreateProject;
+use super::models::NetworkCreateTag;
 use super::models::NetworkProject;
 use super::models::NetworkTag;
 use super::models::NetworkTask;
@@ -43,7 +44,17 @@ pub trait ApiClient {
         color: String,
     ) -> ResultWithDefaultError<Project>;
 
+    async fn delete_project(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+    ) -> ResultWithDefaultError<()>;
+
     async fn get_tags(&self, workspace_id: i64) -> ResultWithDefaultError<Vec<Tag>>;
+
+    async fn create_tag(&self, workspace_id: i64, name: String) -> ResultWithDefaultError<Tag>;
+
+    async fn delete_tag(&self, workspace_id: i64, tag_id: i64) -> ResultWithDefaultError<()>;
 }
 
 pub struct V9ApiClient {
@@ -143,6 +154,19 @@ impl V9ApiClient {
             },
         }
     }
+
+    async fn delete(&self, url: String) -> ResultWithDefaultError<()> {
+        match self.http_client.delete(url).send().await {
+            Err(_) => Err(Box::new(ApiError::Network)),
+            Ok(response) => {
+                if response.status().is_success() {
+                    Ok(())
+                } else {
+                    Err(Box::new(ApiError::Deserialization))
+                }
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -199,6 +223,18 @@ impl ApiClient for V9ApiClient {
         })
     }
 
+    async fn delete_project(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+    ) -> ResultWithDefaultError<()> {
+        let url = format!(
+            "{}/workspaces/{}/projects/{}",
+            self.base_url, workspace_id, project_id
+        );
+        self.delete(url).await
+    }
+
     async fn get_tags(&self, workspace_id: i64) -> ResultWithDefaultError<Vec<Tag>> {
         let network_tags = self.get_workspace_tags(workspace_id).await?;
         Ok(network_tags
@@ -209,6 +245,25 @@ impl ApiClient for V9ApiClient {
                 workspace_id: t.workspace_id,
             })
             .collect())
+    }
+
+    async fn create_tag(&self, workspace_id: i64, name: String) -> ResultWithDefaultError<Tag> {
+        let url = format!("{}/workspaces/{}/tags", self.base_url, workspace_id);
+        let body = NetworkCreateTag { name, workspace_id };
+        let network_tag = self.post::<NetworkTag, NetworkCreateTag>(url, &body).await?;
+        Ok(Tag {
+            id: network_tag.id,
+            name: network_tag.name,
+            workspace_id: network_tag.workspace_id,
+        })
+    }
+
+    async fn delete_tag(&self, workspace_id: i64, tag_id: i64) -> ResultWithDefaultError<()> {
+        let url = format!(
+            "{}/workspaces/{}/tags/{}",
+            self.base_url, workspace_id, tag_id
+        );
+        self.delete(url).await
     }
 
     async fn get_entities(&self) -> ResultWithDefaultError<Entities> {
