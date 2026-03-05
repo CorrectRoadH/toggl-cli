@@ -27,13 +27,19 @@ toggl --help
 ### Claude Code
 
 ```shell
-npm install -g @correctroadh/toggl-cli && mkdir -p ~/.claude/skills/toggl-cli && wget -qO ~/.claude/skills/toggl-cli/SKILL.md https://raw.githubusercontent.com/CorrectRoadH/toggl-cli/main/skills/toggl-cli/SKILL.md
+npm install -g @correctroadh/toggl-cli && npx skills add CorrectRoadH/toggl-cli --skill toggl-cli
 ```
 
 ### OpenClaw
 
 ```shell
-npm install -g @correctroadh/toggl-cli && mkdir -p ~/.openclaw/skills/toggl-cli && wget -qO ~/.openclaw/skills/toggl-cli/SKILL.md https://raw.githubusercontent.com/CorrectRoadH/toggl-cli/main/skills/toggl-cli/SKILL.md
+npm install -g @correctroadh/toggl-cli && npx skills add CorrectRoadH/toggl-cli --skill toggl-cli
+```
+
+`skills` CLI can also help manage and discover skills:
+
+```shell
+npx skills find toggl
 ```
 
 ## Usage
