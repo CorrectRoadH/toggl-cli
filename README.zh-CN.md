@@ -1,3 +1,5 @@
+[English](README.md) | 中文
+
 # toggl-cli（活跃维护 Fork）
 
 > **注意**：这是 [watercooler-labs/toggl-cli](https://github.com/watercooler-labs/toggl-cli) 的活跃维护 fork。上游项目长期缺乏维护，因此我 fork 出来持续开发，加入了大量新功能，并特别关注 **对 AI Agent 的友好性**。
@@ -52,5 +54,3 @@ toggl rename-tag "旧名" "新名"                  # 重命名标签
 ---
 
 由 [CorrectRoadH](https://github.com/CorrectRoadH) 维护 | 上游：[Watercooler Studio](https://watercooler.studio/)
-
-[English](README.md)

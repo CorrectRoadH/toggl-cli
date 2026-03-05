@@ -1,3 +1,5 @@
+English | [中文](README.zh-CN.md)
+
 # toggl-cli (Active Fork)
 
 > **Note**: This is an actively maintained fork of [watercooler-labs/toggl-cli](https://github.com/watercooler-labs/toggl-cli). The upstream project has been largely inactive, so I forked it to continue development with new features and improvements — especially with a focus on **AI agent friendliness**.
@@ -116,5 +118,3 @@ cargo clippy --fix # To automatically fix common mistakes.
 ---
 
 Built by [CorrectRoadH](https://github.com/CorrectRoadH) | Upstream: [Watercooler Studio](https://watercooler.studio/)
-
-[中文说明](README.zh-CN.md)
