@@ -44,8 +44,34 @@ on:
       - 'v*'
 
 jobs:
+  preflight:
+    name: Preflight Check (ubuntu)
+    runs-on: "ubuntu-20.04"
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev
+      - name: Run cargo check
+        run: cargo check --locked
+      - name: Run cargo test
+        run: cargo test --locked
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check
+      - name: Run cargo clippy
+        run: cargo clippy --locked -- -D warnings
+
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
+    needs:
+      - preflight
     runs-on: "ubuntu-20.04"
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
