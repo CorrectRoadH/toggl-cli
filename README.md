@@ -1,6 +1,16 @@
-# toggl-cli
+# toggl-cli (Active Fork)
+
+> **Note**: This is an actively maintained fork of [watercooler-labs/toggl-cli](https://github.com/watercooler-labs/toggl-cli). The upstream project has been largely inactive, so I forked it to continue development with new features and improvements — especially with a focus on **AI agent friendliness**.
 
 Unofficial CLI for [Toggl Track](https://toggl.com/track/) written in Rust, using the [v9 API](https://developers.track.toggl.com/docs/).
+
+## What's New in This Fork
+
+- **Full project CRUD** — create, rename, and delete projects
+- **Full tag CRUD** — create, rename, and delete tags
+- **Time entry editing & deletion** — update description, project, tags; delete entries
+- **Date filtering** — filter `list` output by date range
+- **Agent-friendly design** — structured, predictable output suitable for use with AI agents and automation tools
 
 ## Usage
 
@@ -11,27 +21,6 @@ cargo build # or cargo build --release
 ```
 
 Installing the binary.
-
-### From [crates.io](https://crates.io/crates/toggl)
-
-```shell
-cargo install toggl
-```
-
-### From Arch Linux aur
-[![toggl-cli](https://img.shields.io/aur/version/toggl-cli?label=toggl-cli)](https://aur.archlinux.org/packages/toggl-cli/)
-[![toggl-cli-bin](https://img.shields.io/aur/version/toggl-cli-bin?label=toggl-cli-bin)](https://aur.archlinux.org/packages/toggl-cli-bin/)
-
-toggl-cli is available on the [AUR](https://wiki.archlinux.org/index.php/Arch_User_Repository):
-- [toggl-cli](https://aur.archlinux.org/packages/toggl-cli/) (release package)
-- [toggl-cli-bin](https://aur.archlinux.org/packages/toggl-cli-bin/) (binary release package)
-
-You can install it using your [AUR helper](https://wiki.archlinux.org/index.php/AUR_helpers) of choice.
-
-Example:
-```shell
-$ yay -Sy toggl-cli
-```
 
 ### From source
 
@@ -45,7 +34,6 @@ You can invoke the binary using the `toggl` command now. Alternatively you can a
 
 ```shell
 cargo run [command]
-
 
 # To list the last 3 time-entries
 cargo run list -n 3
@@ -87,42 +75,24 @@ OPTIONS:
         --proxy <proxy>    Use custom proxy
 
 SUBCOMMANDS:
-    auth        Authenticate with the Toggl API. Find your API token at https://track.toggl.com/profile#api-token
-    config      Manage auto-tracking configuration
+    auth              Authenticate with the Toggl API
+    config            Manage auto-tracking configuration
     continue
     current
-    help        Prints this message or the help of the given subcommand(s)
-    list
-    logout      Clear stored credentials
+    list              List time entries (supports date filtering)
+    logout            Clear stored credentials
     running
-    start       Start a new time entry, call with no arguments to start in interactive mode
+    start             Start a new time entry
     stop
-
-```
-
-You can also run the `help` command on a specific subcommand.
-
-```shell
-$ toggl help start
-toggl-start 0.4.11
-Start a new time entry, call with no arguments to start in interactive mode
-
-USAGE:
-    toggl start [FLAGS] [OPTIONS] [--] [description]
-
-FLAGS:
-    -b, --billable
-    -h, --help           Prints help information
-    -i, --interactive
-    -V, --version        Prints version information
-
-OPTIONS:
-    -p, --project <project>    Exact name of the project you want the time entry to be associated with
-    -t, --tags <tags>...       Space separated list of tags to associate with the time entry, e.g. 'tag1 tag2 tag3'
-
-ARGS:
-    <description>    Description of the time entry
-
+    edit              Edit a time entry
+    delete            Delete a time entry
+    create-project    Create a new project
+    rename-project    Rename a project
+    delete-project    Delete a project
+    create-tag        Create a new tag
+    rename-tag        Rename a tag
+    delete-tag        Delete a tag
+    help              Prints this message or the help of the given subcommand(s)
 ```
 
 ## Testing
@@ -143,20 +113,59 @@ cargo fmt # Formatting the code to a unified style.
 cargo clippy --fix # To automatically fix common mistakes.
 ```
 
-The CI will also run the lint commands for all pull-requests.
-See [pull_request.yml](.github/workflows/pull_request.yml) for more details.
+---
 
-## Releasing
+# 中文说明
 
-To create a new release, first bump the package version.
-We have a handy script at [pkg/autodoc.rs](pkg/autodoc.rs).
-Running it with no arguments, bumps the current patch version, in `Cargo.toml`
-and `Cargo.lock` files.
-It also updates the help documentation in this README to match the current
-version of the command.
-Commit and push the updated changes and a new release will show up under the
-[releases](https://github.com/watercooler-labs/toggl-cli/releases) page.
+> **注意**：这是 [watercooler-labs/toggl-cli](https://github.com/watercooler-labs/toggl-cli) 的活跃维护 fork。上游项目长期缺乏维护，因此我 fork 出来持续开发，加入了大量新功能，并特别关注 **对 AI Agent 的友好性**。
+
+非官方的 [Toggl Track](https://toggl.com/track/) 命令行工具，使用 Rust 编写，基于 [v9 API](https://developers.track.toggl.com/docs/)。
+
+## 相比上游的新功能
+
+- **项目完整 CRUD** — 创建、重命名、删除项目
+- **标签完整 CRUD** — 创建、重命名、删除标签
+- **时间条目编辑与删除** — 修改描述、项目、标签；删除条目
+- **日期过滤** — 按日期范围过滤 `list` 输出
+- **对 AI Agent 友好** — 结构化、可预测的输出，适合与 AI Agent 和自动化工具配合使用
+
+## 安装
+
+### 从源码安装
+
+```shell
+cargo install --path .
+```
+
+> 二进制文件会安装到 `~/.cargo/bin/toggl`，请确保将 `~/.cargo/bin` 加入 `$PATH`。
+
+### 首次配置
+
+首先运行 `auth` 命令，配置你的 [Toggl API Token](https://support.toggl.com/en/articles/3116844-where-is-my-api-token-located)。
+
+```shell
+toggl auth [API_TOKEN]
+```
+
+API Token 会通过 [keyring](https://crates.io/crates/keyring) 安全存储在系统钥匙串中。
+
+> **注意**：在部分 Linux 环境下，keyring 存储在重启后可能不持久。建议在 shell 配置文件中导出环境变量 `TOGGL_API_TOKEN`，CLI 会优先使用该变量，无需再运行 `auth` 命令。
+
+## 常用命令
+
+```shell
+toggl start "写代码" -p 我的项目 -t tag1 tag2   # 开始计时
+toggl stop                                      # 停止计时
+toggl current                                   # 查看当前计时
+toggl list -n 10                                # 列出最近10条记录
+toggl edit [ID] --description "新描述"          # 编辑时间条目
+toggl delete [ID]                               # 删除时间条目
+toggl create-project "新项目"                   # 创建项目
+toggl rename-project "旧名" "新名"              # 重命名项目
+toggl create-tag "新标签"                       # 创建标签
+toggl rename-tag "旧名" "新名"                  # 重命名标签
+```
 
 ---
 
-Built by the [Watercooler Studio](https://watercooler.studio/)
+Built by [CorrectRoadH](https://github.com/CorrectRoadH) | Upstream: [Watercooler Studio](https://watercooler.studio/)
