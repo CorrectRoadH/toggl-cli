@@ -6,13 +6,7 @@ English | [中文](README.zh-CN.md)
 
 Unofficial CLI for [Toggl Track](https://toggl.com/track/) written in Rust, using the [v9 API](https://developers.track.toggl.com/docs/).
 
-## What's New in This Fork
-
-- **Full project CRUD** — create, rename, and delete projects
-- **Full tag CRUD** — create, rename, and delete tags
-- **Time entry editing & deletion** — update description, project, tags; delete entries
-- **Date filtering** — filter `list` output by date range
-- **Agent-friendly design** — structured, predictable output suitable for use with AI agents and automation tools
+This fork focuses on a more complete user experience, better day-to-day usability, and smoother workflows for AI agents and automation.
 
 ## Install
 
@@ -28,30 +22,16 @@ Then verify:
 toggl --help
 ```
 
+## Usage
+
 You can invoke the binary using the `toggl` command now.
 
 ```shell
-cargo run [command]
+toggl [command]
 
 # To list the last 3 time-entries
-cargo run list -n 3
+toggl list -n 3
 ```
-
-The first command you need to run is `auth` to set up your [Toggl API token](https://support.toggl.com/en/articles/3116844-where-is-my-api-token-located).
-
-```shell
-cargo run auth [API_TOKEN] # or toggl auth [API_TOKEN]
-```
-
-The API token is stored securely in your Operating System's keychain using the [keyring](https://crates.io/crates/keyring) crate.
-
-> **Note**: On some linux environments the `keyring` store is not persistent
-> across reboots. We recommend exporting the api token as `TOGGL_API_TOKEN`
-> in your shell profile. The CLI will use this environment variable if it is
-> set. You don't need to run the `auth` command if you have the environment
-> variable set.
-
-### Commands
 
 Run the `help` command to see a list of available commands.
 
@@ -92,6 +72,20 @@ SUBCOMMANDS:
     delete-tag        Delete a tag
     help              Prints this message or the help of the given subcommand(s)
 ```
+
+The first command you need to run is `auth` to set up your [Toggl API token](https://support.toggl.com/en/articles/3116844-where-is-my-api-token-located).
+
+```shell
+toggl auth [API_TOKEN]
+```
+
+The API token is stored securely in your Operating System's keychain using the [keyring](https://crates.io/crates/keyring) crate.
+
+> **Note**: On some Linux environments the `keyring` store is not persistent
+> across reboots. We recommend exporting the api token as `TOGGL_API_TOKEN`
+> in your shell profile. The CLI will use this environment variable if it is
+> set. You don't need to run the `auth` command if you have the environment
+> variable set.
 
 ## Testing
 

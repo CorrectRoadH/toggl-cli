@@ -6,13 +6,7 @@
 
 非官方的 [Toggl Track](https://toggl.com/track/) 命令行工具，使用 Rust 编写，基于 [v9 API](https://developers.track.toggl.com/docs/)。
 
-## 相比上游的新功能
-
-- **项目完整 CRUD** — 创建、重命名、删除项目
-- **标签完整 CRUD** — 创建、重命名、删除标签
-- **时间条目编辑与删除** — 修改描述、项目、标签；删除条目
-- **日期过滤** — 按日期范围过滤 `list` 输出
-- **对 AI Agent 友好** — 结构化、可预测的输出，适合与 AI Agent 和自动化工具配合使用
+这个 fork 更强调功能完整性、日常使用体验，以及与 AI Agent 和自动化工具协作时的顺滑程度。
 
 ## 安装
 
