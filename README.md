@@ -22,18 +22,18 @@ Then verify:
 toggl --help
 ```
 
-## Agent one-click install (CLI + skill)
+## Agent one-click install (skill)
 
 ### Claude Code
 
 ```shell
-npm install -g @correctroadh/toggl-cli && npx skills add CorrectRoadH/toggl-cli --skill toggl-cli
+npx skills add CorrectRoadH/toggl-cli
 ```
 
 ### OpenClaw
 
 ```shell
-npm install -g @correctroadh/toggl-cli && npx skills add CorrectRoadH/toggl-cli --skill toggl-cli
+npx skills add CorrectRoadH/toggl-cli
 ```
 
 `skills` CLI can also help manage and discover skills:
