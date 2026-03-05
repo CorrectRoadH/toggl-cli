@@ -154,6 +154,8 @@ jobs:
           fi
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
       # Get the dist-manifest
       - name: Fetch local artifacts
         uses: actions/download-artifact@v4
@@ -209,6 +211,8 @@ jobs:
           name: cargo-dist-cache
           path: ~/.cargo/bin/
       - run: chmod +x ~/.cargo/bin/dist
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
       # Get all the local artifacts for the global tasks to use (for e.g. checksums)
       - name: Fetch local artifacts
         uses: actions/download-artifact@v4
