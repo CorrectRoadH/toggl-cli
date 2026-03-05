@@ -14,25 +14,21 @@ Unofficial CLI for [Toggl Track](https://toggl.com/track/) written in Rust, usin
 - **Date filtering** — filter `list` output by date range
 - **Agent-friendly design** — structured, predictable output suitable for use with AI agents and automation tools
 
-## Usage
+## Install
 
-Building the binary.
-
-```shell
-cargo build # or cargo build --release
-```
-
-Installing the binary.
-
-### From source
+### From npm (recommended)
 
 ```shell
-cargo install --path .
+npm install -g @correctroadh/toggl-cli
 ```
 
-> This places the release optimized binary at `~/.cargo/bin/toggl`. Make sure to add `~/.cargo/bin` to your `$PATH` so that you can run the binary from any directory.
+Then verify:
 
-You can invoke the binary using the `toggl` command now. Alternatively you can also run the command directly using `cargo run`
+```shell
+toggl --help
+```
+
+You can invoke the binary using the `toggl` command now.
 
 ```shell
 cargo run [command]

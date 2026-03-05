@@ -16,13 +16,17 @@
 
 ## 安装
 
-### 从源码安装
+### 通过 npm 安装（推荐）
 
 ```shell
-cargo install --path .
+npm install -g @correctroadh/toggl-cli
 ```
 
-> 二进制文件会安装到 `~/.cargo/bin/toggl`，请确保将 `~/.cargo/bin` 加入 `$PATH`。
+安装后可验证：
+
+```shell
+toggl --help
+```
 
 ### 首次配置
 
