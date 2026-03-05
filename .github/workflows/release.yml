@@ -66,7 +66,19 @@ jobs:
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev
       - name: Run cargo check
-        run: cargo check --locked
+        shell: bash
+        run: |
+          run_cargo_check() {
+            cargo check --locked
+          }
+
+          if ! run_cargo_check; then
+            echo "cargo check failed with sccache enabled; retrying without sccache"
+            unset RUSTC_WRAPPER
+            unset SCCACHE_GHA_ENABLED
+            unset SCCACHE_PATH
+            run_cargo_check
+          fi
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
       - name: Run cargo clippy
@@ -183,9 +195,20 @@ jobs:
         run: |
           ${{ matrix.packages_install }}
       - name: Build artifacts
+        shell: bash
         run: |
+          run_dist_build() {
+            dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
+          }
+
           # Actually do builds and make zips and whatnot
-          dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
+          if ! run_dist_build; then
+            echo "dist build failed with sccache enabled; retrying without sccache"
+            unset RUSTC_WRAPPER
+            unset SCCACHE_GHA_ENABLED
+            unset SCCACHE_PATH
+            run_dist_build
+          fi
           echo "dist ran successfully"
       - id: cargo-dist
         name: Post-build
