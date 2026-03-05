@@ -7,6 +7,7 @@ use crate::models::Entities;
 use crate::models::Project;
 use crate::models::Task;
 use crate::models::TimeEntry;
+use crate::models::Tag;
 use crate::models::Workspace;
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
@@ -19,7 +20,9 @@ use reqwest::{header, RequestBuilder};
 use serde::{de, Serialize};
 
 use super::models::NetworkClient;
+use super::models::NetworkCreateProject;
 use super::models::NetworkProject;
+use super::models::NetworkTag;
 use super::models::NetworkTask;
 use super::models::NetworkTimeEntry;
 use super::models::NetworkWorkspace;
@@ -32,6 +35,15 @@ pub trait ApiClient {
 
     async fn create_time_entry(&self, time_entry: TimeEntry) -> ResultWithDefaultError<i64>;
     async fn update_time_entry(&self, time_entry: TimeEntry) -> ResultWithDefaultError<i64>;
+
+    async fn create_project(
+        &self,
+        workspace_id: i64,
+        name: String,
+        color: String,
+    ) -> ResultWithDefaultError<Project>;
+
+    async fn get_tags(&self, workspace_id: i64) -> ResultWithDefaultError<Vec<Tag>>;
 }
 
 pub struct V9ApiClient {
@@ -63,6 +75,14 @@ impl V9ApiClient {
     async fn get_workspaces(&self) -> ResultWithDefaultError<Vec<NetworkWorkspace>> {
         let url = format!("{}/me/workspaces", self.base_url);
         self.get::<Vec<NetworkWorkspace>>(url).await
+    }
+
+    async fn get_workspace_tags(
+        &self,
+        workspace_id: i64,
+    ) -> ResultWithDefaultError<Vec<NetworkTag>> {
+        let url = format!("{}/workspaces/{}/tags", self.base_url, workspace_id);
+        self.get::<Vec<NetworkTag>>(url).await
     }
 
     pub fn from_credentials(
@@ -146,6 +166,49 @@ impl ApiClient for V9ApiClient {
             .put::<NetworkTimeEntry, NetworkTimeEntry>(url, &time_entry.into())
             .await?;
         return Ok(network_time_entry.id);
+    }
+
+    async fn create_project(
+        &self,
+        workspace_id: i64,
+        name: String,
+        color: String,
+    ) -> ResultWithDefaultError<Project> {
+        let url = format!("{}/workspaces/{}/projects", self.base_url, workspace_id);
+        let body = NetworkCreateProject {
+            name,
+            workspace_id,
+            color,
+            is_private: false,
+            active: true,
+        };
+        let network_project = self
+            .post::<NetworkProject, NetworkCreateProject>(url, &body)
+            .await?;
+        Ok(Project {
+            id: network_project.id,
+            name: network_project.name,
+            workspace_id: network_project.workspace_id,
+            client: None,
+            is_private: network_project.is_private,
+            active: network_project.active,
+            at: network_project.at,
+            created_at: network_project.created_at,
+            color: network_project.color,
+            billable: network_project.billable,
+        })
+    }
+
+    async fn get_tags(&self, workspace_id: i64) -> ResultWithDefaultError<Vec<Tag>> {
+        let network_tags = self.get_workspace_tags(workspace_id).await?;
+        Ok(network_tags
+            .into_iter()
+            .map(|t| Tag {
+                id: t.id,
+                name: t.name,
+                workspace_id: t.workspace_id,
+            })
+            .collect())
     }
 
     async fn get_entities(&self) -> ResultWithDefaultError<Entities> {
@@ -250,6 +313,7 @@ impl ApiClient for V9ApiClient {
             tasks,
             clients,
             workspaces,
+            tags: Vec::new(),
         })
     }
 }

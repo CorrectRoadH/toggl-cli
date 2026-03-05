@@ -67,6 +67,18 @@ pub enum Command {
         #[structopt(short, long)]
         interactive: bool,
     },
+    #[structopt(about = "Create a new project in your workspace")]
+    CreateProject {
+        #[structopt(help = "Name of the project to create")]
+        name: String,
+        #[structopt(
+            short,
+            long,
+            help = "Hex color for the project (e.g. #06aaf5)",
+            default_value = "#06aaf5"
+        )]
+        color: String,
+    },
     #[structopt(about = "Manage auto-tracking configuration")]
     Config {
         #[structopt(
@@ -93,6 +105,10 @@ pub enum Entity {
         json: bool,
     },
     TimeEntry {
+        #[structopt(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
+    Tag {
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },

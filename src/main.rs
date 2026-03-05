@@ -14,6 +14,7 @@ use api::client::V9ApiClient;
 use arguments::Command::Auth;
 use arguments::Command::Config;
 use arguments::Command::Continue;
+use arguments::Command::CreateProject;
 use arguments::Command::Current;
 use arguments::Command::List;
 use arguments::Command::Logout;
@@ -24,6 +25,7 @@ use arguments::CommandLineArguments;
 use arguments::ConfigSubCommand;
 use commands::auth::AuthenticationCommand;
 use commands::cont::ContinueCommand;
+use commands::create_project::CreateProjectCommand;
 use commands::list::ListCommand;
 use commands::running::RunningTimeEntryCommand;
 use commands::start::StartCommand;
@@ -102,6 +104,10 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                     interactive,
                 )
                 .await?
+            }
+
+            CreateProject { name, color } => {
+                CreateProjectCommand::execute(get_default_api_client()?, name, color).await?
             }
 
             Auth { api_token } => {

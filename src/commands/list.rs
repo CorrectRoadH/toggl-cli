@@ -15,6 +15,33 @@ impl ListCommand {
         json_flag: bool,
         entity: Option<Entity>,
     ) -> ResultWithDefaultError<()> {
+        // Tags require a separate API call with workspace_id; handle before fetching entities.
+        if let Some(Entity::Tag { json: entity_json }) = entity {
+            let json = json_flag || entity_json;
+            let user = api_client.get_user().await?;
+            match api_client.get_tags(user.default_workspace_id).await {
+                Err(error) => println!("{}\n{}", "Couldn't fetch tags from API".red(), error),
+                Ok(tags) => {
+                    let stdout = io::stdout();
+                    let mut handle = BufWriter::new(stdout);
+                    let tags = tags
+                        .iter()
+                        .take(count.unwrap_or(usize::MAX))
+                        .collect::<Vec<_>>();
+                    if json {
+                        let json_string = serde_json::to_string_pretty(&tags)
+                            .expect("failed to serialize tags to JSON");
+                        writeln!(handle, "{json_string}").expect("failed to print");
+                    } else {
+                        tags.iter().for_each(|tag| {
+                            writeln!(handle, "{tag}").expect("failed to print")
+                        });
+                    }
+                }
+            }
+            return Ok(());
+        }
+
         match api_client.get_entities().await {
             Err(error) => println!(
                 "{}\n{}",
@@ -66,6 +93,9 @@ impl ListCommand {
                             });
                         }
                     }
+
+                    // Already handled above, but needed for exhaustive match
+                    Entity::Tag { .. } => unreachable!(),
                 };
             }
         }
