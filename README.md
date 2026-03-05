@@ -22,6 +22,22 @@ Then verify:
 toggl --help
 ```
 
+## Agent one-click install (CLI + skill)
+
+### Claude Code
+
+```shell
+npm install -g @correctroadh/toggl-cli && mkdir -p ~/.claude/skills/toggl-cli && cp skills/toggl-cli/SKILL.md ~/.claude/skills/toggl-cli/SKILL.md
+```
+
+### OpenClaw
+
+```shell
+npm install -g @correctroadh/toggl-cli && mkdir -p ~/.openclaw/skills/toggl-cli && cp skills/toggl-cli/SKILL.md ~/.openclaw/skills/toggl-cli/SKILL.md
+```
+
+Run from the repository root after `git clone`.
+
 ## Usage
 
 You can invoke the binary using the `toggl` command now.
