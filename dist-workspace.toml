@@ -8,6 +8,7 @@ installers = ["shell", "powershell", "npm"]
 publish-jobs = ["npm"]
 npm-scope = "@correctroadh"
 npm-package = "toggl-cli"
+github-releases-repo = "CorrectRoadH/toggl-cli"
 targets = [
   "aarch64-apple-darwin",
   "x86_64-apple-darwin",

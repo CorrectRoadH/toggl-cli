@@ -16,7 +16,7 @@ homepage = "https://toggl.com/track"
 keywords = ["cli", "time", "time-tracking", "toggl", "track"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/watercooler-labs/toggl-cli"
+repository = "https://github.com/CorrectRoadH/toggl-cli"
 edition = "2021"
 
 [dependencies]
