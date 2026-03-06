@@ -1,6 +1,6 @@
 use crate::api::client::ApiClient;
+use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
-use colored::Colorize;
 
 pub struct RenameClientCommand;
 
@@ -13,25 +13,19 @@ impl RenameClientCommand {
         let workspace_id = api_client.get_user().await?.default_workspace_id;
         let clients = api_client.get_clients(workspace_id).await?;
 
-        let client = clients.into_iter().find(|c| c.name == old_name);
+        let client = clients
+            .into_iter()
+            .find(|c| c.name == old_name)
+            .ok_or_else(|| {
+                Box::new(ArgumentError::ResourceNotFound(format!(
+                    "No client found with name '{old_name}'"
+                ))) as Box<dyn std::error::Error + Send>
+            })?;
 
-        match client {
-            None => println!(
-                "{}",
-                format!("No client found with name '{old_name}'").yellow()
-            ),
-            Some(client) => {
-                match api_client
-                    .rename_client(workspace_id, client.id, new_name)
-                    .await
-                {
-                    Err(error) => println!("{}\n{}", "Couldn't rename client".red(), error),
-                    Ok(client) => {
-                        println!("{}\n{}", "Client renamed successfully".green(), client)
-                    }
-                }
-            }
-        }
+        let client = api_client
+            .rename_client(workspace_id, client.id, new_name)
+            .await?;
+        println!("Client renamed successfully\n{}", client);
 
         Ok(())
     }
@@ -43,7 +37,7 @@ mod tests {
     use crate::api::client::MockApiClient;
     use crate::error::ApiError;
     use crate::models::{Client, User};
-    use tokio_test::assert_ok;
+    use tokio_test::{assert_err, assert_ok};
 
     fn mock_user() -> User {
         User {
@@ -113,7 +107,7 @@ mod tests {
             "NewName".to_string(),
         )
         .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -133,6 +127,6 @@ mod tests {
         let result =
             RenameClientCommand::execute(api_client, "OldName".to_string(), "NewName".to_string())
                 .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 }

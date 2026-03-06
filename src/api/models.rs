@@ -11,9 +11,12 @@ pub struct NetworkTimeEntry {
     pub stop: Option<DateTime<Utc>>,
     pub duration: i64,
     pub billable: bool,
+    #[serde(alias = "wid")]
     pub workspace_id: i64,
     pub tags: Option<Vec<String>>,
+    #[serde(alias = "pid")]
     pub project_id: Option<i64>,
+    #[serde(alias = "tid")]
     pub task_id: Option<i64>,
     pub created_with: Option<String>,
 }

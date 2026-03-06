@@ -1,6 +1,6 @@
 use crate::api::client::ApiClient;
+use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
-use colored::Colorize;
 
 pub struct DeleteProjectCommand;
 
@@ -9,18 +9,19 @@ impl DeleteProjectCommand {
         let workspace_id = api_client.get_user().await?.default_workspace_id;
         let entities = api_client.get_entities().await?;
 
-        let project = entities.projects.values().find(|p| p.name == name).cloned();
+        let project = entities
+            .projects
+            .values()
+            .find(|p| p.name == name)
+            .cloned()
+            .ok_or_else(|| {
+                Box::new(ArgumentError::ResourceNotFound(format!(
+                    "No project found with name '{name}'"
+                ))) as Box<dyn std::error::Error + Send>
+            })?;
 
-        match project {
-            None => println!(
-                "{}",
-                format!("No project found with name '{name}'").yellow()
-            ),
-            Some(project) => match api_client.delete_project(workspace_id, project.id).await {
-                Err(error) => println!("{}\n{}", "Couldn't delete project".red(), error),
-                Ok(()) => println!("{}\n{}", "Project deleted successfully".green(), project),
-            },
-        }
+        api_client.delete_project(workspace_id, project.id).await?;
+        println!("Project deleted successfully\n{}", project);
 
         Ok(())
     }
@@ -34,7 +35,7 @@ mod tests {
     use crate::models::{Entities, Project, User};
     use chrono::Utc;
     use std::collections::HashMap;
-    use tokio_test::assert_ok;
+    use tokio_test::{assert_err, assert_ok};
 
     fn mock_user() -> User {
         User {
@@ -112,7 +113,7 @@ mod tests {
             .returning(|| Ok(mock_entities()));
 
         let result = DeleteProjectCommand::execute(api_client, "Missing".to_string()).await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -130,6 +131,6 @@ mod tests {
             .returning(|_, _| Err(Box::new(ApiError::Network)));
 
         let result = DeleteProjectCommand::execute(api_client, "Platform".to_string()).await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 }

@@ -1,7 +1,5 @@
 use crate::api::client::ApiClient;
 use crate::models::ResultWithDefaultError;
-use colored::Colorize;
-
 pub struct CreateProjectCommand;
 
 impl CreateProjectCommand {
@@ -11,10 +9,8 @@ impl CreateProjectCommand {
         color: String,
     ) -> ResultWithDefaultError<()> {
         let workspace_id = api_client.get_user().await?.default_workspace_id;
-        match api_client.create_project(workspace_id, name, color).await {
-            Err(error) => println!("{}\n{}", "Couldn't create project".red(), error),
-            Ok(project) => println!("{}\n{}", "Project created successfully".green(), project),
-        }
+        let project = api_client.create_project(workspace_id, name, color).await?;
+        println!("Project created successfully\n{}", project);
         Ok(())
     }
 }
@@ -92,7 +88,7 @@ mod tests {
         let result =
             CreateProjectCommand::execute(api_client, "Fail".to_string(), "#000000".to_string())
                 .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]

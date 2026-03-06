@@ -2,7 +2,6 @@ use crate::api;
 use crate::arguments::Entity;
 use crate::models;
 use api::client::ApiClient;
-use colored::Colorize;
 use models::ResultWithDefaultError;
 use std::io::{self, BufWriter, Write};
 
@@ -27,12 +26,17 @@ impl ListCommand {
                 Some(Entity::TimeEntry { json }) => json_flag || *json,
                 _ => json_flag,
             };
-            match api_client.get_time_entries_filtered(since, until).await {
-                Err(error) => println!(
-                    "{}\n{}",
-                    "Couldn't fetch time entries from API".red(),
-                    error
-                ),
+            let entries = if json {
+                api_client
+                    .get_time_entries_filtered_minimal(since, until)
+                    .await
+            } else {
+                api_client.get_time_entries_filtered(since, until).await
+            };
+            match entries {
+                Err(error) => {
+                    return Err(error);
+                }
                 Ok(entries) => {
                     let entries = entries
                         .iter()
@@ -56,7 +60,9 @@ impl ListCommand {
             let json = json_flag || entity_json;
             let user = api_client.get_user().await?;
             match api_client.get_tags(user.default_workspace_id).await {
-                Err(error) => println!("{}\n{}", "Couldn't fetch tags from API".red(), error),
+                Err(error) => {
+                    return Err(error);
+                }
                 Ok(tags) => {
                     let stdout = io::stdout();
                     let mut handle = BufWriter::new(stdout);
@@ -81,7 +87,9 @@ impl ListCommand {
             let json = json_flag || entity_json;
             let user = api_client.get_user().await?;
             match api_client.get_clients(user.default_workspace_id).await {
-                Err(error) => println!("{}\n{}", "Couldn't fetch clients from API".red(), error),
+                Err(error) => {
+                    return Err(error);
+                }
                 Ok(clients) => {
                     let stdout = io::stdout();
                     let mut handle = BufWriter::new(stdout);
@@ -104,11 +112,9 @@ impl ListCommand {
         }
 
         match api_client.get_entities().await {
-            Err(error) => println!(
-                "{}\n{}",
-                "Couldn't fetch time entries the from API".red(),
-                error
-            ),
+            Err(error) => {
+                return Err(error);
+            }
             Ok(entities) => {
                 // use this to avoid calling println! in a loop:
                 // <https://rust-cli.github.io/book/tutorial/output.html#a-note-on-printing-performance>
@@ -268,6 +274,28 @@ mod tests {
             api_client,
             Some(1),
             false,
+            Some("2026-01-01".to_string()),
+            Some("2026-01-31".to_string()),
+            None,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn list_time_entries_with_date_filter_and_json_uses_minimal_endpoint() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_time_entries_filtered_minimal()
+            .withf(|since, until| {
+                since.as_deref() == Some("2026-01-01") && until.as_deref() == Some("2026-01-31")
+            })
+            .returning(|_, _| Ok(vec![mock_time_entry()]));
+
+        let result = ListCommand::execute(
+            api_client,
+            Some(1),
+            true,
             Some("2026-01-01".to_string()),
             Some("2026-01-31".to_string()),
             None,

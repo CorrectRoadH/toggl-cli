@@ -52,6 +52,12 @@ pub trait ApiClient {
         until: Option<String>,
     ) -> ResultWithDefaultError<Vec<TimeEntry>>;
 
+    async fn get_time_entries_filtered_minimal(
+        &self,
+        since: Option<String>,
+        until: Option<String>,
+    ) -> ResultWithDefaultError<Vec<TimeEntry>>;
+
     async fn delete_time_entry(
         &self,
         workspace_id: i64,
@@ -351,7 +357,7 @@ impl V9ApiClient {
     ) -> ResultWithDefaultError<Option<NetworkTimeEntry>> {
         let url = format!("{}/me/time_entries/current", self.base_url);
         match self.http_client.get(url).send().await {
-            Err(_) => Err(Box::new(ApiError::Network)),
+            Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
                 if response.status() == reqwest::StatusCode::NOT_FOUND
                     || response.status() == reqwest::StatusCode::NO_CONTENT
@@ -393,7 +399,7 @@ impl V9ApiClient {
         .expect("Couldn't build a http client");
         let api_client = Self {
             http_client,
-            base_url: "https://track.toggl.com/api/v9".to_string(),
+            base_url: "https://api.track.toggl.com/api/v9".to_string(),
         };
         Ok(api_client)
     }
@@ -435,17 +441,36 @@ impl V9ApiClient {
 
     async fn send<T: de::DeserializeOwned>(request: RequestBuilder) -> ResultWithDefaultError<T> {
         match request.send().await {
-            Err(_) => Err(Box::new(ApiError::Network)),
-            Ok(response) => match response.json::<T>().await {
-                Err(_) => Err(Box::new(ApiError::Deserialization)),
-                Ok(parsed_response) => Ok(parsed_response),
-            },
+            Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
+            Ok(response) => {
+                let status = response.status();
+                let body = response.text().await.map_err(|error| {
+                    Box::new(ApiError::NetworkWithMessage(error.to_string()))
+                        as Box<dyn std::error::Error + Send>
+                })?;
+
+                if !status.is_success() {
+                    return Err(Box::new(ApiError::NetworkWithMessage(format!(
+                        "HTTP {} {}",
+                        status.as_u16(),
+                        summarize_response_body(&body)
+                    ))));
+                }
+
+                serde_json::from_str::<T>(&body).map_err(|error| {
+                    Box::new(ApiError::DeserializationWithMessage(format!(
+                        "{}; response body: {}",
+                        error,
+                        summarize_response_body(&body)
+                    ))) as Box<dyn std::error::Error + Send>
+                })
+            }
         }
     }
 
     async fn delete(&self, url: String) -> ResultWithDefaultError<()> {
         match self.http_client.delete(url).send().await {
-            Err(_) => Err(Box::new(ApiError::Network)),
+            Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
                 if response.status().is_success() {
                     Ok(())
@@ -454,6 +479,21 @@ impl V9ApiClient {
                 }
             }
         }
+    }
+}
+
+fn summarize_response_body(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return "(empty response body)".to_string();
+    }
+
+    const MAX_LEN: usize = 400;
+    let summary: String = trimmed.chars().take(MAX_LEN).collect();
+    if trimmed.chars().count() > MAX_LEN {
+        format!("{summary}...")
+    } else {
+        summary
     }
 }
 
@@ -651,6 +691,32 @@ impl ApiClient for V9ApiClient {
             .collect();
 
         Ok(entries)
+    }
+
+    async fn get_time_entries_filtered_minimal(
+        &self,
+        since: Option<String>,
+        until: Option<String>,
+    ) -> ResultWithDefaultError<Vec<TimeEntry>> {
+        let network_entries = self
+            .get_time_entries(since.as_deref(), until.as_deref())
+            .await?;
+        Ok(network_entries
+            .into_iter()
+            .map(|te| TimeEntry {
+                id: te.id,
+                description: te.description,
+                start: te.start,
+                stop: te.stop,
+                duration: te.duration,
+                billable: te.billable,
+                workspace_id: te.workspace_id,
+                tags: te.tags.unwrap_or_default(),
+                project: None,
+                task: None,
+                ..Default::default()
+            })
+            .collect())
     }
 
     async fn create_project(

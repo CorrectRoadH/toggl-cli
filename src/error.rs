@@ -6,17 +6,34 @@ use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum ApiError {
+    #[allow(dead_code)]
     Network,
+    NetworkWithMessage(String),
     Deserialization,
+    DeserializationWithMessage(String),
 }
 
 impl Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let summary = match self {
             ApiError::Network => format!("{}", constants::NETWORK_ERROR_MESSAGE.red()),
+            ApiError::NetworkWithMessage(message) => format!(
+                "{}\n{}: {}",
+                constants::NETWORK_ERROR_MESSAGE.red(),
+                "Details".yellow().bold(),
+                message
+            ),
             ApiError::Deserialization => format!(
                 "{}\n{} {}",
                 constants::DESERIALIZATION_ERROR_MESSAGE.red(),
+                constants::OUTDATED_APP_ERROR_MESSAGE.blue().bold(),
+                constants::ISSUE_LINK.blue().bold().underline()
+            ),
+            ApiError::DeserializationWithMessage(message) => format!(
+                "{}\n{}: {}\n{} {}",
+                constants::DESERIALIZATION_ERROR_MESSAGE.red(),
+                "Details".yellow().bold(),
+                message,
                 constants::OUTDATED_APP_ERROR_MESSAGE.blue().bold(),
                 constants::ISSUE_LINK.blue().bold().underline()
             ),
@@ -164,6 +181,7 @@ pub enum ArgumentError {
     InvalidTimeRange(String),
     MissingUpdateFields(String),
     MultipleWorkspaces(String),
+    ResourceNotFound(String),
 }
 
 impl Display for ArgumentError {
@@ -198,6 +216,9 @@ impl Display for ArgumentError {
             }
             ArgumentError::MultipleWorkspaces(message) => {
                 format!("{}: {}", "Multiple workspaces".red(), message)
+            }
+            ArgumentError::ResourceNotFound(message) => {
+                format!("{}: {}", "Resource not found".red(), message)
             }
         };
         writeln!(f, "{summary}")

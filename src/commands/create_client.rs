@@ -1,16 +1,12 @@
 use crate::api::client::ApiClient;
 use crate::models::ResultWithDefaultError;
-use colored::Colorize;
-
 pub struct CreateClientCommand;
 
 impl CreateClientCommand {
     pub async fn execute(api_client: impl ApiClient, name: String) -> ResultWithDefaultError<()> {
         let workspace_id = api_client.get_user().await?.default_workspace_id;
-        match api_client.create_client(workspace_id, name).await {
-            Err(error) => println!("{}\n{}", "Couldn't create client".red(), error),
-            Ok(client) => println!("{}\n{}", "Client created successfully".green(), client),
-        }
+        let client = api_client.create_client(workspace_id, name).await?;
+        println!("Client created successfully\n{}", client);
         Ok(())
     }
 }
@@ -73,7 +69,7 @@ mod tests {
             .returning(|_, _| Err(Box::new(ApiError::Network)));
 
         let result = CreateClientCommand::execute(api_client, "Fail".to_string()).await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]

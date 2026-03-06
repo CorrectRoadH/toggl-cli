@@ -1,7 +1,6 @@
 use crate::api::client::ApiClient;
 use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
-use colored::Colorize;
 
 pub struct UpdateTaskCommand;
 
@@ -31,51 +30,37 @@ impl UpdateTaskCommand {
             .projects
             .values()
             .find(|project| project.name == project_name)
-            .cloned();
+            .cloned()
+            .ok_or_else(|| {
+                Box::new(ArgumentError::ResourceNotFound(format!(
+                    "No project found with name '{project_name}'"
+                ))) as Box<dyn std::error::Error + Send>
+            })?;
 
-        match project {
-            None => println!(
-                "{}",
-                format!("No project found with name '{project_name}'").yellow()
-            ),
-            Some(project) => {
-                let task = entities
-                    .tasks
-                    .values()
-                    .find(|task| task.name == task_name && task.project.id == project.id)
-                    .cloned();
+        let task = entities
+            .tasks
+            .values()
+            .find(|task| task.name == task_name && task.project.id == project.id)
+            .cloned()
+            .ok_or_else(|| {
+                Box::new(ArgumentError::ResourceNotFound(format!(
+                    "No task found with name '{task_name}' in project '{}'",
+                    project.name
+                ))) as Box<dyn std::error::Error + Send>
+            })?;
 
-                match task {
-                    None => println!(
-                        "{}",
-                        format!(
-                            "No task found with name '{task_name}' in project '{}'",
-                            project.name
-                        )
-                        .yellow()
-                    ),
-                    Some(task) => {
-                        match api_client
-                            .update_task(
-                                task.workspace_id,
-                                task.project.id,
-                                task.id,
-                                new_name,
-                                active,
-                                estimated_seconds,
-                                user_id,
-                            )
-                            .await
-                        {
-                            Err(error) => println!("{}\n{}", "Couldn't update task".red(), error),
-                            Ok(task) => {
-                                println!("{}\n{}", "Task updated successfully".green(), task)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        let task = api_client
+            .update_task(
+                task.workspace_id,
+                task.project.id,
+                task.id,
+                new_name,
+                active,
+                estimated_seconds,
+                user_id,
+            )
+            .await?;
+        println!("Task updated successfully\n{}", task);
 
         Ok(())
     }
@@ -183,7 +168,7 @@ mod tests {
             None,
         )
         .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -203,7 +188,7 @@ mod tests {
             None,
         )
         .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -226,7 +211,7 @@ mod tests {
             None,
         )
         .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
