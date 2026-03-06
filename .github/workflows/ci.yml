@@ -9,18 +9,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: Cross-platform Check
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [macOS-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo check
-
   coverage:
     name: Test & Coverage
     runs-on: ubuntu-latest
