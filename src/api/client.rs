@@ -997,7 +997,36 @@ impl ApiClient for V9ApiClient {
 
     async fn update_preferences(&self, preferences: Value) -> ResultWithDefaultError<Value> {
         let url = format!("{}/me/preferences", self.base_url);
-        self.post::<Value, Value>(url, &preferences).await
+        match self.http_client.post(url).json(&preferences).send().await {
+            Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
+            Ok(response) => {
+                let status = response.status();
+                let body = response.text().await.map_err(|error| {
+                    Box::new(ApiError::NetworkWithMessage(error.to_string()))
+                        as Box<dyn std::error::Error + Send>
+                })?;
+
+                if !status.is_success() {
+                    return Err(Box::new(ApiError::NetworkWithMessage(format!(
+                        "HTTP {} {}",
+                        status.as_u16(),
+                        summarize_response_body(&body)
+                    ))));
+                }
+
+                if body.trim().is_empty() {
+                    return Ok(preferences);
+                }
+
+                serde_json::from_str::<Value>(&body).map_err(|error| {
+                    Box::new(ApiError::DeserializationWithMessage(format!(
+                        "{}; response body: {}",
+                        error,
+                        summarize_response_body(&body)
+                    ))) as Box<dyn std::error::Error + Send>
+                })
+            }
+        }
     }
 
     async fn create_task(
