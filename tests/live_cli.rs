@@ -39,17 +39,41 @@ fn should_run_live_tests() -> bool {
 }
 
 fn run_toggl(args: &[&str]) -> String {
-    let output = try_run_toggl(args).expect("failed to execute toggl");
+    match try_run_toggl_checked(args) {
+        Ok(output) => output,
+        Err(SkipReason::RateLimited(message)) => {
+            eprintln!(
+                "Skipping live CLI test because Toggl API rate limit was hit while running `toggl {}`.\nstderr:\n{}",
+                args.join(" "),
+                message
+            );
+            String::new()
+        }
+    }
+}
 
-    assert!(
-        output.status.success(),
+enum SkipReason {
+    RateLimited(String),
+}
+
+fn try_run_toggl_checked(args: &[&str]) -> Result<String, SkipReason> {
+    let output = try_run_toggl(args).expect("failed to execute toggl");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if output.status.success() {
+        return Ok(String::from_utf8(output.stdout).expect("stdout was not valid UTF-8"));
+    }
+
+    if is_rate_limited(&stderr) {
+        return Err(SkipReason::RateLimited(stderr.into_owned()));
+    }
+
+    panic!(
         "command `toggl {}` failed\nstdout:\n{}\nstderr:\n{}",
         args.join(" "),
         String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        stderr
     );
-
-    String::from_utf8(output.stdout).expect("stdout was not valid UTF-8")
 }
 
 fn try_run_toggl(args: &[&str]) -> std::io::Result<std::process::Output> {
@@ -59,10 +83,16 @@ fn try_run_toggl(args: &[&str]) -> std::io::Result<std::process::Output> {
 }
 
 fn list_entries_on_test_day() -> Vec<TimeEntryRecord> {
-    serde_json::from_str(&run_toggl(&[
-        "list", "--json", "--since", TEST_DAY, "--until", TEST_DAY,
-    ]))
-    .expect("failed to parse time entry list JSON")
+    let output = run_toggl(&["list", "--json", "--since", TEST_DAY, "--until", TEST_DAY]);
+    serde_json::from_str(&output).expect("failed to parse time entry list JSON")
+}
+
+fn is_rate_limited(stderr: &str) -> bool {
+    let stderr = stderr.to_ascii_lowercase();
+    stderr.contains("hourly limit for api calls")
+        || stderr.contains("quota will reset in")
+        || stderr.contains("too many requests")
+        || stderr.contains("rate limit")
 }
 
 fn wait_for<T, F>(message: &str, mut fetch: F) -> T
@@ -90,7 +120,18 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     let renamed_description = format!("{description}-edited");
     let mut cleanup = CleanupState::default();
 
-    let entries_before = list_entries_on_test_day();
+    let entries_before: Vec<TimeEntryRecord> = match try_run_toggl_checked(&[
+        "list", "--json", "--since", TEST_DAY, "--until", TEST_DAY,
+    ]) {
+        Ok(output) => serde_json::from_str(&output).expect("failed to parse time entry list JSON"),
+        Err(SkipReason::RateLimited(message)) => {
+            eprintln!(
+                "Skipping live CLI test because Toggl API rate limit was hit while loading the baseline list.\nstderr:\n{}",
+                message
+            );
+            return;
+        }
+    };
     assert!(
         !entries_before
             .iter()
@@ -98,14 +139,18 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
         "baseline already contains test description {description}"
     );
 
-    run_toggl(&[
+    if try_run_toggl_checked(&[
         "start",
         &description,
         "--start",
         TEST_START,
         "--end",
         TEST_END,
-    ]);
+    ])
+    .is_err()
+    {
+        return;
+    }
 
     let created_entry = wait_for("created time entry missing from list", || {
         list_entries_on_test_day()
@@ -114,13 +159,17 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     });
     cleanup.time_entry_id = Some(created_entry.id);
 
-    run_toggl(&[
+    if try_run_toggl_checked(&[
         "edit",
         "time-entry",
         &created_entry.id.to_string(),
         "--description",
         &renamed_description,
-    ]);
+    ])
+    .is_err()
+    {
+        return;
+    }
 
     let edited_entry = wait_for("edited time entry missing from list", || {
         list_entries_on_test_day()
@@ -129,7 +178,9 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     });
     assert_eq!(edited_entry.id, created_entry.id);
 
-    run_toggl(&["delete", &created_entry.id.to_string()]);
+    if try_run_toggl_checked(&["delete", &created_entry.id.to_string()]).is_err() {
+        return;
+    }
     cleanup.time_entry_id = None;
 
     let entries_after_delete = wait_for("time entry cleanup did not restore baseline", || {
