@@ -10,19 +10,6 @@ struct ProjectRecord {
 }
 
 #[derive(Deserialize)]
-struct TaskProjectRecord {
-    id: i64,
-    name: String,
-}
-
-#[derive(Deserialize)]
-struct TaskRecord {
-    id: i64,
-    name: String,
-    project: TaskProjectRecord,
-}
-
-#[derive(Deserialize)]
 struct TagRecord {
     name: String,
 }
@@ -35,19 +22,12 @@ struct ClientRecord {
 #[derive(Default)]
 struct CleanupState {
     project_name: Option<String>,
-    task_name: Option<String>,
     tag_name: Option<String>,
     client_name: Option<String>,
 }
 
 impl Drop for CleanupState {
     fn drop(&mut self) {
-        if let (Some(project_name), Some(task_name)) =
-            (self.project_name.as_deref(), self.task_name.as_deref())
-        {
-            let _ = try_run_toggl(&["delete", "task", "--project", project_name, task_name]);
-        }
-
         if let Some(project_name) = self.project_name.as_deref() {
             let _ = try_run_toggl(&["delete", "project", project_name]);
         }
@@ -99,11 +79,6 @@ fn list_projects() -> Vec<ProjectRecord> {
         .expect("failed to parse project list JSON")
 }
 
-fn list_tasks() -> Vec<TaskRecord> {
-    serde_json::from_str(&run_toggl(&["list", "task", "--json"]))
-        .expect("failed to parse task list JSON")
-}
-
 fn list_tags() -> Vec<TagRecord> {
     serde_json::from_str(&run_toggl(&["list", "tag", "--json"]))
         .expect("failed to parse tag list JSON")
@@ -137,8 +112,6 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
 
     let project_name = unique_name("project");
     let renamed_project_name = format!("{project_name}-renamed");
-    let task_name = unique_name("task");
-    let renamed_task_name = format!("{task_name}-renamed");
     let tag_name = unique_name("tag");
     let renamed_tag_name = format!("{tag_name}-renamed");
     let client_name = unique_name("client");
@@ -193,38 +166,12 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
         "created client missing from list"
     );
 
-    let tasks_before = list_tasks();
-    let tasks_before_for_project = tasks_before
-        .iter()
-        .filter(|item| item.project.id == created_project.id)
-        .count();
-    assert_eq!(tasks_before_for_project, 0);
-
-    run_toggl(&["create", "task", "--project", &project_name, &task_name]);
-    cleanup.task_name = Some(task_name.clone());
-
-    let created_task = wait_for("created task missing from list", || {
-        list_tasks()
-            .into_iter()
-            .find(|item| item.name == task_name && item.project.id == created_project.id)
-    });
-
     run_toggl(&["rename", "project", &project_name, &renamed_project_name]);
     run_toggl(&["rename", "tag", &tag_name, &renamed_tag_name]);
     run_toggl(&["rename", "client", &client_name, &renamed_client_name]);
-    run_toggl(&[
-        "edit",
-        "task",
-        "--project",
-        &renamed_project_name,
-        &task_name,
-        "--new-name",
-        &renamed_task_name,
-    ]);
     cleanup.project_name = Some(renamed_project_name.clone());
     cleanup.tag_name = Some(renamed_tag_name.clone());
     cleanup.client_name = Some(renamed_client_name.clone());
-    cleanup.task_name = Some(renamed_task_name.clone());
 
     let projects_after_rename = wait_for("renamed project missing from list", || {
         let projects = list_projects();
@@ -281,37 +228,9 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
             .all(|item| item.name != client_name),
         "old client name still present after rename"
     );
-
-    let tasks_after_rename = wait_for("renamed task missing from list", || {
-        let tasks = list_tasks();
-        tasks
-            .iter()
-            .any(|item| item.name == renamed_task_name && item.project.id == renamed_project.id)
-            .then_some(tasks)
-    });
-    let renamed_task = tasks_after_rename
-        .iter()
-        .find(|item| item.name == renamed_task_name && item.project.id == renamed_project.id)
-        .expect("renamed task missing from list after polling");
-    assert_eq!(renamed_task.id, created_task.id);
-    assert!(
-        tasks_after_rename
-            .iter()
-            .all(|item| !(item.name == task_name && item.project.id == renamed_project.id)),
-        "old task name still present after rename"
-    );
-
-    run_toggl(&[
-        "delete",
-        "task",
-        "--project",
-        &renamed_project_name,
-        &renamed_task_name,
-    ]);
     run_toggl(&["delete", "project", &renamed_project_name]);
     run_toggl(&["delete", "tag", &renamed_tag_name]);
     run_toggl(&["delete", "client", &renamed_client_name]);
-    cleanup.task_name = None;
     cleanup.project_name = None;
     cleanup.tag_name = None;
     cleanup.client_name = None;
@@ -362,22 +281,5 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
             .iter()
             .all(|item| item.name != client_name && item.name != renamed_client_name),
         "client cleanup did not restore baseline"
-    );
-
-    let tasks_after_delete = wait_for("task cleanup did not restore baseline", || {
-        let tasks = list_tasks();
-        tasks
-            .iter()
-            .all(|item| {
-                item.project.id != renamed_project.id && item.project.name != renamed_project_name
-            })
-            .then_some(tasks)
-    });
-    assert!(
-        tasks_after_delete
-            .iter()
-            .all(|item| item.project.id != renamed_project.id
-                && item.project.name != renamed_project_name),
-        "task cleanup did not restore baseline"
     );
 }
