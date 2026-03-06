@@ -1,11 +1,13 @@
 ---
 name: toggl-cli
 description: >
-  Use this skill whenever the user wants to manage their Toggl Track time entries, projects, or tags
+  Use this skill whenever the user wants to manage their Toggl Track time entries, projects, tags, or clients
   via the command line. Trigger this skill for starting, stopping, continuing, listing, editing, and deleting
-  time entries; creating, listing, renaming, and deleting projects/tags; and setting up auto-tracking config.
+  time entries; creating, listing, renaming, and deleting projects/tags/clients; viewing user profile, workspaces,
+  and tasks; showing individual time entry details; and setting up auto-tracking config.
   Also trigger when the user says things like "log my time", "track time for X", "what am I tracking",
-  "stop the timer", "start a new timer", "show my recent entries", "which project", or similar
+  "stop the timer", "start a new timer", "show my recent entries", "which project", "who am I",
+  "my profile", "list my clients", "show entry details", or similar
   time-tracking requests — even if they don't explicitly say "Toggl" or "toggl-cli".
 ---
 
@@ -55,7 +57,7 @@ toggl list --until 2026-03-05
 toggl list --since 2026-03-01 --until 2026-03-05
 ```
 
-### List Projects / Tags
+### List Projects / Tags / Clients / Workspaces / Tasks
 
 ```bash
 # List projects
@@ -65,7 +67,45 @@ toggl list project --json
 # List tags
 toggl list tag
 toggl list tag --json
+
+# List clients
+toggl list client
+toggl list client --json
+
+# List workspaces
+toggl list workspace
+toggl list workspace --json
+
+# List tasks (requires paid plan)
+toggl list task
+toggl list task --json
 ```
+
+---
+
+### Show User Profile
+
+```bash
+# Display current user info (name, email, timezone, workspace)
+toggl me
+```
+
+Output includes: Name, Email, Timezone, Default Workspace ID, Week Starts On, Avatar URL, Created At.
+
+---
+
+### Show Time Entry Details
+
+```bash
+# Show a specific time entry by ID
+toggl show 123456789
+
+# Show in JSON format
+toggl show 123456789 --json
+toggl show 123456789 -j
+```
+
+Use `toggl list --json` to find time entry IDs, then `toggl show <id>` for full details.
 
 ---
 
@@ -194,6 +234,21 @@ toggl delete-tag "client-meeting"
 
 ---
 
+### Manage Clients
+
+```bash
+# Create client
+toggl create-client "Acme Corp"
+
+# Rename client
+toggl rename-client "Acme Corp" "Acme Corporation"
+
+# Delete client
+toggl delete-client "Acme Corporation"
+```
+
+---
+
 ### Authentication
 
 ```bash
@@ -288,4 +343,33 @@ toggl start "New task" -p "New Project"
 ### "Parse time entries with a script"
 ```bash
 toggl list --json | jq '.[] | {desc: .description, project: .project.name, duration: .duration}'
+```
+
+### "Who am I? / Check my profile"
+```bash
+toggl me
+```
+
+### "Show details of a specific time entry"
+```bash
+# First find the ID
+toggl list -n 5 --json
+# Then show details
+toggl show 4317653032
+```
+
+### "List all my clients"
+```bash
+toggl list client
+```
+
+### "Add a new client and start tracking for them"
+```bash
+toggl create-client "New Client"
+toggl start "Onboarding call" -p "ClientProject" -t "meeting" -b
+```
+
+### "What workspaces do I have access to?"
+```bash
+toggl list workspace
 ```
