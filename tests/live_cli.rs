@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 use std::process::Command;
+use std::sync::OnceLock;
 use std::thread::sleep;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -78,6 +79,12 @@ fn should_run_live_tests() -> bool {
 
 fn test_organization_id() -> Option<i64> {
     std::env::var("TOGGL_TEST_ORGANIZATION_ID")
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+}
+
+fn test_workspace_id() -> Option<i64> {
+    std::env::var("TOGGL_TEST_WORKSPACE_ID")
         .ok()
         .and_then(|value| value.trim().parse::<i64>().ok())
 }
@@ -199,6 +206,33 @@ fn default_workspace_id_from_me(output: &str) -> i64 {
         .expect("failed to find default workspace ID in `toggl me` output")
 }
 
+fn require_default_workspace_matches_test_workspace(me_output: &str) -> i64 {
+    let default_workspace_id = default_workspace_id_from_me(me_output);
+    if let Some(expected_workspace_id) = test_workspace_id() {
+        assert_eq!(
+            default_workspace_id, expected_workspace_id,
+            "TOGGL_TEST_WORKSPACE_ID is set to {}, but `toggl me` reports default workspace {}. Live tests would otherwise operate outside the intended workspace.",
+            expected_workspace_id, default_workspace_id
+        );
+    }
+    default_workspace_id
+}
+
+static TEST_WORKSPACE_SCOPE_CHECK: OnceLock<()> = OnceLock::new();
+
+fn ensure_test_workspace_scope() {
+    if test_workspace_id().is_none() {
+        return;
+    }
+
+    TEST_WORKSPACE_SCOPE_CHECK.get_or_init(|| {
+        let Some(me_output) = run_checked_or_skip(&["me"]) else {
+            return;
+        };
+        require_default_workspace_matches_test_workspace(&me_output);
+    });
+}
+
 fn is_rate_limited(stderr: &str) -> bool {
     let stderr = stderr.to_ascii_lowercase();
     stderr.contains("hourly limit for api calls")
@@ -235,6 +269,7 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     let description = unique_description("entry");
     let renamed_description = format!("{description}-edited");
     let mut cleanup = CleanupState::default();
+    ensure_test_workspace_scope();
 
     let entries_before: Vec<TimeEntryRecord> = match try_run_toggl_checked(&[
         "list", "--json", "--since", TEST_DAY, "--until", TEST_DAY,
@@ -371,6 +406,8 @@ fn live_cli_list_commands_cover_workspace_resources() {
         return;
     }
 
+    ensure_test_workspace_scope();
+
     let commands: [&[&str]; 5] = [
         &["list", "project", "--json"],
         &["list", "client", "--json"],
@@ -398,6 +435,8 @@ fn live_cli_default_time_entry_listing_succeeds() {
         eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
         return;
     }
+
+    ensure_test_workspace_scope();
 
     let Some(items) = run_json_array_command(&["list", "--json", "--number", "5"]) else {
         return;
@@ -471,6 +510,8 @@ fn live_cli_running_commands_succeed() {
         return;
     }
 
+    ensure_test_workspace_scope();
+
     for args in [&["running"][..], &[][..], &["current"][..]] {
         let Some(output) = run_checked_or_skip(args) else {
             return;
@@ -492,6 +533,7 @@ fn live_cli_start_and_stop_running_entry_succeeds() {
 
     let description = unique_description("running");
     let mut cleanup = CleanupState::default();
+    ensure_test_workspace_scope();
 
     if run_checked_or_skip(&["start", &description]).is_none() {
         return;
@@ -550,6 +592,7 @@ fn live_cli_continue_succeeds() {
 
     let description = unique_description("continue");
     let mut cleanup = CleanupState::default();
+    ensure_test_workspace_scope();
     let end = chrono::Utc::now() - chrono::Duration::minutes(5);
     let start = end - chrono::Duration::minutes(5);
     let start_string = start.to_rfc3339();
@@ -631,6 +674,7 @@ fn live_cli_workspace_resource_crud_succeeds() {
     }
 
     let mut cleanup = CleanupState::default();
+    ensure_test_workspace_scope();
     let project_name = unique_description("project");
     let renamed_project_name = format!("{project_name}-renamed");
     let task_name = unique_description("task");
@@ -839,7 +883,8 @@ fn live_cli_workspace_rename_round_trip_succeeds() {
     let Some(me_output) = run_checked_or_skip(&["me"]) else {
         return;
     };
-    let default_workspace_id = default_workspace_id_from_me(&me_output);
+    ensure_test_workspace_scope();
+    let default_workspace_id = require_default_workspace_matches_test_workspace(&me_output);
 
     let Some(workspaces_output) = run_checked_or_skip(&["list", "workspace", "--json"]) else {
         return;
@@ -905,6 +950,7 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
         );
         return;
     };
+    ensure_test_workspace_scope();
 
     let workspace_name = unique_description("workspace");
 

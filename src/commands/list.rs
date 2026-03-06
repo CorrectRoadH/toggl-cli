@@ -132,6 +132,69 @@ impl ListCommand {
             return Ok(());
         }
 
+        if let Some(Entity::Project { json: entity_json }) = entity {
+            let json = json_flag || entity_json;
+            let projects = api_client.get_projects_list().await?;
+            let stdout = io::stdout();
+            let mut handle = BufWriter::new(stdout);
+            let projects = projects
+                .iter()
+                .take(count.unwrap_or(usize::MAX))
+                .collect::<Vec<_>>();
+            if json {
+                let json_string = serde_json::to_string_pretty(&projects)
+                    .expect("failed to serialize projects to JSON");
+                writeln!(handle, "{json_string}").expect("failed to print");
+            } else {
+                projects
+                    .iter()
+                    .for_each(|project| writeln!(handle, "{project}").expect("failed to print"));
+            }
+            return Ok(());
+        }
+
+        if let Some(Entity::Workspace { json: entity_json }) = entity {
+            let json = json_flag || entity_json;
+            let workspaces = api_client.get_workspaces_list().await?;
+            let stdout = io::stdout();
+            let mut handle = BufWriter::new(stdout);
+            let workspaces = workspaces
+                .iter()
+                .take(count.unwrap_or(usize::MAX))
+                .collect::<Vec<_>>();
+            if json {
+                let json_string = serde_json::to_string_pretty(&workspaces)
+                    .expect("failed to serialize workspaces to JSON");
+                writeln!(handle, "{json_string}").expect("failed to print");
+            } else {
+                workspaces.iter().for_each(|workspace| {
+                    writeln!(handle, "{workspace}").expect("failed to print")
+                });
+            }
+            return Ok(());
+        }
+
+        if let Some(Entity::Task { json: entity_json }) = entity {
+            let json = json_flag || entity_json;
+            let tasks = api_client.get_tasks_list().await?;
+            let stdout = io::stdout();
+            let mut handle = BufWriter::new(stdout);
+            let tasks = tasks
+                .iter()
+                .take(count.unwrap_or(usize::MAX))
+                .collect::<Vec<_>>();
+            if json {
+                let json_string = serde_json::to_string_pretty(&tasks)
+                    .expect("failed to serialize tasks to JSON");
+                writeln!(handle, "{json_string}").expect("failed to print");
+            } else {
+                tasks
+                    .iter()
+                    .for_each(|task| writeln!(handle, "{task}").expect("failed to print"));
+            }
+            return Ok(());
+        }
+
         match api_client.get_entities().await {
             Err(error) => {
                 return Err(error);

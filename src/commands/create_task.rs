@@ -13,12 +13,11 @@ impl CreateTaskCommand {
         estimated_seconds: Option<i64>,
         user_id: Option<i64>,
     ) -> ResultWithDefaultError<()> {
-        let entities = api_client.get_entities().await?;
-        let project = entities
-            .projects
-            .values()
+        let project = api_client
+            .get_projects_list()
+            .await?
+            .into_iter()
             .find(|project| project.name == project_name)
-            .cloned()
             .ok_or_else(|| {
                 Box::new(ArgumentError::ResourceNotFound(format!(
                     "No project found with name '{project_name}'"
@@ -46,9 +45,8 @@ mod tests {
     use super::*;
     use crate::api::client::MockApiClient;
     use crate::error::ApiError;
-    use crate::models::{Entities, Project, Task};
+    use crate::models::{Project, Task};
     use chrono::Utc;
-    use std::collections::HashMap;
     use tokio_test::{assert_err, assert_ok};
 
     fn mock_project() -> Project {
@@ -66,18 +64,8 @@ mod tests {
         }
     }
 
-    fn mock_entities() -> Entities {
-        let project = mock_project();
-        let mut projects = HashMap::new();
-        projects.insert(project.id, project);
-        Entities {
-            time_entries: Vec::new(),
-            projects,
-            tasks: HashMap::new(),
-            clients: HashMap::new(),
-            workspaces: Vec::new(),
-            tags: Vec::new(),
-        }
+    fn mock_projects() -> Vec<Project> {
+        vec![mock_project()]
     }
 
     #[tokio::test]
@@ -85,8 +73,8 @@ mod tests {
         let mut api_client = MockApiClient::new();
         let project = mock_project();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_projects_list()
+            .returning(|| Ok(mock_projects()));
         api_client
             .expect_create_task()
             .withf(|wid, pid, name, active, estimate, user_id| {
@@ -122,8 +110,8 @@ mod tests {
     async fn create_task_handles_missing_project() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_projects_list()
+            .returning(|| Ok(mock_projects()));
 
         let result = CreateTaskCommand::execute(
             api_client,
@@ -141,8 +129,8 @@ mod tests {
     async fn create_task_handles_api_failure() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_projects_list()
+            .returning(|| Ok(mock_projects()));
         api_client
             .expect_create_task()
             .returning(|_, _, _, _, _, _| Err(Box::new(ApiError::Network)));
@@ -160,10 +148,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_task_returns_error_when_entities_fetch_fails() {
+    async fn create_task_returns_error_when_projects_fetch_fails() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
+            .expect_get_projects_list()
             .returning(|| Err(Box::new(ApiError::Network)));
 
         let result = CreateTaskCommand::execute(

@@ -17,7 +17,7 @@ impl StopCommand {
         api_client: &impl ApiClient,
         origin: StopCommandOrigin,
     ) -> ResultWithDefaultError<Option<TimeEntry>> {
-        match api_client.get_current_time_entry().await? {
+        match api_client.get_current_time_entry_minimal().await? {
             None => {
                 match origin {
                     StopCommandOrigin::CommandLine => {
@@ -60,7 +60,7 @@ mod tests {
     async fn stop_returns_ok_when_no_entry_is_running() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_current_time_entry()
+            .expect_get_current_time_entry_minimal()
             .returning(|| Ok(None));
 
         let result = StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await;
@@ -73,7 +73,7 @@ mod tests {
         let current_entry = TimeEntry::default();
         let stopped_entry = current_entry.clone();
         api_client
-            .expect_get_current_time_entry()
+            .expect_get_current_time_entry_minimal()
             .returning(move || Ok(Some(current_entry.clone())));
         api_client
             .expect_stop_time_entry()
@@ -88,7 +88,7 @@ mod tests {
     async fn stop_returns_error_when_api_fails() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_current_time_entry()
+            .expect_get_current_time_entry_minimal()
             .returning(|| Err(Box::new(ApiError::Network)));
 
         let result = StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await;

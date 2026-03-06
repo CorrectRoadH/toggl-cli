@@ -25,27 +25,15 @@ impl UpdateTaskCommand {
             )));
         }
 
-        let entities = api_client.get_entities().await?;
-        let project = entities
-            .projects
-            .values()
-            .find(|project| project.name == project_name)
-            .cloned()
-            .ok_or_else(|| {
-                Box::new(ArgumentError::ResourceNotFound(format!(
-                    "No project found with name '{project_name}'"
-                ))) as Box<dyn std::error::Error + Send>
-            })?;
-
-        let task = entities
-            .tasks
-            .values()
-            .find(|task| task.name == task_name && task.project.id == project.id)
-            .cloned()
+        let task = api_client
+            .get_tasks_list()
+            .await?
+            .into_iter()
+            .find(|task| task.name == task_name && task.project.name == project_name)
             .ok_or_else(|| {
                 Box::new(ArgumentError::ResourceNotFound(format!(
                     "No task found with name '{task_name}' in project '{}'",
-                    project.name
+                    project_name
                 ))) as Box<dyn std::error::Error + Send>
             })?;
 
@@ -71,9 +59,8 @@ mod tests {
     use super::*;
     use crate::api::client::MockApiClient;
     use crate::error::ApiError;
-    use crate::models::{Entities, Project, Task};
+    use crate::models::{Project, Task};
     use chrono::Utc;
-    use std::collections::HashMap;
     use tokio_test::{assert_err, assert_ok};
 
     fn mock_project() -> Project {
@@ -100,21 +87,8 @@ mod tests {
         }
     }
 
-    fn mock_entities() -> Entities {
-        let project = mock_project();
-        let task = mock_task();
-        let mut projects = HashMap::new();
-        let mut tasks = HashMap::new();
-        projects.insert(project.id, project);
-        tasks.insert(task.id, task);
-        Entities {
-            time_entries: Vec::new(),
-            projects,
-            tasks,
-            clients: HashMap::new(),
-            workspaces: Vec::new(),
-            tags: Vec::new(),
-        }
+    fn mock_tasks() -> Vec<Task> {
+        vec![mock_task()]
     }
 
     #[tokio::test]
@@ -123,8 +97,8 @@ mod tests {
         let mut updated_task = mock_task();
         updated_task.name = "Review v2".to_string();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_tasks_list()
+            .returning(|| Ok(mock_tasks()));
         api_client
             .expect_update_task()
             .withf(|wid, pid, tid, name, active, estimate, user_id| {
@@ -155,8 +129,8 @@ mod tests {
     async fn update_task_handles_missing_project() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_tasks_list()
+            .returning(|| Ok(mock_tasks()));
 
         let result = UpdateTaskCommand::execute(
             api_client,
@@ -175,8 +149,8 @@ mod tests {
     async fn update_task_handles_missing_task() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_tasks_list()
+            .returning(|| Ok(mock_tasks()));
 
         let result = UpdateTaskCommand::execute(
             api_client,
@@ -195,8 +169,8 @@ mod tests {
     async fn update_task_handles_api_failure() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_tasks_list()
+            .returning(|| Ok(mock_tasks()));
         api_client
             .expect_update_task()
             .returning(|_, _, _, _, _, _, _| Err(Box::new(ApiError::Network)));

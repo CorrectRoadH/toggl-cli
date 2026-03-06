@@ -10,27 +10,15 @@ impl DeleteTaskCommand {
         project_name: String,
         task_name: String,
     ) -> ResultWithDefaultError<()> {
-        let entities = api_client.get_entities().await?;
-        let project = entities
-            .projects
-            .values()
-            .find(|project| project.name == project_name)
-            .cloned()
-            .ok_or_else(|| {
-                Box::new(ArgumentError::ResourceNotFound(format!(
-                    "No project found with name '{project_name}'"
-                ))) as Box<dyn std::error::Error + Send>
-            })?;
-
-        let task = entities
-            .tasks
-            .values()
-            .find(|task| task.name == task_name && task.project.id == project.id)
-            .cloned()
+        let task = api_client
+            .get_tasks_list()
+            .await?
+            .into_iter()
+            .find(|task| task.name == task_name && task.project.name == project_name)
             .ok_or_else(|| {
                 Box::new(ArgumentError::ResourceNotFound(format!(
                     "No task found with name '{task_name}' in project '{}'",
-                    project.name
+                    project_name
                 ))) as Box<dyn std::error::Error + Send>
             })?;
 
@@ -48,9 +36,8 @@ mod tests {
     use super::*;
     use crate::api::client::MockApiClient;
     use crate::error::ApiError;
-    use crate::models::{Entities, Project, Task};
+    use crate::models::{Project, Task};
     use chrono::Utc;
-    use std::collections::HashMap;
     use tokio_test::{assert_err, assert_ok};
 
     fn mock_project() -> Project {
@@ -77,29 +64,16 @@ mod tests {
         }
     }
 
-    fn mock_entities() -> Entities {
-        let project = mock_project();
-        let task = mock_task();
-        let mut projects = HashMap::new();
-        let mut tasks = HashMap::new();
-        projects.insert(project.id, project);
-        tasks.insert(task.id, task);
-        Entities {
-            time_entries: Vec::new(),
-            projects,
-            tasks,
-            clients: HashMap::new(),
-            workspaces: Vec::new(),
-            tags: Vec::new(),
-        }
+    fn mock_tasks() -> Vec<Task> {
+        vec![mock_task()]
     }
 
     #[tokio::test]
     async fn delete_task_returns_ok_on_success() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_tasks_list()
+            .returning(|| Ok(mock_tasks()));
         api_client
             .expect_delete_task()
             .withf(|wid, pid, tid| *wid == 1 && *pid == 10 && *tid == 77)
@@ -115,8 +89,8 @@ mod tests {
     async fn delete_task_handles_missing_project() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_tasks_list()
+            .returning(|| Ok(mock_tasks()));
 
         let result =
             DeleteTaskCommand::execute(api_client, "Missing".to_string(), "Review".to_string())
@@ -128,8 +102,8 @@ mod tests {
     async fn delete_task_handles_missing_task() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_tasks_list()
+            .returning(|| Ok(mock_tasks()));
 
         let result =
             DeleteTaskCommand::execute(api_client, "Platform".to_string(), "Missing".to_string())
@@ -141,8 +115,8 @@ mod tests {
     async fn delete_task_handles_api_failure() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_tasks_list()
+            .returning(|| Ok(mock_tasks()));
         api_client
             .expect_delete_task()
             .returning(|_, _, _| Err(Box::new(ApiError::Network)));
@@ -154,10 +128,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delete_task_returns_error_when_entities_fetch_fails() {
+    async fn delete_task_returns_error_when_tasks_fetch_fails() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
+            .expect_get_tasks_list()
             .returning(|| Err(Box::new(ApiError::Network)));
 
         let result =

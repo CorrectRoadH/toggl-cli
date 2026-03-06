@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+use std::fs;
+use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 
 use crate::credentials;
 use crate::error;
@@ -18,6 +21,7 @@ use mockall::automock;
 use models::{ResultWithDefaultError, User};
 use reqwest::Client;
 use reqwest::{header, RequestBuilder};
+use serde::Deserialize;
 use serde::{de, Serialize};
 use serde_json::Value;
 
@@ -44,6 +48,9 @@ use super::models::NetworkWorkspace;
 pub trait ApiClient {
     async fn get_user(&self) -> ResultWithDefaultError<User>;
     async fn get_entities(&self) -> ResultWithDefaultError<Entities>;
+    async fn get_projects_list(&self) -> ResultWithDefaultError<Vec<Project>>;
+    async fn get_tasks_list(&self) -> ResultWithDefaultError<Vec<Task>>;
+    async fn get_workspaces_list(&self) -> ResultWithDefaultError<Vec<Workspace>>;
 
     async fn create_time_entry(&self, time_entry: TimeEntry) -> ResultWithDefaultError<i64>;
     async fn update_time_entry(&self, time_entry: TimeEntry) -> ResultWithDefaultError<i64>;
@@ -67,6 +74,7 @@ pub trait ApiClient {
     ) -> ResultWithDefaultError<()>;
 
     async fn get_current_time_entry(&self) -> ResultWithDefaultError<Option<TimeEntry>>;
+    async fn get_current_time_entry_minimal(&self) -> ResultWithDefaultError<Option<TimeEntry>>;
 
     async fn stop_time_entry(
         &self,
@@ -186,6 +194,13 @@ pub trait ApiClient {
 pub struct V9ApiClient {
     http_client: Client,
     base_url: String,
+    cache_namespace: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CachedResponse {
+    fetched_at_epoch_seconds: i64,
+    body: String,
 }
 
 impl V9ApiClient {
@@ -413,6 +428,7 @@ impl V9ApiClient {
         credentials: credentials::Credentials,
         proxy: Option<String>,
     ) -> ResultWithDefaultError<V9ApiClient> {
+        let cache_namespace = cache_namespace_for_token(&credentials.api_token);
         let auth_string = credentials.api_token + ":api_token";
         let header_content =
             "Basic ".to_string() + general_purpose::STANDARD.encode(auth_string).as_str();
@@ -434,12 +450,94 @@ impl V9ApiClient {
         let api_client = Self {
             http_client,
             base_url: "https://api.track.toggl.com/api/v9".to_string(),
+            cache_namespace,
         };
         Ok(api_client)
     }
 
     async fn get<T: de::DeserializeOwned>(&self, url: String) -> ResultWithDefaultError<T> {
-        V9ApiClient::send::<T>(self.http_client.get(url)).await
+        if let Some(cached_body) = self.read_cached_body(&url) {
+            return deserialize_response_body(&cached_body);
+        }
+
+        let response = self.http_client.get(url.clone()).send().await;
+        let result = match response {
+            Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))
+                as Box<dyn std::error::Error + Send>),
+            Ok(response) => {
+                let status = response.status();
+                let body = response.text().await.map_err(|error| {
+                    Box::new(ApiError::NetworkWithMessage(error.to_string()))
+                        as Box<dyn std::error::Error + Send>
+                })?;
+
+                if !status.is_success() {
+                    Err(Box::new(ApiError::NetworkWithMessage(format!(
+                        "HTTP {} {}",
+                        status.as_u16(),
+                        summarize_response_body(&body)
+                    ))) as Box<dyn std::error::Error + Send>)
+                } else {
+                    self.write_cached_body(&url, &body);
+                    deserialize_response_body(&body)
+                }
+            }
+        };
+
+        result
+    }
+
+    fn read_cached_body(&self, url: &str) -> Option<String> {
+        if !is_cacheable_get_url(url) || is_http_cache_disabled() {
+            return None;
+        }
+
+        let cache_path = self.cache_file_path(url)?;
+        let contents = fs::read_to_string(cache_path).ok()?;
+        let cached = serde_json::from_str::<CachedResponse>(&contents).ok()?;
+        let age = chrono::Utc::now().timestamp() - cached.fetched_at_epoch_seconds;
+        if age < 0 || age > cache_ttl_seconds() {
+            return None;
+        }
+        Some(cached.body)
+    }
+
+    fn write_cached_body(&self, url: &str, body: &str) {
+        if !is_cacheable_get_url(url) || is_http_cache_disabled() {
+            return;
+        }
+
+        let Some(cache_path) = self.cache_file_path(url) else {
+            return;
+        };
+        let Some(cache_dir) = cache_path.parent() else {
+            return;
+        };
+        if fs::create_dir_all(cache_dir).is_err() {
+            return;
+        }
+
+        let cached = CachedResponse {
+            fetched_at_epoch_seconds: chrono::Utc::now().timestamp(),
+            body: body.to_string(),
+        };
+        let Ok(serialized) = serde_json::to_string(&cached) else {
+            return;
+        };
+        let _ = fs::write(cache_path, serialized);
+    }
+
+    fn cache_file_path(&self, url: &str) -> Option<PathBuf> {
+        cache_root_dir().map(|root| {
+            root.join(&self.cache_namespace)
+                .join(format!("{}.json", stable_hash(url)))
+        })
+    }
+
+    fn invalidate_read_cache(&self) {
+        if let Some(dir) = cache_root_dir().map(|root| root.join(&self.cache_namespace)) {
+            let _ = fs::remove_dir_all(dir);
+        }
     }
 
     async fn put<T: de::DeserializeOwned, Body: Serialize>(
@@ -447,7 +545,11 @@ impl V9ApiClient {
         url: String,
         body: &Body,
     ) -> ResultWithDefaultError<T> {
-        V9ApiClient::send::<T>(self.http_client.put(url).json(body)).await
+        let result = V9ApiClient::send::<T>(self.http_client.put(url).json(body)).await;
+        if result.is_ok() {
+            self.invalidate_read_cache();
+        }
+        result
     }
 
     async fn post<T: de::DeserializeOwned, Body: Serialize>(
@@ -455,7 +557,11 @@ impl V9ApiClient {
         url: String,
         body: &Body,
     ) -> ResultWithDefaultError<T> {
-        V9ApiClient::send::<T>(self.http_client.post(url).json(body)).await
+        let result = V9ApiClient::send::<T>(self.http_client.post(url).json(body)).await;
+        if result.is_ok() {
+            self.invalidate_read_cache();
+        }
+        result
     }
 
     async fn patch<T: de::DeserializeOwned, Body: Serialize>(
@@ -463,14 +569,22 @@ impl V9ApiClient {
         url: String,
         body: &Body,
     ) -> ResultWithDefaultError<T> {
-        V9ApiClient::send::<T>(self.http_client.patch(url).json(body)).await
+        let result = V9ApiClient::send::<T>(self.http_client.patch(url).json(body)).await;
+        if result.is_ok() {
+            self.invalidate_read_cache();
+        }
+        result
     }
 
     async fn patch_without_body<T: de::DeserializeOwned>(
         &self,
         url: String,
     ) -> ResultWithDefaultError<T> {
-        V9ApiClient::send::<T>(self.http_client.patch(url)).await
+        let result = V9ApiClient::send::<T>(self.http_client.patch(url)).await;
+        if result.is_ok() {
+            self.invalidate_read_cache();
+        }
+        result
     }
 
     async fn send<T: de::DeserializeOwned>(request: RequestBuilder) -> ResultWithDefaultError<T> {
@@ -507,6 +621,7 @@ impl V9ApiClient {
             Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
                 if response.status().is_success() {
+                    self.invalidate_read_cache();
                     Ok(())
                 } else {
                     let status = response.status();
@@ -523,6 +638,68 @@ impl V9ApiClient {
             }
         }
     }
+}
+
+fn deserialize_response_body<T: de::DeserializeOwned>(body: &str) -> ResultWithDefaultError<T> {
+    serde_json::from_str::<T>(body).map_err(|error| {
+        Box::new(ApiError::DeserializationWithMessage(format!(
+            "{}; response body: {}",
+            error,
+            summarize_response_body(body)
+        ))) as Box<dyn std::error::Error + Send>
+    })
+}
+
+fn cache_root_dir() -> Option<PathBuf> {
+    directories::ProjectDirs::from("studio.watercooler", "labs", "toggl-cli")
+        .map(|dirs| dirs.cache_dir().join("http"))
+}
+
+fn stable_hash(value: &str) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn cache_namespace_for_token(token: &str) -> String {
+    format!("{:x}", stable_hash(token))
+}
+
+fn is_http_cache_disabled() -> bool {
+    matches!(
+        std::env::var("TOGGL_DISABLE_HTTP_CACHE"),
+        Ok(value) if matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES")
+    )
+}
+
+fn cache_ttl_seconds() -> i64 {
+    std::env::var("TOGGL_HTTP_CACHE_TTL_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+        .filter(|value| *value >= 0)
+        .unwrap_or(15)
+}
+
+fn is_cacheable_get_url(url: &str) -> bool {
+    if url.ends_with("/me")
+        || url.ends_with("/me/projects")
+        || url.ends_with("/me/tasks")
+        || url.ends_with("/me/clients")
+        || url.ends_with("/me/workspaces")
+        || url.ends_with("/me/organizations")
+        || url.ends_with("/me/preferences")
+    {
+        return true;
+    }
+
+    if url.contains("/organizations/")
+        && !url.contains("/organizations//")
+        && !url.ends_with("/workspaces")
+    {
+        return true;
+    }
+
+    url.contains("/workspaces/") && url.ends_with("/tags")
 }
 
 fn summarize_response_body(body: &str) -> String {
@@ -545,6 +722,43 @@ impl ApiClient for V9ApiClient {
     async fn get_user(&self) -> ResultWithDefaultError<User> {
         let url = format!("{}/me", self.base_url);
         return self.get::<User>(url).await;
+    }
+
+    async fn get_projects_list(&self) -> ResultWithDefaultError<Vec<Project>> {
+        Ok(self
+            .get_projects()
+            .await?
+            .into_iter()
+            .map(Self::network_project_to_project)
+            .collect())
+    }
+
+    async fn get_tasks_list(&self) -> ResultWithDefaultError<Vec<Task>> {
+        let (network_tasks, network_projects) = tokio::join!(self.get_tasks(), self.get_projects());
+        let projects = network_projects
+            .unwrap_or_default()
+            .into_iter()
+            .map(|project| (project.id, Self::network_project_to_project(project)))
+            .collect::<HashMap<_, _>>();
+
+        Ok(
+            Self::map_tasks(network_tasks.unwrap_or_default(), &projects)
+                .into_values()
+                .collect(),
+        )
+    }
+
+    async fn get_workspaces_list(&self) -> ResultWithDefaultError<Vec<Workspace>> {
+        Ok(self
+            .get_workspaces()
+            .await?
+            .into_iter()
+            .map(|workspace| Workspace {
+                id: workspace.id,
+                name: workspace.name,
+                admin: workspace.admin,
+            })
+            .collect())
     }
 
     async fn create_time_entry(&self, time_entry: TimeEntry) -> ResultWithDefaultError<i64> {
@@ -603,6 +817,27 @@ impl ApiClient for V9ApiClient {
             &projects,
             &tasks,
         )))
+    }
+
+    async fn get_current_time_entry_minimal(&self) -> ResultWithDefaultError<Option<TimeEntry>> {
+        let network_entry = match self.get_current_network_time_entry().await? {
+            Some(entry) => entry,
+            None => return Ok(None),
+        };
+
+        Ok(Some(TimeEntry {
+            id: network_entry.id,
+            description: network_entry.description,
+            start: network_entry.start,
+            stop: network_entry.stop,
+            duration: network_entry.duration,
+            billable: network_entry.billable,
+            workspace_id: network_entry.workspace_id,
+            tags: network_entry.tags.unwrap_or_default(),
+            project: None,
+            task: None,
+            created_with: network_entry.created_with,
+        }))
     }
 
     async fn stop_time_entry(
@@ -1050,16 +1285,22 @@ impl ApiClient for V9ApiClient {
                 }
 
                 if body.trim().is_empty() {
+                    self.invalidate_read_cache();
                     return Ok(preferences);
                 }
 
-                serde_json::from_str::<Value>(&body).map_err(|error| {
+                let result = serde_json::from_str::<Value>(&body).map_err(|error| {
                     Box::new(ApiError::DeserializationWithMessage(format!(
                         "{}; response body: {}",
                         error,
                         summarize_response_body(&body)
                     ))) as Box<dyn std::error::Error + Send>
-                })
+                });
+
+                if result.is_ok() {
+                    self.invalidate_read_cache();
+                }
+                result
             }
         }
     }
