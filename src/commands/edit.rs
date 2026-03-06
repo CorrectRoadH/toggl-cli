@@ -20,7 +20,7 @@ impl EditCommand {
         start: Option<String>,
         end: Option<String>,
     ) -> ResultWithDefaultError<()> {
-        let needs_entities = project_name.is_some() || task_name.is_some() || matches!(id, None);
+        let needs_entities = project_name.is_some() || task_name.is_some() || id.is_none();
         let entities = if needs_entities {
             Some(api_client.get_entities().await?)
         } else {
@@ -284,9 +284,11 @@ mod tests {
     #[tokio::test]
     async fn edit_entry_clears_tags_with_empty_argument() {
         let mut api_client = MockApiClient::new();
+        let entry = mock_entry();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_time_entry()
+            .withf(|id| *id == 42)
+            .returning(move |_| Ok(entry.clone()));
         api_client
             .expect_update_time_entry()
             .withf(|entry| entry.tags.is_empty())

@@ -178,7 +178,7 @@ impl StartCommand {
             .as_deref()
             .and_then(|name| {
                 entities.as_ref().and_then(|entities| {
-                    resolve_task_from_name(&entities, name, project.as_ref().map(|p| p.id))
+                    resolve_task_from_name(entities, name, project.as_ref().map(|p| p.id))
                 })
             })
             .or(default_time_entry.task.clone());
