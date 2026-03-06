@@ -12,6 +12,7 @@ mod utilities;
 use api::client::ApiClient;
 use api::client::V9ApiClient;
 use arguments::Command::Auth;
+use arguments::Command::BulkEditTimeEntries;
 use arguments::Command::Config;
 use arguments::Command::Continue;
 use arguments::Command::CreateClient;
@@ -43,6 +44,7 @@ use arguments::Command::UpdateTask;
 use arguments::CommandLineArguments;
 use arguments::ConfigSubCommand;
 use commands::auth::AuthenticationCommand;
+use commands::bulk_edit_time_entries::BulkEditTimeEntriesCommand;
 use commands::cont::ContinueCommand;
 use commands::create_client::CreateClientCommand;
 use commands::create_project::CreateProjectCommand;
@@ -142,6 +144,7 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 billable,
                 description,
                 project,
+                task,
                 tags,
                 start,
                 end,
@@ -151,6 +154,7 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                     picker,
                     description,
                     project,
+                    task,
                     tags,
                     billable,
                     interactive,
@@ -163,7 +167,9 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
             Edit {
                 id,
                 description,
+                billable,
                 project,
+                task,
                 tags,
                 start,
                 end,
@@ -172,7 +178,9 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                     get_default_api_client()?,
                     id,
                     description,
+                    billable,
                     project,
+                    task,
                     tags,
                     start,
                     end,
@@ -181,6 +189,10 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
             }
 
             Delete { id } => DeleteCommand::execute(get_default_api_client()?, id).await?,
+
+            BulkEditTimeEntries { ids, json } => {
+                BulkEditTimeEntriesCommand::execute(get_default_api_client()?, ids, json).await?
+            }
 
             CreateProject { name, color } => {
                 CreateProjectCommand::execute(get_default_api_client()?, name, color).await?

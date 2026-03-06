@@ -76,6 +76,7 @@ SUBCOMMANDS:
     auth              Authenticate with the Toggl API
     config            Manage auto-tracking configuration
     continue
+    bulk-edit-time-entries  Bulk edit multiple time entries with a JSON Patch payload
     current
     list              List time entries (supports date filtering)
     logout            Clear stored credentials

@@ -68,6 +68,7 @@ toggl preferences                               # 查看当前偏好设置
 toggl update-preferences '{"time_format":"H:mm"}' # 更新偏好设置
 toggl update-task --project 我的项目 "代码评审" --new-name "CR" # 更新任务
 toggl delete-task --project 我的项目 "CR"        # 删除任务
+toggl bulk-edit-time-entries 101 102 --json '[{"op":"replace","path":"/description","value":"深度工作"}]' # 批量编辑时间记录
 ```
 
 ---

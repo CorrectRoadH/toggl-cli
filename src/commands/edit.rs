@@ -8,11 +8,14 @@ use colored::Colorize;
 pub struct EditCommand;
 
 impl EditCommand {
+    #[allow(clippy::too_many_arguments)]
     pub async fn execute(
         api_client: impl ApiClient,
         id: Option<i64>,
         description: Option<String>,
+        billable: Option<bool>,
         project_name: Option<String>,
+        task_name: Option<String>,
         tags: Option<Vec<String>>,
         start: Option<String>,
         end: Option<String>,
@@ -21,7 +24,7 @@ impl EditCommand {
 
         let time_entry = match id {
             Some(id) => entities.time_entries.into_iter().find(|te| te.id == id),
-            None => entities.running_time_entry(),
+            None => api_client.get_current_time_entry().await?,
         };
 
         match time_entry {
@@ -41,11 +44,37 @@ impl EditCommand {
                     Some("") => None,
                     Some(name) => entities
                         .projects
+                        .clone()
                         .into_values()
                         .find(|p| p.name == name)
                         .or(entry.project.clone()),
                     None => entry.project.clone(),
                 };
+
+                let task = match task_name.as_deref() {
+                    Some("") => None,
+                    Some(name) => entities
+                        .tasks
+                        .values()
+                        .find(|task| {
+                            task.name == name
+                                && project
+                                    .as_ref()
+                                    .is_none_or(|project| task.project.id == project.id)
+                        })
+                        .cloned(),
+                    None => {
+                        let project_changed = project.as_ref().map(|project| project.id)
+                            != entry.project.as_ref().map(|project| project.id);
+                        if project_changed {
+                            None
+                        } else {
+                            entry.task.clone()
+                        }
+                    }
+                };
+
+                let project = task.as_ref().map(|task| task.project.clone()).or(project);
 
                 let tags = match tags {
                     Some(ref t) if t.len() == 1 && t[0].is_empty() => Vec::new(),
@@ -58,7 +87,9 @@ impl EditCommand {
 
                 let updated = crate::models::TimeEntry {
                     description: description.unwrap_or(entry.description.clone()),
+                    billable: billable.unwrap_or(entry.billable),
                     project,
+                    task,
                     tags,
                     start,
                     stop,

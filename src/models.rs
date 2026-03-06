@@ -35,10 +35,6 @@ pub struct Entities {
 }
 
 impl Entities {
-    pub fn running_time_entry(&self) -> Option<TimeEntry> {
-        self.time_entries.iter().find(|te| te.is_running()).cloned()
-    }
-
     pub fn workspace_id_for_name(&self, name: &str) -> Option<i64> {
         self.workspaces
             .iter()
@@ -265,14 +261,6 @@ impl TimeEntry {
             stop: None,
             duration: -start.timestamp(),
             created_with: Some(constants::CLIENT_NAME.to_string()),
-            ..self.clone()
-        }
-    }
-
-    pub fn as_stopped_time_entry(&self, stop: DateTime<Utc>) -> TimeEntry {
-        TimeEntry {
-            stop: Some(stop),
-            duration: (stop - self.start).num_seconds(),
             ..self.clone()
         }
     }

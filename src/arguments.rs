@@ -65,6 +65,11 @@ pub enum Command {
         )]
         project: Option<String>,
         #[structopt(
+            long,
+            help = "Exact name of the task you want the time entry to be associated with"
+        )]
+        task: Option<String>,
+        #[structopt(
             short,
             long,
             help = "Space separated list of tags to associate with the time entry, e.g. 'tag1 tag2 tag3'"
@@ -87,7 +92,7 @@ pub enum Command {
         #[structopt(short, long)]
         interactive: bool,
     },
-    #[structopt(about = "Edit a time entry's description, project, or tags")]
+    #[structopt(about = "Edit a time entry's description, billable state, project, task, or tags")]
     Edit {
         #[structopt(
             help = "ID of the time entry to edit (omit to edit the currently running entry)"
@@ -95,12 +100,16 @@ pub enum Command {
         id: Option<i64>,
         #[structopt(short, long, help = "New description")]
         description: Option<String>,
+        #[structopt(long, help = "New billable state (true/false)")]
+        billable: Option<bool>,
         #[structopt(
             short,
             long,
             help = "New project name (use empty string \"\" to remove project)"
         )]
         project: Option<String>,
+        #[structopt(long, help = "New task name (use empty string \"\" to remove task)")]
+        task: Option<String>,
         #[structopt(
             short,
             long,
@@ -122,6 +131,13 @@ pub enum Command {
     Delete {
         #[structopt(help = "ID of the time entry to delete")]
         id: i64,
+    },
+    #[structopt(about = "Bulk edit multiple time entries with a JSON Patch payload")]
+    BulkEditTimeEntries {
+        #[structopt(help = "IDs of the time entries to update")]
+        ids: Vec<i64>,
+        #[structopt(long, help = "JSON Patch array to send to the bulk update endpoint")]
+        json: String,
     },
     #[structopt(about = "Create a new project in your workspace")]
     CreateProject {

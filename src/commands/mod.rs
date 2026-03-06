@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod bulk_edit_time_entries;
 pub mod cont;
 pub mod create_client;
 pub mod create_project;

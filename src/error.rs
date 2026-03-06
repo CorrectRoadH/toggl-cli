@@ -163,6 +163,7 @@ pub enum ArgumentError {
     InvalidDateTime(String),
     InvalidTimeRange(String),
     MissingUpdateFields(String),
+    MultipleWorkspaces(String),
 }
 
 impl Display for ArgumentError {
@@ -194,6 +195,9 @@ impl Display for ArgumentError {
             }
             ArgumentError::MissingUpdateFields(message) => {
                 format!("{}: {}", "Missing update fields".red(), message)
+            }
+            ArgumentError::MultipleWorkspaces(message) => {
+                format!("{}: {}", "Multiple workspaces".red(), message)
             }
         };
         writeln!(f, "{summary}")
