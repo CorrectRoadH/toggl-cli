@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::process::Command;
+use std::thread::sleep;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Deserialize)]
@@ -113,6 +114,20 @@ fn list_clients() -> Vec<ClientRecord> {
         .expect("failed to parse client list JSON")
 }
 
+fn wait_for<T, F>(message: &str, mut fetch: F) -> T
+where
+    F: FnMut() -> Option<T>,
+{
+    for _ in 0..10 {
+        if let Some(value) = fetch() {
+            return value;
+        }
+        sleep(std::time::Duration::from_millis(500));
+    }
+
+    panic!("{message}");
+}
+
 #[test]
 fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
     if !should_run_live_tests() {
@@ -188,11 +203,11 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
     run_toggl(&["create", "task", "--project", &project_name, &task_name]);
     cleanup.task_name = Some(task_name.clone());
 
-    let tasks_after_create = list_tasks();
-    let created_task = tasks_after_create
-        .iter()
-        .find(|item| item.name == task_name && item.project.id == created_project.id)
-        .expect("created task missing from list");
+    let created_task = wait_for("created task missing from list", || {
+        list_tasks()
+            .into_iter()
+            .find(|item| item.name == task_name && item.project.id == created_project.id)
+    });
 
     run_toggl(&["rename", "project", &project_name, &renamed_project_name]);
     run_toggl(&["rename", "tag", &tag_name, &renamed_tag_name]);
@@ -211,7 +226,13 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
     cleanup.client_name = Some(renamed_client_name.clone());
     cleanup.task_name = Some(renamed_task_name.clone());
 
-    let projects_after_rename = list_projects();
+    let projects_after_rename = wait_for("renamed project missing from list", || {
+        let projects = list_projects();
+        projects
+            .iter()
+            .any(|item| item.name == renamed_project_name)
+            .then_some(projects)
+    });
     let renamed_project = projects_after_rename
         .iter()
         .find(|item| item.name == renamed_project_name)
@@ -224,7 +245,12 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
     );
     assert_eq!(renamed_project.id, created_project.id);
 
-    let tags_after_rename = list_tags();
+    let tags_after_rename = wait_for("renamed tag missing from list", || {
+        let tags = list_tags();
+        tags.iter()
+            .any(|item| item.name == renamed_tag_name)
+            .then_some(tags)
+    });
     assert!(
         tags_after_rename
             .iter()
@@ -236,7 +262,13 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
         "old tag name still present after rename"
     );
 
-    let clients_after_rename = list_clients();
+    let clients_after_rename = wait_for("renamed client missing from list", || {
+        let clients = list_clients();
+        clients
+            .iter()
+            .any(|item| item.name == renamed_client_name)
+            .then_some(clients)
+    });
     assert!(
         clients_after_rename
             .iter()
@@ -250,11 +282,17 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
         "old client name still present after rename"
     );
 
-    let tasks_after_rename = list_tasks();
+    let tasks_after_rename = wait_for("renamed task missing from list", || {
+        let tasks = list_tasks();
+        tasks
+            .iter()
+            .any(|item| item.name == renamed_task_name && item.project.id == renamed_project.id)
+            .then_some(tasks)
+    });
     let renamed_task = tasks_after_rename
         .iter()
         .find(|item| item.name == renamed_task_name && item.project.id == renamed_project.id)
-        .expect("renamed task missing from list");
+        .expect("renamed task missing from list after polling");
     assert_eq!(renamed_task.id, created_task.id);
     assert!(
         tasks_after_rename
@@ -278,7 +316,14 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
     cleanup.tag_name = None;
     cleanup.client_name = None;
 
-    let projects_after_delete = list_projects();
+    let projects_after_delete = wait_for("project cleanup did not restore baseline", || {
+        let projects = list_projects();
+        (projects.len() == projects_before.len()
+            && projects
+                .iter()
+                .all(|item| item.name != project_name && item.name != renamed_project_name))
+        .then_some(projects)
+    });
     assert_eq!(projects_after_delete.len(), projects_before.len());
     assert!(
         projects_after_delete
@@ -287,7 +332,14 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
         "project cleanup did not restore baseline"
     );
 
-    let tags_after_delete = list_tags();
+    let tags_after_delete = wait_for("tag cleanup did not restore baseline", || {
+        let tags = list_tags();
+        (tags.len() == tags_before.len()
+            && tags
+                .iter()
+                .all(|item| item.name != tag_name && item.name != renamed_tag_name))
+        .then_some(tags)
+    });
     assert_eq!(tags_after_delete.len(), tags_before.len());
     assert!(
         tags_after_delete
@@ -296,7 +348,14 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
         "tag cleanup did not restore baseline"
     );
 
-    let clients_after_delete = list_clients();
+    let clients_after_delete = wait_for("client cleanup did not restore baseline", || {
+        let clients = list_clients();
+        (clients.len() == clients_before.len()
+            && clients
+                .iter()
+                .all(|item| item.name != client_name && item.name != renamed_client_name))
+        .then_some(clients)
+    });
     assert_eq!(clients_after_delete.len(), clients_before.len());
     assert!(
         clients_after_delete
@@ -305,7 +364,15 @@ fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
         "client cleanup did not restore baseline"
     );
 
-    let tasks_after_delete = list_tasks();
+    let tasks_after_delete = wait_for("task cleanup did not restore baseline", || {
+        let tasks = list_tasks();
+        tasks
+            .iter()
+            .all(|item| {
+                item.project.id != renamed_project.id && item.project.name != renamed_project_name
+            })
+            .then_some(tasks)
+    });
     assert!(
         tasks_after_delete
             .iter()
