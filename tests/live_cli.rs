@@ -3,46 +3,30 @@ use std::process::Command;
 use std::thread::sleep;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+const TEST_DAY: &str = "2026-03-05";
+const TEST_START: &str = "2026-03-05T09:00:00Z";
+const TEST_END: &str = "2026-03-05T09:05:00Z";
+
 #[derive(Deserialize)]
-struct ProjectRecord {
+struct TimeEntryRecord {
     id: i64,
-    name: String,
-}
-
-#[derive(Deserialize)]
-struct TagRecord {
-    name: String,
-}
-
-#[derive(Deserialize)]
-struct ClientRecord {
-    name: String,
+    description: String,
 }
 
 #[derive(Default)]
 struct CleanupState {
-    project_name: Option<String>,
-    tag_name: Option<String>,
-    client_name: Option<String>,
+    time_entry_id: Option<i64>,
 }
 
 impl Drop for CleanupState {
     fn drop(&mut self) {
-        if let Some(project_name) = self.project_name.as_deref() {
-            let _ = try_run_toggl(&["delete", "project", project_name]);
-        }
-
-        if let Some(tag_name) = self.tag_name.as_deref() {
-            let _ = try_run_toggl(&["delete", "tag", tag_name]);
-        }
-
-        if let Some(client_name) = self.client_name.as_deref() {
-            let _ = try_run_toggl(&["delete", "client", client_name]);
+        if let Some(id) = self.time_entry_id {
+            let _ = try_run_toggl(&["delete", &id.to_string()]);
         }
     }
 }
 
-fn unique_name(prefix: &str) -> String {
+fn unique_description(prefix: &str) -> String {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system clock is before UNIX_EPOCH")
@@ -74,19 +58,11 @@ fn try_run_toggl(args: &[&str]) -> std::io::Result<std::process::Output> {
         .output()
 }
 
-fn list_projects() -> Vec<ProjectRecord> {
-    serde_json::from_str(&run_toggl(&["list", "project", "--json"]))
-        .expect("failed to parse project list JSON")
-}
-
-fn list_tags() -> Vec<TagRecord> {
-    serde_json::from_str(&run_toggl(&["list", "tag", "--json"]))
-        .expect("failed to parse tag list JSON")
-}
-
-fn list_clients() -> Vec<ClientRecord> {
-    serde_json::from_str(&run_toggl(&["list", "client", "--json"]))
-        .expect("failed to parse client list JSON")
+fn list_entries_on_test_day() -> Vec<TimeEntryRecord> {
+    serde_json::from_str(&run_toggl(&[
+        "list", "--json", "--since", TEST_DAY, "--until", TEST_DAY,
+    ]))
+    .expect("failed to parse time entry list JSON")
 }
 
 fn wait_for<T, F>(message: &str, mut fetch: F) -> T
@@ -104,182 +80,84 @@ where
 }
 
 #[test]
-fn live_cli_round_trip_covers_list_create_mutate_and_cleanup() {
+fn live_cli_round_trip_covers_time_entry_lifecycle() {
     if !should_run_live_tests() {
         eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
         return;
     }
 
-    let project_name = unique_name("project");
-    let renamed_project_name = format!("{project_name}-renamed");
-    let tag_name = unique_name("tag");
-    let renamed_tag_name = format!("{tag_name}-renamed");
-    let client_name = unique_name("client");
-    let renamed_client_name = format!("{client_name}-renamed");
+    let description = unique_description("entry");
+    let renamed_description = format!("{description}-edited");
     let mut cleanup = CleanupState::default();
 
-    let projects_before = list_projects();
+    let entries_before = list_entries_on_test_day();
     assert!(
-        !projects_before.iter().any(|item| item.name == project_name),
-        "baseline already contains test project name {project_name}"
-    );
-
-    let tags_before = list_tags();
-    assert!(
-        !tags_before.iter().any(|item| item.name == tag_name),
-        "baseline already contains test tag name {tag_name}"
-    );
-
-    let clients_before = list_clients();
-    assert!(
-        !clients_before.iter().any(|item| item.name == client_name),
-        "baseline already contains test client name {client_name}"
-    );
-
-    run_toggl(&["create", "project", &project_name]);
-    run_toggl(&["create", "tag", &tag_name]);
-    run_toggl(&["create", "client", &client_name]);
-    cleanup.project_name = Some(project_name.clone());
-    cleanup.tag_name = Some(tag_name.clone());
-    cleanup.client_name = Some(client_name.clone());
-
-    let projects_after_create = list_projects();
-    assert_eq!(projects_after_create.len(), projects_before.len() + 1);
-    let created_project = projects_after_create
-        .iter()
-        .find(|item| item.name == project_name)
-        .expect("created project missing from list");
-
-    let tags_after_create = list_tags();
-    assert_eq!(tags_after_create.len(), tags_before.len() + 1);
-    assert!(
-        tags_after_create.iter().any(|item| item.name == tag_name),
-        "created tag missing from list"
-    );
-
-    let clients_after_create = list_clients();
-    assert_eq!(clients_after_create.len(), clients_before.len() + 1);
-    assert!(
-        clients_after_create
+        !entries_before
             .iter()
-            .any(|item| item.name == client_name),
-        "created client missing from list"
+            .any(|entry| entry.description == description),
+        "baseline already contains test description {description}"
     );
 
-    run_toggl(&["rename", "project", &project_name, &renamed_project_name]);
-    run_toggl(&["rename", "tag", &tag_name, &renamed_tag_name]);
-    run_toggl(&["rename", "client", &client_name, &renamed_client_name]);
-    cleanup.project_name = Some(renamed_project_name.clone());
-    cleanup.tag_name = Some(renamed_tag_name.clone());
-    cleanup.client_name = Some(renamed_client_name.clone());
+    run_toggl(&[
+        "start",
+        &description,
+        "--start",
+        TEST_START,
+        "--end",
+        TEST_END,
+    ]);
 
-    let projects_after_rename = wait_for("renamed project missing from list", || {
-        let projects = list_projects();
-        projects
-            .iter()
-            .any(|item| item.name == renamed_project_name)
-            .then_some(projects)
+    let created_entry = wait_for("created time entry missing from list", || {
+        list_entries_on_test_day()
+            .into_iter()
+            .find(|entry| entry.description == description)
     });
-    let renamed_project = projects_after_rename
-        .iter()
-        .find(|item| item.name == renamed_project_name)
-        .expect("renamed project missing from list");
-    assert!(
-        projects_after_rename
-            .iter()
-            .all(|item| item.name != project_name),
-        "old project name still present after rename"
-    );
-    assert_eq!(renamed_project.id, created_project.id);
+    cleanup.time_entry_id = Some(created_entry.id);
 
-    let tags_after_rename = wait_for("renamed tag missing from list", || {
-        let tags = list_tags();
-        tags.iter()
-            .any(|item| item.name == renamed_tag_name)
-            .then_some(tags)
+    let shown_entry: TimeEntryRecord = serde_json::from_str(&run_toggl(&[
+        "show",
+        &created_entry.id.to_string(),
+        "--json",
+    ]))
+    .expect("failed to parse show JSON");
+    assert_eq!(shown_entry.id, created_entry.id);
+    assert_eq!(shown_entry.description, description);
+
+    run_toggl(&[
+        "edit",
+        "time-entry",
+        &created_entry.id.to_string(),
+        "--description",
+        &renamed_description,
+    ]);
+
+    let edited_entry = wait_for("edited time entry missing from list", || {
+        list_entries_on_test_day()
+            .into_iter()
+            .find(|entry| entry.id == created_entry.id && entry.description == renamed_description)
+    });
+    assert_eq!(edited_entry.id, created_entry.id);
+
+    run_toggl(&["delete", &created_entry.id.to_string()]);
+    cleanup.time_entry_id = None;
+
+    let entries_after_delete = wait_for("time entry cleanup did not restore baseline", || {
+        let entries = list_entries_on_test_day();
+        entries
+            .iter()
+            .all(|entry| {
+                entry.id != created_entry.id
+                    && entry.description != description
+                    && entry.description != renamed_description
+            })
+            .then_some(entries)
     });
     assert!(
-        tags_after_rename
-            .iter()
-            .any(|item| item.name == renamed_tag_name),
-        "renamed tag missing from list"
-    );
-    assert!(
-        tags_after_rename.iter().all(|item| item.name != tag_name),
-        "old tag name still present after rename"
-    );
-
-    let clients_after_rename = wait_for("renamed client missing from list", || {
-        let clients = list_clients();
-        clients
-            .iter()
-            .any(|item| item.name == renamed_client_name)
-            .then_some(clients)
-    });
-    assert!(
-        clients_after_rename
-            .iter()
-            .any(|item| item.name == renamed_client_name),
-        "renamed client missing from list"
-    );
-    assert!(
-        clients_after_rename
-            .iter()
-            .all(|item| item.name != client_name),
-        "old client name still present after rename"
-    );
-    run_toggl(&["delete", "project", &renamed_project_name]);
-    run_toggl(&["delete", "tag", &renamed_tag_name]);
-    run_toggl(&["delete", "client", &renamed_client_name]);
-    cleanup.project_name = None;
-    cleanup.tag_name = None;
-    cleanup.client_name = None;
-
-    let projects_after_delete = wait_for("project cleanup did not restore baseline", || {
-        let projects = list_projects();
-        (projects.len() == projects_before.len()
-            && projects
-                .iter()
-                .all(|item| item.name != project_name && item.name != renamed_project_name))
-        .then_some(projects)
-    });
-    assert_eq!(projects_after_delete.len(), projects_before.len());
-    assert!(
-        projects_after_delete
-            .iter()
-            .all(|item| item.name != project_name && item.name != renamed_project_name),
-        "project cleanup did not restore baseline"
-    );
-
-    let tags_after_delete = wait_for("tag cleanup did not restore baseline", || {
-        let tags = list_tags();
-        (tags.len() == tags_before.len()
-            && tags
-                .iter()
-                .all(|item| item.name != tag_name && item.name != renamed_tag_name))
-        .then_some(tags)
-    });
-    assert_eq!(tags_after_delete.len(), tags_before.len());
-    assert!(
-        tags_after_delete
-            .iter()
-            .all(|item| item.name != tag_name && item.name != renamed_tag_name),
-        "tag cleanup did not restore baseline"
-    );
-
-    let clients_after_delete = wait_for("client cleanup did not restore baseline", || {
-        let clients = list_clients();
-        (clients.len() == clients_before.len()
-            && clients
-                .iter()
-                .all(|item| item.name != client_name && item.name != renamed_client_name))
-        .then_some(clients)
-    });
-    assert_eq!(clients_after_delete.len(), clients_before.len());
-    assert!(
-        clients_after_delete
-            .iter()
-            .all(|item| item.name != client_name && item.name != renamed_client_name),
-        "client cleanup did not restore baseline"
+        entries_after_delete.iter().all(|entry| {
+            entry.id != created_entry.id
+                && entry.description != description
+                && entry.description != renamed_description
+        }),
+        "time entry cleanup did not restore baseline"
     );
 }
