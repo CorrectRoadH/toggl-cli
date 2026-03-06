@@ -434,6 +434,34 @@ fn live_cli_read_only_profile_commands_succeed() {
         preferences_json.is_object(),
         "expected `toggl preferences` output to be a JSON object"
     );
+
+    let Some(organizations_output) = run_checked_or_skip(&["organization", "list", "--json"])
+    else {
+        return;
+    };
+    let organizations_json: Value = serde_json::from_str(&organizations_output)
+        .expect("expected `toggl organization list --json` to return JSON");
+    assert!(
+        organizations_json.is_array(),
+        "expected `toggl organization list --json` output to be a JSON array"
+    );
+
+    if let Some(organization_id) = test_organization_id() {
+        let Some(organization_output) = run_checked_or_skip(&[
+            "organization",
+            "show",
+            &organization_id.to_string(),
+            "--json",
+        ]) else {
+            return;
+        };
+        let organization_json: Value = serde_json::from_str(&organization_output)
+            .expect("expected `toggl organization show --json` to return JSON");
+        assert!(
+            organization_json.is_object(),
+            "expected `toggl organization show --json` output to be a JSON object"
+        );
+    }
 }
 
 #[test]
@@ -879,6 +907,22 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
     };
 
     let workspace_name = unique_description("workspace");
+
+    let Some(organization_output) = run_checked_or_skip(&[
+        "organization",
+        "show",
+        &organization_id.to_string(),
+        "--json",
+    ]) else {
+        return;
+    };
+    let organization_json: Value = serde_json::from_str(&organization_output)
+        .expect("expected `toggl organization show --json` to return JSON");
+    assert!(
+        organization_json["id"].as_i64() == Some(organization_id),
+        "expected organization lookup to return the configured organization id, got:\n{}",
+        organization_output
+    );
 
     let Some(workspaces_before) = run_checked_or_skip(&["list", "workspace", "--json"]) else {
         return;

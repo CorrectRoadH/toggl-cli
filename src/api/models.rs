@@ -67,6 +67,22 @@ pub struct NetworkWorkspace {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NetworkOrganization {
+    pub id: i64,
+    pub name: String,
+    #[serde(default)]
+    pub admin: bool,
+    #[serde(default)]
+    pub workspace_id: Option<i64>,
+    #[serde(default)]
+    pub workspace_name: Option<String>,
+    #[serde(default)]
+    pub pricing_plan_name: Option<String>,
+    #[serde(default)]
+    pub permissions: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NetworkTag {
     pub id: i64,
     pub name: String,

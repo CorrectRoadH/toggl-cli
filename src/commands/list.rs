@@ -111,6 +111,27 @@ impl ListCommand {
             return Ok(());
         }
 
+        if let Some(Entity::Organization { json: entity_json }) = entity {
+            let json = json_flag || entity_json;
+            let organizations = api_client.get_organizations().await?;
+            let stdout = io::stdout();
+            let mut handle = BufWriter::new(stdout);
+            let organizations = organizations
+                .iter()
+                .take(count.unwrap_or(usize::MAX))
+                .collect::<Vec<_>>();
+            if json {
+                let json_string = serde_json::to_string_pretty(&organizations)
+                    .expect("failed to serialize organizations to JSON");
+                writeln!(handle, "{json_string}").expect("failed to print");
+            } else {
+                organizations.iter().for_each(|organization| {
+                    writeln!(handle, "{organization}").expect("failed to print")
+                });
+            }
+            return Ok(());
+        }
+
         match api_client.get_entities().await {
             Err(error) => {
                 return Err(error);
@@ -200,7 +221,9 @@ impl ListCommand {
                     }
 
                     // Already handled above via dedicated API paths
-                    Entity::Tag { .. } | Entity::Client { .. } => unreachable!(),
+                    Entity::Tag { .. } | Entity::Client { .. } | Entity::Organization { .. } => {
+                        unreachable!()
+                    }
                 };
             }
         }

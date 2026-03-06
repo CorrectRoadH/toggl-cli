@@ -100,6 +100,22 @@ pub struct Workspace {
     pub admin: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Organization {
+    pub id: i64,
+    pub name: String,
+    #[serde(default)]
+    pub admin: bool,
+    #[serde(default)]
+    pub workspace_id: Option<i64>,
+    #[serde(default)]
+    pub workspace_name: Option<String>,
+    #[serde(default)]
+    pub pricing_plan_name: Option<String>,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+}
+
 lazy_static! {
     pub static ref HAS_TRUECOLOR_SUPPORT: bool = if let Ok(truecolor) = env::var("COLORTERM") {
         truecolor == "truecolor" || truecolor == "24bit"
@@ -209,6 +225,18 @@ impl std::fmt::Display for Workspace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let role = if self.admin { "admin" } else { "member" };
         write!(f, "{} ({})", self.name, role)
+    }
+}
+
+impl std::fmt::Display for Organization {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let role = if self.admin { "admin" } else { "member" };
+        match self.pricing_plan_name.as_deref() {
+            Some(plan) if !plan.is_empty() => {
+                write!(f, "{} (#{}; {}; plan: {})", self.name, self.id, role, plan)
+            }
+            _ => write!(f, "{} (#{}; {})", self.name, self.id, role),
+        }
     }
 }
 

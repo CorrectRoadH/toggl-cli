@@ -13,7 +13,9 @@ use api::client::ApiClient;
 use api::client::V9ApiClient;
 use arguments::CommandLineArguments;
 use arguments::ConfigSubCommand;
-use arguments::{Command, CreateEntity, DeleteEntity, EditEntity, RenameEntity};
+use arguments::{
+    Command, CreateEntity, DeleteEntity, EditEntity, OrganizationEntity, RenameEntity,
+};
 use commands::auth::AuthenticationCommand;
 use commands::bulk_edit_time_entries::BulkEditTimeEntriesCommand;
 use commands::cont::ContinueCommand;
@@ -30,6 +32,7 @@ use commands::delete_task::DeleteTaskCommand;
 use commands::edit::EditCommand;
 use commands::list::ListCommand;
 use commands::me::MeCommand;
+use commands::organization::{OrganizationAction, OrganizationCommand};
 use commands::preferences::PreferencesCommand;
 use commands::rename_client::RenameClientCommand;
 use commands::rename_project::RenameProjectCommand;
@@ -273,6 +276,23 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
             }
 
             Command::Me => MeCommand::execute(get_default_api_client()?).await?,
+
+            Command::Organization { entity } => match entity {
+                OrganizationEntity::List { json } => {
+                    OrganizationCommand::execute(
+                        get_default_api_client()?,
+                        OrganizationAction::List { json },
+                    )
+                    .await?
+                }
+                OrganizationEntity::Show { id, json } => {
+                    OrganizationCommand::execute(
+                        get_default_api_client()?,
+                        OrganizationAction::Show { id, json },
+                    )
+                    .await?
+                }
+            },
 
             Command::Preferences => PreferencesCommand::execute(get_default_api_client()?).await?,
 

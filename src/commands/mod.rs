@@ -14,6 +14,7 @@ pub mod delete_task;
 pub mod edit;
 pub mod list;
 pub mod me;
+pub mod organization;
 pub mod preferences;
 pub mod rename_client;
 pub mod rename_project;

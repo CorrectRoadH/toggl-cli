@@ -142,6 +142,11 @@ pub enum Command {
     },
     #[structopt(about = "Show current user profile information")]
     Me,
+    #[structopt(about = "Inspect organizations available to the current user")]
+    Organization {
+        #[structopt(subcommand)]
+        entity: OrganizationEntity,
+    },
     #[structopt(about = "Show current user preferences")]
     Preferences,
     #[structopt(about = "Manage auto-tracking configuration")]
@@ -360,6 +365,27 @@ pub enum Entity {
     },
     #[structopt(about = "List tasks")]
     Task {
+        #[structopt(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
+    #[structopt(about = "List organizations available to the current user")]
+    Organization {
+        #[structopt(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
+}
+
+#[derive(Debug, StructOpt)]
+pub enum OrganizationEntity {
+    #[structopt(about = "List organizations available to the current user")]
+    List {
+        #[structopt(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
+    #[structopt(about = "Show one organization by ID")]
+    Show {
+        #[structopt(help = "Organization ID")]
+        id: i64,
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },

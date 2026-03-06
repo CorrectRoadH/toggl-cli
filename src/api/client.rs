@@ -4,6 +4,7 @@ use crate::credentials;
 use crate::error;
 use crate::models;
 use crate::models::Entities;
+use crate::models::Organization;
 use crate::models::Project;
 use crate::models::Tag;
 use crate::models::Task;
@@ -26,6 +27,7 @@ use super::models::NetworkCreateProject;
 use super::models::NetworkCreateTag;
 use super::models::NetworkCreateTask;
 use super::models::NetworkCreateWorkspace;
+use super::models::NetworkOrganization;
 use super::models::NetworkProject;
 use super::models::NetworkRenameClient;
 use super::models::NetworkRenameProject;
@@ -130,6 +132,10 @@ pub trait ApiClient {
     async fn delete_client(&self, workspace_id: i64, client_id: i64) -> ResultWithDefaultError<()>;
 
     async fn get_time_entry(&self, time_entry_id: i64) -> ResultWithDefaultError<TimeEntry>;
+
+    async fn get_organizations(&self) -> ResultWithDefaultError<Vec<Organization>>;
+
+    async fn get_organization(&self, organization_id: i64) -> ResultWithDefaultError<Organization>;
 
     async fn create_workspace(
         &self,
@@ -294,6 +300,20 @@ impl V9ApiClient {
                 )
             })
             .collect()
+    }
+
+    fn network_organization_to_organization(
+        network_organization: NetworkOrganization,
+    ) -> Organization {
+        Organization {
+            id: network_organization.id,
+            name: network_organization.name,
+            admin: network_organization.admin,
+            workspace_id: network_organization.workspace_id,
+            workspace_name: network_organization.workspace_name,
+            pricing_plan_name: network_organization.pricing_plan_name,
+            permissions: network_organization.permissions.unwrap_or_default(),
+        }
     }
 
     fn map_tasks(
@@ -949,6 +969,21 @@ impl ApiClient for V9ApiClient {
             task: None,
             ..Default::default()
         })
+    }
+
+    async fn get_organizations(&self) -> ResultWithDefaultError<Vec<Organization>> {
+        let url = format!("{}/me/organizations", self.base_url);
+        let organizations = self.get::<Vec<NetworkOrganization>>(url).await?;
+        Ok(organizations
+            .into_iter()
+            .map(Self::network_organization_to_organization)
+            .collect())
+    }
+
+    async fn get_organization(&self, organization_id: i64) -> ResultWithDefaultError<Organization> {
+        let url = format!("{}/organizations/{}", self.base_url, organization_id);
+        let organization = self.get::<NetworkOrganization>(url).await?;
+        Ok(Self::network_organization_to_organization(organization))
     }
 
     async fn create_workspace(
