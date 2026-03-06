@@ -77,6 +77,32 @@ impl ListCommand {
             return Ok(());
         }
 
+        if let Some(Entity::Client { json: entity_json }) = entity {
+            let json = json_flag || entity_json;
+            let user = api_client.get_user().await?;
+            match api_client.get_clients(user.default_workspace_id).await {
+                Err(error) => println!("{}\n{}", "Couldn't fetch clients from API".red(), error),
+                Ok(clients) => {
+                    let stdout = io::stdout();
+                    let mut handle = BufWriter::new(stdout);
+                    let clients = clients
+                        .iter()
+                        .take(count.unwrap_or(usize::MAX))
+                        .collect::<Vec<_>>();
+                    if json {
+                        let json_string = serde_json::to_string_pretty(&clients)
+                            .expect("failed to serialize clients to JSON");
+                        writeln!(handle, "{json_string}").expect("failed to print");
+                    } else {
+                        clients
+                            .iter()
+                            .for_each(|c| writeln!(handle, "{c}").expect("failed to print"));
+                    }
+                }
+            }
+            return Ok(());
+        }
+
         match api_client.get_entities().await {
             Err(error) => println!(
                 "{}\n{}",
@@ -129,8 +155,46 @@ impl ListCommand {
                         }
                     }
 
-                    // Already handled above via get_tags path
-                    Entity::Tag { .. } => unreachable!(),
+                    Entity::Workspace { json: entity_json } => {
+                        let json = json_flag || entity_json;
+                        let workspaces = entities
+                            .workspaces
+                            .iter()
+                            .take(count.unwrap_or(usize::MAX))
+                            .collect::<Vec<_>>();
+
+                        if json {
+                            let json_string = serde_json::to_string_pretty(&workspaces)
+                                .expect("failed to serialize workspaces to JSON");
+                            writeln!(handle, "{json_string}").expect("failed to print");
+                        } else {
+                            workspaces.iter().for_each(|workspace| {
+                                writeln!(handle, "{workspace}").expect("failed to print")
+                            });
+                        }
+                    }
+
+                    Entity::Task { json: entity_json } => {
+                        let json = json_flag || entity_json;
+                        let tasks = entities
+                            .tasks
+                            .values()
+                            .take(count.unwrap_or(usize::MAX))
+                            .collect::<Vec<_>>();
+
+                        if json {
+                            let json_string = serde_json::to_string_pretty(&tasks)
+                                .expect("failed to serialize tasks to JSON");
+                            writeln!(handle, "{json_string}").expect("failed to print");
+                        } else {
+                            tasks.iter().for_each(|task| {
+                                writeln!(handle, "{task}").expect("failed to print")
+                            });
+                        }
+                    }
+
+                    // Already handled above via dedicated API paths
+                    Entity::Tag { .. } | Entity::Client { .. } => unreachable!(),
                 };
             }
         }

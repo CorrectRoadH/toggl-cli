@@ -20,9 +20,11 @@ use reqwest::{header, RequestBuilder};
 use serde::{de, Serialize};
 
 use super::models::NetworkClient;
+use super::models::NetworkCreateClient;
 use super::models::NetworkCreateProject;
 use super::models::NetworkCreateTag;
 use super::models::NetworkProject;
+use super::models::NetworkRenameClient;
 use super::models::NetworkRenameProject;
 use super::models::NetworkRenameTag;
 use super::models::NetworkTag;
@@ -83,6 +85,25 @@ pub trait ApiClient {
     ) -> ResultWithDefaultError<Tag>;
 
     async fn delete_tag(&self, workspace_id: i64, tag_id: i64) -> ResultWithDefaultError<()>;
+
+    async fn get_clients(&self, workspace_id: i64) -> ResultWithDefaultError<Vec<models::Client>>;
+
+    async fn create_client(
+        &self,
+        workspace_id: i64,
+        name: String,
+    ) -> ResultWithDefaultError<models::Client>;
+
+    async fn rename_client(
+        &self,
+        workspace_id: i64,
+        client_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<models::Client>;
+
+    async fn delete_client(&self, workspace_id: i64, client_id: i64) -> ResultWithDefaultError<()>;
+
+    async fn get_time_entry(&self, time_entry_id: i64) -> ResultWithDefaultError<TimeEntry>;
 }
 
 pub struct V9ApiClient {
@@ -458,6 +479,89 @@ impl ApiClient for V9ApiClient {
             self.base_url, workspace_id, tag_id
         );
         self.delete(url).await
+    }
+
+    async fn get_clients(&self, workspace_id: i64) -> ResultWithDefaultError<Vec<models::Client>> {
+        let url = format!("{}/workspaces/{}/clients", self.base_url, workspace_id);
+        let network_clients = self.get::<Vec<NetworkClient>>(url).await?;
+        Ok(network_clients
+            .into_iter()
+            .map(|c| models::Client {
+                id: c.id,
+                name: c.name,
+                workspace_id: c.wid,
+            })
+            .collect())
+    }
+
+    async fn create_client(
+        &self,
+        workspace_id: i64,
+        name: String,
+    ) -> ResultWithDefaultError<models::Client> {
+        let url = format!("{}/workspaces/{}/clients", self.base_url, workspace_id);
+        let body = NetworkCreateClient {
+            name,
+            wid: workspace_id,
+        };
+        let network_client = self
+            .post::<NetworkClient, NetworkCreateClient>(url, &body)
+            .await?;
+        Ok(models::Client {
+            id: network_client.id,
+            name: network_client.name,
+            workspace_id: network_client.wid,
+        })
+    }
+
+    async fn rename_client(
+        &self,
+        workspace_id: i64,
+        client_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<models::Client> {
+        let url = format!(
+            "{}/workspaces/{}/clients/{}",
+            self.base_url, workspace_id, client_id
+        );
+        let body = NetworkRenameClient {
+            name: new_name,
+            wid: workspace_id,
+        };
+        let network_client = self
+            .put::<NetworkClient, NetworkRenameClient>(url, &body)
+            .await?;
+        Ok(models::Client {
+            id: network_client.id,
+            name: network_client.name,
+            workspace_id: network_client.wid,
+        })
+    }
+
+    async fn delete_client(&self, workspace_id: i64, client_id: i64) -> ResultWithDefaultError<()> {
+        let url = format!(
+            "{}/workspaces/{}/clients/{}",
+            self.base_url, workspace_id, client_id
+        );
+        self.delete(url).await
+    }
+
+    async fn get_time_entry(&self, time_entry_id: i64) -> ResultWithDefaultError<TimeEntry> {
+        let url = format!("{}/me/time_entries/{}", self.base_url, time_entry_id);
+        let network_entry = self.get::<NetworkTimeEntry>(url).await?;
+        Ok(TimeEntry {
+            id: network_entry.id,
+            description: network_entry.description,
+            start: network_entry.start,
+            stop: network_entry.stop,
+            duration: network_entry.duration,
+            billable: network_entry.billable,
+            workspace_id: network_entry.workspace_id,
+            tags: network_entry.tags.unwrap_or_default(),
+            project: None,
+            task: None,
+            ..Default::default()
+        })
     }
 
     async fn get_entities(&self) -> ResultWithDefaultError<Entities> {

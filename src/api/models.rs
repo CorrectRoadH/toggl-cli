@@ -88,6 +88,18 @@ pub struct NetworkRenameProject {
     pub name: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NetworkCreateClient {
+    pub name: String,
+    pub wid: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NetworkRenameClient {
+    pub name: String,
+    pub wid: i64,
+}
+
 impl From<TimeEntry> for NetworkTimeEntry {
     fn from(value: TimeEntry) -> Self {
         NetworkTimeEntry {
