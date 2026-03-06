@@ -1,6 +1,6 @@
 use crate::api::client::ApiClient;
+use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
-use colored::Colorize;
 
 pub struct CreateTaskCommand;
 
@@ -18,30 +18,24 @@ impl CreateTaskCommand {
             .projects
             .values()
             .find(|project| project.name == project_name)
-            .cloned();
+            .cloned()
+            .ok_or_else(|| {
+                Box::new(ArgumentError::ResourceNotFound(format!(
+                    "No project found with name '{project_name}'"
+                ))) as Box<dyn std::error::Error + Send>
+            })?;
 
-        match project {
-            None => println!(
-                "{}",
-                format!("No project found with name '{project_name}'").yellow()
-            ),
-            Some(project) => {
-                match api_client
-                    .create_task(
-                        project.workspace_id,
-                        project.id,
-                        name,
-                        active,
-                        estimated_seconds,
-                        user_id,
-                    )
-                    .await
-                {
-                    Err(error) => println!("{}\n{}", "Couldn't create task".red(), error),
-                    Ok(task) => println!("{}\n{}", "Task created successfully".green(), task),
-                }
-            }
-        }
+        let task = api_client
+            .create_task(
+                project.workspace_id,
+                project.id,
+                name,
+                active,
+                estimated_seconds,
+                user_id,
+            )
+            .await?;
+        println!("Task created successfully\n{}", task);
 
         Ok(())
     }
@@ -140,7 +134,7 @@ mod tests {
             None,
         )
         .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -162,7 +156,7 @@ mod tests {
             None,
         )
         .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]

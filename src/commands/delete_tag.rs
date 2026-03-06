@@ -1,6 +1,6 @@
 use crate::api::client::ApiClient;
+use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
-use colored::Colorize;
 
 pub struct DeleteTagCommand;
 
@@ -9,15 +9,14 @@ impl DeleteTagCommand {
         let workspace_id = api_client.get_user().await?.default_workspace_id;
         let tags = api_client.get_tags(workspace_id).await?;
 
-        let tag = tags.into_iter().find(|t| t.name == name);
+        let tag = tags.into_iter().find(|t| t.name == name).ok_or_else(|| {
+            Box::new(ArgumentError::ResourceNotFound(format!(
+                "No tag found with name '{name}'"
+            ))) as Box<dyn std::error::Error + Send>
+        })?;
 
-        match tag {
-            None => println!("{}", format!("No tag found with name '{name}'").yellow()),
-            Some(tag) => match api_client.delete_tag(workspace_id, tag.id).await {
-                Err(error) => println!("{}\n{}", "Couldn't delete tag".red(), error),
-                Ok(()) => println!("{}", "Tag deleted successfully".green()),
-            },
-        }
+        api_client.delete_tag(workspace_id, tag.id).await?;
+        println!("Tag deleted successfully");
 
         Ok(())
     }

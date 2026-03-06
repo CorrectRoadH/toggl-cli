@@ -1,6 +1,6 @@
 use crate::api::client::ApiClient;
+use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
-use colored::Colorize;
 
 pub struct RenameProjectCommand;
 
@@ -17,25 +17,17 @@ impl RenameProjectCommand {
             .projects
             .values()
             .find(|p| p.name == old_name)
-            .cloned();
+            .cloned()
+            .ok_or_else(|| {
+                Box::new(ArgumentError::ResourceNotFound(format!(
+                    "No project found with name '{old_name}'"
+                ))) as Box<dyn std::error::Error + Send>
+            })?;
 
-        match project {
-            None => println!(
-                "{}",
-                format!("No project found with name '{old_name}'").yellow()
-            ),
-            Some(project) => {
-                match api_client
-                    .rename_project(workspace_id, project.id, new_name)
-                    .await
-                {
-                    Err(error) => println!("{}\n{}", "Couldn't rename project".red(), error),
-                    Ok(project) => {
-                        println!("{}\n{}", "Project renamed successfully".green(), project)
-                    }
-                }
-            }
-        }
+        let project = api_client
+            .rename_project(workspace_id, project.id, new_name)
+            .await?;
+        println!("Project renamed successfully\n{}", project);
 
         Ok(())
     }
@@ -49,7 +41,7 @@ mod tests {
     use crate::models::{Entities, Project, User};
     use chrono::Utc;
     use std::collections::HashMap;
-    use tokio_test::assert_ok;
+    use tokio_test::{assert_err, assert_ok};
 
     fn mock_user() -> User {
         User {
@@ -144,7 +136,7 @@ mod tests {
         let result =
             RenameProjectCommand::execute(api_client, "Missing".to_string(), "NewName".to_string())
                 .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -164,6 +156,6 @@ mod tests {
         let result =
             RenameProjectCommand::execute(api_client, "OldName".to_string(), "NewName".to_string())
                 .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 }

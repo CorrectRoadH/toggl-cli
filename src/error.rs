@@ -164,6 +164,7 @@ pub enum ArgumentError {
     InvalidTimeRange(String),
     MissingUpdateFields(String),
     MultipleWorkspaces(String),
+    ResourceNotFound(String),
 }
 
 impl Display for ArgumentError {
@@ -198,6 +199,9 @@ impl Display for ArgumentError {
             }
             ArgumentError::MultipleWorkspaces(message) => {
                 format!("{}: {}", "Multiple workspaces".red(), message)
+            }
+            ArgumentError::ResourceNotFound(message) => {
+                format!("{}: {}", "Resource not found".red(), message)
             }
         };
         writeln!(f, "{summary}")

@@ -1,6 +1,6 @@
 use crate::api::client::ApiClient;
+use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
-use colored::Colorize;
 
 pub struct DeleteTaskCommand;
 
@@ -15,41 +15,29 @@ impl DeleteTaskCommand {
             .projects
             .values()
             .find(|project| project.name == project_name)
-            .cloned();
+            .cloned()
+            .ok_or_else(|| {
+                Box::new(ArgumentError::ResourceNotFound(format!(
+                    "No project found with name '{project_name}'"
+                ))) as Box<dyn std::error::Error + Send>
+            })?;
 
-        match project {
-            None => println!(
-                "{}",
-                format!("No project found with name '{project_name}'").yellow()
-            ),
-            Some(project) => {
-                let task = entities
-                    .tasks
-                    .values()
-                    .find(|task| task.name == task_name && task.project.id == project.id)
-                    .cloned();
+        let task = entities
+            .tasks
+            .values()
+            .find(|task| task.name == task_name && task.project.id == project.id)
+            .cloned()
+            .ok_or_else(|| {
+                Box::new(ArgumentError::ResourceNotFound(format!(
+                    "No task found with name '{task_name}' in project '{}'",
+                    project.name
+                ))) as Box<dyn std::error::Error + Send>
+            })?;
 
-                match task {
-                    None => println!(
-                        "{}",
-                        format!(
-                            "No task found with name '{task_name}' in project '{}'",
-                            project.name
-                        )
-                        .yellow()
-                    ),
-                    Some(task) => {
-                        match api_client
-                            .delete_task(task.workspace_id, task.project.id, task.id)
-                            .await
-                        {
-                            Err(error) => println!("{}\n{}", "Couldn't delete task".red(), error),
-                            Ok(()) => println!("{}\n{}", "Task deleted successfully".green(), task),
-                        }
-                    }
-                }
-            }
-        }
+        api_client
+            .delete_task(task.workspace_id, task.project.id, task.id)
+            .await?;
+        println!("Task deleted successfully\n{}", task);
 
         Ok(())
     }
@@ -133,7 +121,7 @@ mod tests {
         let result =
             DeleteTaskCommand::execute(api_client, "Missing".to_string(), "Review".to_string())
                 .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -146,7 +134,7 @@ mod tests {
         let result =
             DeleteTaskCommand::execute(api_client, "Platform".to_string(), "Missing".to_string())
                 .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -162,7 +150,7 @@ mod tests {
         let result =
             DeleteTaskCommand::execute(api_client, "Platform".to_string(), "Review".to_string())
                 .await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]

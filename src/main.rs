@@ -53,11 +53,8 @@ async fn main() -> ResultWithDefaultError<()> {
     match execute_subcommand(parsed_args).await {
         Ok(()) => Ok(()),
         Err(error) => {
-            // We are catching the error and pretty printing it instead of letting the
-            // program error. Since we are not meant to be used other programs, I think
-            // it's fine to always return a 0 error code, but we might wanna revisit this.
-            print!("{error}");
-            Ok(())
+            eprint!("{error}");
+            std::process::exit(1);
         }
     }
 }
