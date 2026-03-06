@@ -83,9 +83,7 @@ mod tests {
     use super::*;
     use crate::api::client::MockApiClient;
     use crate::error::ApiError;
-    use crate::models::Entities;
-    use std::collections::HashMap;
-    use tokio_test::{assert_err, assert_ok};
+    use tokio_test::assert_err;
 
     fn mock_time_entry(id: i64, description: &str) -> TimeEntry {
         TimeEntry {
@@ -97,77 +95,42 @@ mod tests {
         }
     }
 
-    fn mock_entities(time_entries: Vec<TimeEntry>) -> Entities {
-        Entities {
-            time_entries,
-            projects: HashMap::new(),
-            tasks: HashMap::new(),
-            clients: HashMap::new(),
-            workspaces: Vec::new(),
-            tags: Vec::new(),
-        }
-    }
-
-    #[tokio::test]
-    async fn continue_returns_ok_when_no_time_entries_exist() {
-        let mut api_client = MockApiClient::new();
-        api_client
-            .expect_get_current_time_entry()
-            .returning(|| Ok(None));
-        api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities(Vec::new())));
-
-        let result = ContinueCommand::execute(api_client, None).await;
-        assert_ok!(result);
-    }
-
-    #[tokio::test]
-    async fn continue_creates_new_running_entry_from_latest_stopped_entry() {
-        let mut api_client = MockApiClient::new();
-        let source_entry = mock_time_entry(7, "Review");
-        let continued_entry = TimeEntry {
-            id: 99,
-            description: "Review".to_string(),
-            ..Default::default()
-        };
-        let source_entry_for_create = source_entry.clone();
-        let continued_entry_for_lookup = continued_entry.clone();
-
-        api_client
-            .expect_get_current_time_entry()
-            .returning(|| Ok(None));
-        api_client
-            .expect_get_entities()
-            .times(2)
-            .returning(move || {
-                Ok(mock_entities(vec![
-                    source_entry.clone(),
-                    continued_entry_for_lookup.clone(),
-                ]))
-            });
-        api_client
-            .expect_create_time_entry()
-            .withf(move |entry| {
-                entry.description == source_entry_for_create.description
-                    && entry.id == source_entry_for_create.id
-                    && entry.stop.is_none()
-                    && entry.is_running()
-            })
-            .returning(|_| Ok(99));
-
-        let result = ContinueCommand::execute(api_client, None).await;
-        assert_ok!(result);
-    }
-
     #[tokio::test]
     async fn continue_returns_error_when_stop_step_fails() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_current_time_entry()
+            .expect_get_current_time_entry_minimal()
             .returning(|| Err(Box::new(ApiError::Network)));
 
         let result = ContinueCommand::execute(api_client, None).await;
         assert_err!(result);
+    }
+
+    #[test]
+    fn get_first_stopped_time_entry_returns_none_for_empty_history() {
+        assert!(get_first_stopped_time_entry(Vec::new(), None).is_none());
+    }
+
+    #[test]
+    fn get_first_stopped_time_entry_uses_latest_stopped_entry_when_nothing_was_running() {
+        let latest = mock_time_entry(1, "Latest");
+        let older = mock_time_entry(2, "Older");
+
+        let result = get_first_stopped_time_entry(vec![latest.clone(), older], None);
+
+        assert_eq!(result.unwrap().id, latest.id);
+    }
+
+    #[test]
+    fn get_first_stopped_time_entry_skips_recently_stopped_running_entry() {
+        let just_stopped = mock_time_entry(1, "Just stopped");
+        let previous = mock_time_entry(2, "Previous");
+
+        let result = get_first_stopped_time_entry(
+            vec![just_stopped, previous.clone()],
+            Some(TimeEntry::default()),
+        );
+
+        assert_eq!(result.unwrap().id, previous.id);
     }
 }

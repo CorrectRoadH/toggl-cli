@@ -534,10 +534,22 @@ impl V9ApiClient {
         })
     }
 
-    fn invalidate_read_cache(&self) {
-        if let Some(dir) = cache_root_dir().map(|root| root.join(&self.cache_namespace)) {
-            let _ = fs::remove_dir_all(dir);
+    fn invalidate_cached_url(&self, url: &str) {
+        let Some(cache_path) = self.cache_file_path(url) else {
+            return;
+        };
+        let _ = fs::remove_file(cache_path);
+    }
+
+    fn invalidate_cached_urls(&self, urls: &[String]) {
+        for url in urls {
+            self.invalidate_cached_url(url);
         }
+    }
+
+    fn invalidate_caches_for_mutation(&self, mutation_url: &str) {
+        let urls = cache_urls_affected_by_mutation(&self.base_url, mutation_url);
+        self.invalidate_cached_urls(&urls);
     }
 
     async fn put<T: de::DeserializeOwned, Body: Serialize>(
@@ -545,9 +557,9 @@ impl V9ApiClient {
         url: String,
         body: &Body,
     ) -> ResultWithDefaultError<T> {
-        let result = V9ApiClient::send::<T>(self.http_client.put(url).json(body)).await;
+        let result = V9ApiClient::send::<T>(self.http_client.put(&url).json(body)).await;
         if result.is_ok() {
-            self.invalidate_read_cache();
+            self.invalidate_caches_for_mutation(&url);
         }
         result
     }
@@ -557,9 +569,9 @@ impl V9ApiClient {
         url: String,
         body: &Body,
     ) -> ResultWithDefaultError<T> {
-        let result = V9ApiClient::send::<T>(self.http_client.post(url).json(body)).await;
+        let result = V9ApiClient::send::<T>(self.http_client.post(&url).json(body)).await;
         if result.is_ok() {
-            self.invalidate_read_cache();
+            self.invalidate_caches_for_mutation(&url);
         }
         result
     }
@@ -569,9 +581,9 @@ impl V9ApiClient {
         url: String,
         body: &Body,
     ) -> ResultWithDefaultError<T> {
-        let result = V9ApiClient::send::<T>(self.http_client.patch(url).json(body)).await;
+        let result = V9ApiClient::send::<T>(self.http_client.patch(&url).json(body)).await;
         if result.is_ok() {
-            self.invalidate_read_cache();
+            self.invalidate_caches_for_mutation(&url);
         }
         result
     }
@@ -580,9 +592,9 @@ impl V9ApiClient {
         &self,
         url: String,
     ) -> ResultWithDefaultError<T> {
-        let result = V9ApiClient::send::<T>(self.http_client.patch(url)).await;
+        let result = V9ApiClient::send::<T>(self.http_client.patch(&url)).await;
         if result.is_ok() {
-            self.invalidate_read_cache();
+            self.invalidate_caches_for_mutation(&url);
         }
         result
     }
@@ -617,11 +629,11 @@ impl V9ApiClient {
     }
 
     async fn delete(&self, url: String) -> ResultWithDefaultError<()> {
-        match self.http_client.delete(url).send().await {
+        match self.http_client.delete(&url).send().await {
             Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
                 if response.status().is_success() {
-                    self.invalidate_read_cache();
+                    self.invalidate_caches_for_mutation(&url);
                     Ok(())
                 } else {
                     let status = response.status();
@@ -700,6 +712,67 @@ fn is_cacheable_get_url(url: &str) -> bool {
     }
 
     url.contains("/workspaces/") && url.ends_with("/tags")
+}
+
+fn cache_urls_affected_by_mutation(base_url: &str, mutation_url: &str) -> Vec<String> {
+    if mutation_url == format!("{base_url}/me/preferences") {
+        return vec![format!("{base_url}/me/preferences")];
+    }
+
+    if mutation_url.contains("/time_entries") {
+        return Vec::new();
+    }
+
+    if mutation_url.contains("/organizations/") && mutation_url.ends_with("/workspaces") {
+        let organization_id = mutation_url
+            .trim_end_matches("/workspaces")
+            .rsplit('/')
+            .next()
+            .unwrap_or_default();
+        return vec![
+            format!("{base_url}/me/workspaces"),
+            format!("{base_url}/me/organizations"),
+            format!("{base_url}/organizations/{organization_id}"),
+        ];
+    }
+
+    if mutation_url.contains("/workspaces/") && mutation_url.contains("/projects/") {
+        return vec![
+            format!("{base_url}/me/projects"),
+            format!("{base_url}/me/tasks"),
+        ];
+    }
+
+    if mutation_url.ends_with("/projects") {
+        return vec![
+            format!("{base_url}/me/projects"),
+            format!("{base_url}/me/tasks"),
+        ];
+    }
+
+    if mutation_url.contains("/workspaces/") && mutation_url.contains("/tasks") {
+        return vec![format!("{base_url}/me/tasks")];
+    }
+
+    if mutation_url.contains("/workspaces/") && mutation_url.contains("/clients") {
+        return vec![format!("{base_url}/me/clients")];
+    }
+
+    if mutation_url.contains("/workspaces/") && mutation_url.contains("/tags") {
+        if let Some(workspace_id) = mutation_url
+            .split("/workspaces/")
+            .nth(1)
+            .and_then(|suffix| suffix.split('/').next())
+        {
+            return vec![format!("{base_url}/workspaces/{workspace_id}/tags")];
+        }
+    }
+
+    if mutation_url.contains("/workspaces/") && !mutation_url.contains("/time_entries") {
+        return vec![format!("{base_url}/me/workspaces")];
+    }
+
+    Vec::new()
 }
 
 fn summarize_response_body(body: &str) -> String {
@@ -1267,7 +1340,7 @@ impl ApiClient for V9ApiClient {
 
     async fn update_preferences(&self, preferences: Value) -> ResultWithDefaultError<Value> {
         let url = format!("{}/me/preferences", self.base_url);
-        match self.http_client.post(url).json(&preferences).send().await {
+        match self.http_client.post(&url).json(&preferences).send().await {
             Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
                 let status = response.status();
@@ -1285,7 +1358,7 @@ impl ApiClient for V9ApiClient {
                 }
 
                 if body.trim().is_empty() {
-                    self.invalidate_read_cache();
+                    self.invalidate_caches_for_mutation(&url);
                     return Ok(preferences);
                 }
 
@@ -1298,7 +1371,7 @@ impl ApiClient for V9ApiClient {
                 });
 
                 if result.is_ok() {
-                    self.invalidate_read_cache();
+                    self.invalidate_caches_for_mutation(&url);
                 }
                 result
             }

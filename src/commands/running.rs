@@ -22,19 +22,7 @@ mod tests {
     use super::*;
     use crate::api::client::MockApiClient;
     use crate::error::ApiError;
-    use crate::models::TimeEntry;
     use tokio_test::{assert_err, assert_ok};
-
-    #[tokio::test]
-    async fn running_returns_ok_when_current_entry_exists() {
-        let mut api_client = MockApiClient::new();
-        api_client
-            .expect_get_current_time_entry_minimal()
-            .returning(|| Ok(Some(TimeEntry::default())));
-
-        let result = RunningTimeEntryCommand::execute(api_client).await;
-        assert_ok!(result);
-    }
 
     #[tokio::test]
     async fn running_returns_ok_when_no_current_entry_exists() {

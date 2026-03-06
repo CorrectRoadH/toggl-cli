@@ -298,9 +298,8 @@ impl ListCommand {
 mod tests {
     use super::*;
     use crate::api::client::MockApiClient;
-    use crate::models::{Client, Entities, Tag, TimeEntry, User};
+    use crate::models::{Client, Tag, TimeEntry, User};
     use chrono::Utc;
-    use std::collections::HashMap;
     use tokio_test::assert_ok;
 
     fn mock_user() -> User {
@@ -332,17 +331,6 @@ mod tests {
             project: None,
             task: None,
             created_with: Some("toggl-cli".to_string()),
-        }
-    }
-
-    fn mock_entities() -> Entities {
-        Entities {
-            time_entries: vec![mock_time_entry()],
-            projects: HashMap::new(),
-            tasks: HashMap::new(),
-            clients: HashMap::new(),
-            workspaces: Vec::new(),
-            tags: Vec::new(),
         }
     }
 
@@ -451,11 +439,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn list_projects_uses_entities_snapshot() {
+    async fn list_projects_uses_projects_api() {
         let mut api_client = MockApiClient::new();
         api_client
-            .expect_get_entities()
-            .returning(|| Ok(mock_entities()));
+            .expect_get_projects_list()
+            .returning(|| Ok(Vec::new()));
 
         let result = ListCommand::execute(
             api_client,

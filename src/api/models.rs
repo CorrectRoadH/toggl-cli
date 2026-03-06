@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::models::TimeEntry;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug)]
 pub struct NetworkTimeEntry {
     pub id: i64,
     pub description: String,
@@ -19,6 +19,49 @@ pub struct NetworkTimeEntry {
     #[serde(alias = "tid")]
     pub task_id: Option<i64>,
     pub created_with: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RawNetworkTimeEntry {
+    id: i64,
+    description: String,
+    start: DateTime<Utc>,
+    stop: Option<DateTime<Utc>>,
+    duration: i64,
+    billable: bool,
+    workspace_id: Option<i64>,
+    wid: Option<i64>,
+    tags: Option<Vec<String>>,
+    project_id: Option<i64>,
+    pid: Option<i64>,
+    task_id: Option<i64>,
+    tid: Option<i64>,
+    created_with: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for NetworkTimeEntry {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawNetworkTimeEntry::deserialize(deserializer)?;
+        Ok(Self {
+            id: raw.id,
+            description: raw.description,
+            start: raw.start,
+            stop: raw.stop,
+            duration: raw.duration,
+            billable: raw.billable,
+            workspace_id: raw
+                .workspace_id
+                .or(raw.wid)
+                .ok_or_else(|| serde::de::Error::missing_field("workspace_id"))?,
+            tags: raw.tags,
+            project_id: raw.project_id.or(raw.pid),
+            task_id: raw.task_id.or(raw.tid),
+            created_with: raw.created_with,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -180,5 +223,36 @@ impl From<TimeEntry> for NetworkTimeEntry {
             task_id: value.task.map(|t| t.id),
             created_with: value.created_with,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NetworkTimeEntry;
+
+    #[test]
+    fn network_time_entry_accepts_both_long_and_short_id_fields() {
+        let entry: NetworkTimeEntry = serde_json::from_str(
+            r#"{
+                "id": 1,
+                "description": "entry",
+                "start": "2026-03-06T15:09:03Z",
+                "stop": null,
+                "duration": -1,
+                "billable": false,
+                "workspace_id": 3550374,
+                "wid": 3550374,
+                "project_id": 212780915,
+                "pid": 212780915,
+                "task_id": null,
+                "tid": null,
+                "tags": ["tag-1"]
+            }"#,
+        )
+        .expect("expected network time entry to deserialize");
+
+        assert_eq!(entry.workspace_id, 3550374);
+        assert_eq!(entry.project_id, Some(212780915));
+        assert_eq!(entry.task_id, None);
     }
 }

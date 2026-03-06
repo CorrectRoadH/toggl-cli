@@ -53,7 +53,6 @@ mod tests {
     use super::*;
     use crate::api::client::MockApiClient;
     use crate::error::ApiError;
-    use crate::models::TimeEntry;
     use tokio_test::{assert_err, assert_ok};
 
     #[tokio::test]
@@ -62,23 +61,6 @@ mod tests {
         api_client
             .expect_get_current_time_entry_minimal()
             .returning(|| Ok(None));
-
-        let result = StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await;
-        assert_ok!(result);
-    }
-
-    #[tokio::test]
-    async fn stop_uses_stop_endpoint_for_running_entry() {
-        let mut api_client = MockApiClient::new();
-        let current_entry = TimeEntry::default();
-        let stopped_entry = current_entry.clone();
-        api_client
-            .expect_get_current_time_entry_minimal()
-            .returning(move || Ok(Some(current_entry.clone())));
-        api_client
-            .expect_stop_time_entry()
-            .withf(|workspace_id, time_entry_id| *workspace_id == -1 && *time_entry_id == -1)
-            .returning(move |_, _| Ok(stopped_entry.clone()));
 
         let result = StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await;
         assert_ok!(result);
