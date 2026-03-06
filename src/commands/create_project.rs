@@ -18,3 +18,93 @@ impl CreateProjectCommand {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::client::MockApiClient;
+    use crate::error::ApiError;
+    use crate::models::{Project, User};
+    use chrono::Utc;
+    use tokio_test::{assert_err, assert_ok};
+
+    fn mock_user() -> User {
+        User {
+            api_token: "token".to_string(),
+            email: "test@example.com".to_string(),
+            fullname: Some("Test".to_string()),
+            timezone: "UTC".to_string(),
+            default_workspace_id: 1,
+            beginning_of_week: None,
+            image_url: None,
+            created_at: None,
+            updated_at: None,
+            country_id: None,
+            has_password: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn create_project_returns_ok_on_success() {
+        let mut api_client = MockApiClient::new();
+        let user = mock_user();
+        api_client
+            .expect_get_user()
+            .returning(move || Ok(user.clone()));
+        api_client
+            .expect_create_project()
+            .withf(|wid, name, color| *wid == 1 && name == "Platform" && color == "#06aaf5")
+            .returning(|wid, name, color| {
+                Ok(Project {
+                    id: 100,
+                    name,
+                    workspace_id: wid,
+                    client: None,
+                    is_private: false,
+                    active: true,
+                    at: Utc::now(),
+                    created_at: Utc::now(),
+                    color,
+                    billable: None,
+                })
+            });
+
+        let result = CreateProjectCommand::execute(
+            api_client,
+            "Platform".to_string(),
+            "#06aaf5".to_string(),
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn create_project_returns_ok_on_api_failure() {
+        let mut api_client = MockApiClient::new();
+        let user = mock_user();
+        api_client
+            .expect_get_user()
+            .returning(move || Ok(user.clone()));
+        api_client
+            .expect_create_project()
+            .returning(|_, _, _| Err(Box::new(ApiError::Network)));
+
+        let result =
+            CreateProjectCommand::execute(api_client, "Fail".to_string(), "#000000".to_string())
+                .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn create_project_returns_error_when_user_fetch_fails() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_user()
+            .returning(|| Err(Box::new(ApiError::Network)));
+
+        let result =
+            CreateProjectCommand::execute(api_client, "Platform".to_string(), "#06aaf5".to_string())
+                .await;
+        assert_err!(result);
+    }
+}

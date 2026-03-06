@@ -239,3 +239,187 @@ fn apply_custom_time_range(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::client::MockApiClient;
+    use crate::models::{Project, Task};
+    use crate::picker::{PickableItem, PickableItemKey};
+    use chrono::{TimeZone, Utc};
+    use std::collections::HashMap;
+    use tokio_test::assert_err;
+
+    struct StubPicker {
+        key: PickableItemKey,
+    }
+
+    impl ItemPicker for StubPicker {
+        fn pick(&self, _items: Vec<PickableItem>) -> ResultWithDefaultError<PickableItemKey> {
+            Ok(self.key.clone())
+        }
+    }
+
+    fn fixed_time(seconds: i64) -> DateTime<Utc> {
+        Utc.timestamp_opt(seconds, 0).single().unwrap()
+    }
+
+    fn mock_project(id: i64, name: &str, billable: Option<bool>) -> Project {
+        Project {
+            id,
+            name: name.to_string(),
+            workspace_id: 1,
+            client: None,
+            is_private: false,
+            active: true,
+            at: fixed_time(1_700_000_000),
+            created_at: fixed_time(1_700_000_000),
+            color: "#06aaf5".to_string(),
+            billable,
+        }
+    }
+
+    fn mock_task(id: i64, name: &str, project: Project) -> Task {
+        Task {
+            id,
+            name: name.to_string(),
+            workspace_id: 1,
+            project,
+        }
+    }
+
+    fn mock_entities() -> Entities {
+        let project = mock_project(10, "Platform", Some(true));
+        let other_project = mock_project(20, "Ops", Some(false));
+        let task = mock_task(50, "Review", project.clone());
+        let other_task = mock_task(60, "Review", other_project.clone());
+
+        let mut projects = HashMap::new();
+        projects.insert(project.id, project);
+        projects.insert(other_project.id, other_project);
+
+        let mut tasks = HashMap::new();
+        tasks.insert(task.id, task);
+        tasks.insert(other_task.id, other_task);
+
+        Entities {
+            time_entries: Vec::new(),
+            projects,
+            tasks,
+            clients: HashMap::new(),
+            workspaces: Vec::new(),
+            tags: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn resolve_task_from_name_matches_within_project() {
+        let entities = mock_entities();
+
+        let task = resolve_task_from_name(&entities, "Review", Some(10)).unwrap();
+
+        assert_eq!(task.id, 50);
+        assert_eq!(task.project.id, 10);
+    }
+
+    #[test]
+    fn interactively_create_time_entry_uses_selected_task_project_and_billable_default() {
+        let entities = mock_entities();
+        let picker = Box::new(StubPicker {
+            key: PickableItemKey {
+                id: 50,
+                kind: PickableItemKind::Task,
+            },
+        });
+        let initial_entry = TimeEntry {
+            description: "Review PR".to_string(),
+            workspace_id: 1,
+            ..TimeEntry::default()
+        };
+
+        let entry = interactively_create_time_entry(initial_entry, entities, picker);
+
+        assert_eq!(entry.project.as_ref().map(|project| project.id), Some(10));
+        assert_eq!(entry.task.as_ref().map(|task| task.id), Some(50));
+        assert!(entry.billable);
+    }
+
+    #[test]
+    fn apply_custom_time_range_sets_running_entry_when_end_is_missing() {
+        let start = fixed_time(1_700_000_000);
+        let mut time_entry = TimeEntry::default();
+
+        apply_custom_time_range(&mut time_entry, Some(start), None).unwrap();
+
+        assert_eq!(time_entry.start, start);
+        assert_eq!(time_entry.stop, None);
+        assert_eq!(time_entry.duration, -1_700_000_000);
+    }
+
+    #[test]
+    fn apply_custom_time_range_sets_finished_duration() {
+        let start = fixed_time(1_700_000_000);
+        let end = fixed_time(1_700_003_600);
+        let mut time_entry = TimeEntry::default();
+
+        apply_custom_time_range(&mut time_entry, Some(start), Some(end)).unwrap();
+
+        assert_eq!(time_entry.start, start);
+        assert_eq!(time_entry.stop, Some(end));
+        assert_eq!(time_entry.duration, 3600);
+    }
+
+    #[tokio::test]
+    async fn start_rejects_end_without_start() {
+        let api_client = MockApiClient::new();
+        let picker = Box::new(StubPicker {
+            key: PickableItemKey {
+                id: 10,
+                kind: PickableItemKind::Project,
+            },
+        });
+
+        let result = StartCommand::execute(
+            api_client,
+            picker,
+            None,
+            None,
+            None,
+            None,
+            false,
+            false,
+            None,
+            Some("2026-01-01T10:00:00Z".to_string()),
+        )
+        .await;
+
+        assert_err!(result);
+    }
+
+    #[tokio::test]
+    async fn start_rejects_non_increasing_range() {
+        let api_client = MockApiClient::new();
+        let picker = Box::new(StubPicker {
+            key: PickableItemKey {
+                id: 10,
+                kind: PickableItemKind::Project,
+            },
+        });
+
+        let result = StartCommand::execute(
+            api_client,
+            picker,
+            None,
+            None,
+            None,
+            None,
+            false,
+            false,
+            Some("2026-01-01T10:00:00Z".to_string()),
+            Some("2026-01-01T09:00:00Z".to_string()),
+        )
+        .await;
+
+        assert_err!(result);
+    }
+}

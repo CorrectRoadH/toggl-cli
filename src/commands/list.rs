@@ -201,3 +201,154 @@ impl ListCommand {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::client::MockApiClient;
+    use crate::models::{Client, Entities, Tag, TimeEntry, User};
+    use chrono::Utc;
+    use std::collections::HashMap;
+    use tokio_test::assert_ok;
+
+    fn mock_user() -> User {
+        User {
+            api_token: "token".to_string(),
+            email: "test@example.com".to_string(),
+            fullname: Some("Test".to_string()),
+            timezone: "UTC".to_string(),
+            default_workspace_id: 1,
+            beginning_of_week: None,
+            image_url: None,
+            created_at: None,
+            updated_at: None,
+            country_id: None,
+            has_password: None,
+        }
+    }
+
+    fn mock_time_entry() -> TimeEntry {
+        TimeEntry {
+            id: 42,
+            description: "Test entry".to_string(),
+            start: Utc::now(),
+            stop: None,
+            duration: -Utc::now().timestamp(),
+            billable: false,
+            workspace_id: 1,
+            tags: vec!["dev".to_string()],
+            project: None,
+            task: None,
+            created_with: Some("toggl-cli".to_string()),
+        }
+    }
+
+    fn mock_entities() -> Entities {
+        Entities {
+            time_entries: vec![mock_time_entry()],
+            projects: HashMap::new(),
+            tasks: HashMap::new(),
+            clients: HashMap::new(),
+            workspaces: Vec::new(),
+            tags: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn list_time_entries_with_date_filter_uses_filtered_endpoint() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_time_entries_filtered()
+            .withf(|since, until| {
+                since.as_deref() == Some("2026-01-01") && until.as_deref() == Some("2026-01-31")
+            })
+            .returning(|_, _| Ok(vec![mock_time_entry()]));
+
+        let result = ListCommand::execute(
+            api_client,
+            Some(1),
+            false,
+            Some("2026-01-01".to_string()),
+            Some("2026-01-31".to_string()),
+            None,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn list_tags_uses_workspace_specific_api() {
+        let mut api_client = MockApiClient::new();
+        let user = mock_user();
+        api_client
+            .expect_get_user()
+            .returning(move || Ok(user.clone()));
+        api_client.expect_get_tags().withf(|wid| *wid == 1).returning(|wid| {
+            Ok(vec![Tag {
+                id: 10,
+                name: "backend".to_string(),
+                workspace_id: wid,
+            }])
+        });
+
+        let result = ListCommand::execute(
+            api_client,
+            None,
+            false,
+            None,
+            None,
+            Some(Entity::Tag { json: false }),
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn list_clients_uses_workspace_specific_api() {
+        let mut api_client = MockApiClient::new();
+        let user = mock_user();
+        api_client
+            .expect_get_user()
+            .returning(move || Ok(user.clone()));
+        api_client
+            .expect_get_clients()
+            .withf(|wid| *wid == 1)
+            .returning(|wid| {
+                Ok(vec![Client {
+                    id: 20,
+                    name: "Acme".to_string(),
+                    workspace_id: wid,
+                }])
+            });
+
+        let result = ListCommand::execute(
+            api_client,
+            None,
+            false,
+            None,
+            None,
+            Some(Entity::Client { json: true }),
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn list_projects_uses_entities_snapshot() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_entities()
+            .returning(|| Ok(mock_entities()));
+
+        let result = ListCommand::execute(
+            api_client,
+            Some(1),
+            false,
+            None,
+            None,
+            Some(Entity::Project { json: false }),
+        )
+        .await;
+        assert_ok!(result);
+    }
+}

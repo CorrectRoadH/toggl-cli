@@ -124,3 +124,193 @@ fn compute_stop_and_duration(
         None => Ok((None, -start.timestamp())),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::client::MockApiClient;
+    use crate::models::{Entities, Project, Task, TimeEntry};
+    use chrono::{TimeZone, Utc};
+    use std::collections::HashMap;
+    use tokio_test::{assert_err, assert_ok};
+
+    fn fixed_time(seconds: i64) -> DateTime<Utc> {
+        Utc.timestamp_opt(seconds, 0).single().unwrap()
+    }
+
+    fn mock_project(id: i64, name: &str) -> Project {
+        Project {
+            id,
+            name: name.to_string(),
+            workspace_id: 1,
+            client: None,
+            is_private: false,
+            active: true,
+            at: fixed_time(1_700_000_000),
+            created_at: fixed_time(1_700_000_000),
+            color: "#06aaf5".to_string(),
+            billable: None,
+        }
+    }
+
+    fn mock_task(id: i64, name: &str, project: Project) -> Task {
+        Task {
+            id,
+            name: name.to_string(),
+            workspace_id: 1,
+            project,
+        }
+    }
+
+    fn mock_entry() -> TimeEntry {
+        let project = mock_project(10, "Platform");
+        let task = mock_task(50, "Review", project.clone());
+        TimeEntry {
+            id: 42,
+            description: "Initial entry".to_string(),
+            start: fixed_time(1_700_000_000),
+            stop: Some(fixed_time(1_700_003_600)),
+            duration: 3600,
+            billable: false,
+            workspace_id: 1,
+            tags: vec!["dev".to_string()],
+            project: Some(project),
+            task: Some(task),
+            created_with: Some("toggl-cli".to_string()),
+        }
+    }
+
+    fn mock_entities() -> Entities {
+        let current_project = mock_project(10, "Platform");
+        let current_task = mock_task(50, "Review", current_project.clone());
+        let new_project = mock_project(20, "Ops");
+        let new_task = mock_task(60, "Deploy", new_project.clone());
+
+        let mut projects = HashMap::new();
+        projects.insert(current_project.id, current_project.clone());
+        projects.insert(new_project.id, new_project.clone());
+
+        let mut tasks = HashMap::new();
+        tasks.insert(current_task.id, current_task);
+        tasks.insert(new_task.id, new_task);
+
+        Entities {
+            time_entries: vec![mock_entry()],
+            projects,
+            tasks,
+            clients: HashMap::new(),
+            workspaces: Vec::new(),
+            tags: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn edit_current_entry_clears_task_when_project_changes() {
+        let mut api_client = MockApiClient::new();
+        let entry = mock_entry();
+        api_client
+            .expect_get_entities()
+            .returning(|| Ok(mock_entities()));
+        api_client
+            .expect_get_current_time_entry()
+            .returning(move || Ok(Some(entry.clone())));
+        api_client
+            .expect_update_time_entry()
+            .withf(|entry| {
+                entry.project.as_ref().map(|project| project.id) == Some(20)
+                    && entry.task.is_none()
+                    && entry.description == "Initial entry"
+            })
+            .returning(|entry| Ok(entry.id));
+
+        let result = EditCommand::execute(
+            api_client,
+            None,
+            None,
+            None,
+            Some("Ops".to_string()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn edit_entry_uses_task_match_within_selected_project() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_entities()
+            .returning(|| Ok(mock_entities()));
+        api_client
+            .expect_update_time_entry()
+            .withf(|entry| {
+                entry.project.as_ref().map(|project| project.id) == Some(20)
+                    && entry.task.as_ref().map(|task| task.id) == Some(60)
+                    && entry.description == "Updated entry"
+            })
+            .returning(|entry| Ok(entry.id));
+
+        let result = EditCommand::execute(
+            api_client,
+            Some(42),
+            Some("Updated entry".to_string()),
+            Some(true),
+            Some("Ops".to_string()),
+            Some("Deploy".to_string()),
+            Some(vec!["ops".to_string()]),
+            None,
+            None,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn edit_entry_clears_tags_with_empty_argument() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_entities()
+            .returning(|| Ok(mock_entities()));
+        api_client
+            .expect_update_time_entry()
+            .withf(|entry| entry.tags.is_empty())
+            .returning(|entry| Ok(entry.id));
+
+        let result = EditCommand::execute(
+            api_client,
+            Some(42),
+            None,
+            None,
+            None,
+            None,
+            Some(vec!["".to_string()]),
+            None,
+            None,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[test]
+    fn compute_stop_and_duration_returns_running_duration_without_stop() {
+        let start = fixed_time(1_700_000_000);
+
+        let result = compute_stop_and_duration(start, None).unwrap();
+
+        assert_eq!(result.0, None);
+        assert_eq!(result.1, -1_700_000_000);
+    }
+
+    #[test]
+    fn compute_stop_and_duration_rejects_non_increasing_range() {
+        let start = fixed_time(1_700_000_000);
+        let stop = Some(fixed_time(1_700_000_000));
+
+        let result = compute_stop_and_duration(start, stop);
+
+        assert_err!(result);
+    }
+}
