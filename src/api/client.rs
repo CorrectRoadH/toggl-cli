@@ -23,6 +23,7 @@ use super::models::NetworkClient;
 use super::models::NetworkCreateClient;
 use super::models::NetworkCreateProject;
 use super::models::NetworkCreateTag;
+use super::models::NetworkCreateWorkspace;
 use super::models::NetworkProject;
 use super::models::NetworkRenameClient;
 use super::models::NetworkRenameProject;
@@ -30,6 +31,7 @@ use super::models::NetworkRenameTag;
 use super::models::NetworkTag;
 use super::models::NetworkTask;
 use super::models::NetworkTimeEntry;
+use super::models::NetworkUpdateWorkspace;
 use super::models::NetworkWorkspace;
 
 #[cfg_attr(test, automock)]
@@ -104,6 +106,18 @@ pub trait ApiClient {
     async fn delete_client(&self, workspace_id: i64, client_id: i64) -> ResultWithDefaultError<()>;
 
     async fn get_time_entry(&self, time_entry_id: i64) -> ResultWithDefaultError<TimeEntry>;
+
+    async fn create_workspace(
+        &self,
+        organization_id: i64,
+        name: String,
+    ) -> ResultWithDefaultError<Workspace>;
+
+    async fn rename_workspace(
+        &self,
+        workspace_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<Workspace>;
 }
 
 pub struct V9ApiClient {
@@ -561,6 +575,45 @@ impl ApiClient for V9ApiClient {
             project: None,
             task: None,
             ..Default::default()
+        })
+    }
+
+    async fn create_workspace(
+        &self,
+        organization_id: i64,
+        name: String,
+    ) -> ResultWithDefaultError<Workspace> {
+        let url = format!(
+            "{}/organizations/{}/workspaces",
+            self.base_url, organization_id
+        );
+        let body = NetworkCreateWorkspace { name };
+        let network_workspace = self
+            .post::<NetworkWorkspace, NetworkCreateWorkspace>(url, &body)
+            .await?;
+        Ok(Workspace {
+            id: network_workspace.id,
+            name: network_workspace.name,
+            admin: network_workspace.admin,
+        })
+    }
+
+    async fn rename_workspace(
+        &self,
+        workspace_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<Workspace> {
+        let url = format!("{}/workspaces/{}", self.base_url, workspace_id);
+        let body = NetworkUpdateWorkspace {
+            name: Some(new_name),
+        };
+        let network_workspace = self
+            .put::<NetworkWorkspace, NetworkUpdateWorkspace>(url, &body)
+            .await?;
+        Ok(Workspace {
+            id: network_workspace.id,
+            name: network_workspace.name,
+            admin: network_workspace.admin,
         })
     }
 

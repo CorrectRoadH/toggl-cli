@@ -61,6 +61,8 @@ toggl create-project "新项目"                   # 创建项目
 toggl rename-project "旧名" "新名"              # 重命名项目
 toggl create-tag "新标签"                       # 创建标签
 toggl rename-tag "旧名" "新名"                  # 重命名标签
+toggl create-workspace 12345 "新空间"           # 在指定组织下创建 workspace
+toggl rename-workspace "旧空间" "新空间"         # 重命名 workspace
 ```
 
 ---

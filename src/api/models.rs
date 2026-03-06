@@ -100,6 +100,17 @@ pub struct NetworkRenameClient {
     pub wid: i64,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NetworkCreateWorkspace {
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct NetworkUpdateWorkspace {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
 impl From<TimeEntry> for NetworkTimeEntry {
     fn from(value: TimeEntry) -> Self {
         NetworkTimeEntry {

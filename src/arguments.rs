@@ -190,6 +190,20 @@ pub enum Command {
         #[structopt(help = "New name for the client")]
         new_name: String,
     },
+    #[structopt(about = "Create a new workspace in an organization")]
+    CreateWorkspace {
+        #[structopt(help = "Organization ID that will own the workspace")]
+        organization_id: i64,
+        #[structopt(help = "Name of the workspace to create")]
+        name: String,
+    },
+    #[structopt(about = "Rename one of your workspaces")]
+    RenameWorkspace {
+        #[structopt(help = "Current name of the workspace")]
+        old_name: String,
+        #[structopt(help = "New name for the workspace")]
+        new_name: String,
+    },
     #[structopt(about = "Manage auto-tracking configuration")]
     Config {
         #[structopt(

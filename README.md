@@ -90,6 +90,8 @@ SUBCOMMANDS:
     create-tag        Create a new tag
     rename-tag        Rename a tag
     delete-tag        Delete a tag
+    create-workspace  Create a new workspace in an organization
+    rename-workspace  Rename a workspace
     help              Prints this message or the help of the given subcommand(s)
 ```
 
