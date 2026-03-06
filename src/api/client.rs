@@ -393,7 +393,7 @@ impl V9ApiClient {
         .expect("Couldn't build a http client");
         let api_client = Self {
             http_client,
-            base_url: "https://track.toggl.com/api/v9".to_string(),
+            base_url: "https://api.track.toggl.com/api/v9".to_string(),
         };
         Ok(api_client)
     }
