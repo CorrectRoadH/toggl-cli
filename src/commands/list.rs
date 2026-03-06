@@ -2,7 +2,6 @@ use crate::api;
 use crate::arguments::Entity;
 use crate::models;
 use api::client::ApiClient;
-use colored::Colorize;
 use models::ResultWithDefaultError;
 use std::io::{self, BufWriter, Write};
 
@@ -35,11 +34,9 @@ impl ListCommand {
                 api_client.get_time_entries_filtered(since, until).await
             };
             match entries {
-                Err(error) => println!(
-                    "{}\n{}",
-                    "Couldn't fetch time entries from API".red(),
-                    error
-                ),
+                Err(error) => {
+                    return Err(error);
+                }
                 Ok(entries) => {
                     let entries = entries
                         .iter()
@@ -63,7 +60,9 @@ impl ListCommand {
             let json = json_flag || entity_json;
             let user = api_client.get_user().await?;
             match api_client.get_tags(user.default_workspace_id).await {
-                Err(error) => println!("{}\n{}", "Couldn't fetch tags from API".red(), error),
+                Err(error) => {
+                    return Err(error);
+                }
                 Ok(tags) => {
                     let stdout = io::stdout();
                     let mut handle = BufWriter::new(stdout);
@@ -88,7 +87,9 @@ impl ListCommand {
             let json = json_flag || entity_json;
             let user = api_client.get_user().await?;
             match api_client.get_clients(user.default_workspace_id).await {
-                Err(error) => println!("{}\n{}", "Couldn't fetch clients from API".red(), error),
+                Err(error) => {
+                    return Err(error);
+                }
                 Ok(clients) => {
                     let stdout = io::stdout();
                     let mut handle = BufWriter::new(stdout);
@@ -111,11 +112,9 @@ impl ListCommand {
         }
 
         match api_client.get_entities().await {
-            Err(error) => println!(
-                "{}\n{}",
-                "Couldn't fetch time entries the from API".red(),
-                error
-            ),
+            Err(error) => {
+                return Err(error);
+            }
             Ok(entities) => {
                 // use this to avoid calling println! in a loop:
                 // <https://rust-cli.github.io/book/tutorial/output.html#a-note-on-printing-performance>
