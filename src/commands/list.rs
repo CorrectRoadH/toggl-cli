@@ -27,7 +27,14 @@ impl ListCommand {
                 Some(Entity::TimeEntry { json }) => json_flag || *json,
                 _ => json_flag,
             };
-            match api_client.get_time_entries_filtered(since, until).await {
+            let entries = if json {
+                api_client
+                    .get_time_entries_filtered_minimal(since, until)
+                    .await
+            } else {
+                api_client.get_time_entries_filtered(since, until).await
+            };
+            match entries {
                 Err(error) => println!(
                     "{}\n{}",
                     "Couldn't fetch time entries from API".red(),
@@ -268,6 +275,28 @@ mod tests {
             api_client,
             Some(1),
             false,
+            Some("2026-01-01".to_string()),
+            Some("2026-01-31".to_string()),
+            None,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn list_time_entries_with_date_filter_and_json_uses_minimal_endpoint() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_time_entries_filtered_minimal()
+            .withf(|since, until| {
+                since.as_deref() == Some("2026-01-01") && until.as_deref() == Some("2026-01-31")
+            })
+            .returning(|_, _| Ok(vec![mock_time_entry()]));
+
+        let result = ListCommand::execute(
+            api_client,
+            Some(1),
+            true,
             Some("2026-01-01".to_string()),
             Some("2026-01-31".to_string()),
             None,

@@ -20,10 +20,18 @@ impl EditCommand {
         start: Option<String>,
         end: Option<String>,
     ) -> ResultWithDefaultError<()> {
-        let entities = api_client.get_entities().await?;
+        let needs_entities = project_name.is_some() || task_name.is_some() || matches!(id, None);
+        let entities = if needs_entities {
+            Some(api_client.get_entities().await?)
+        } else {
+            None
+        };
 
         let time_entry = match id {
-            Some(id) => entities.time_entries.into_iter().find(|te| te.id == id),
+            Some(id) => match &entities {
+                Some(entities) => entities.time_entries.iter().find(|te| te.id == id).cloned(),
+                None => Some(api_client.get_time_entry(id).await?),
+            },
             None => api_client.get_current_time_entry().await?,
         };
 
@@ -43,10 +51,14 @@ impl EditCommand {
                 let project = match project_name.as_deref() {
                     Some("") => None,
                     Some(name) => entities
-                        .projects
-                        .clone()
-                        .into_values()
-                        .find(|p| p.name == name)
+                        .as_ref()
+                        .and_then(|entities| {
+                            entities
+                                .projects
+                                .clone()
+                                .into_values()
+                                .find(|p| p.name == name)
+                        })
                         .or(entry.project.clone()),
                     None => entry.project.clone(),
                 };
@@ -54,13 +66,14 @@ impl EditCommand {
                 let task = match task_name.as_deref() {
                     Some("") => None,
                     Some(name) => entities
-                        .tasks
-                        .values()
-                        .find(|task| {
-                            task.name == name
-                                && project
-                                    .as_ref()
-                                    .is_none_or(|project| task.project.id == project.id)
+                        .as_ref()
+                        .and_then(|entities| {
+                            entities.tasks.values().find(|task| {
+                                task.name == name
+                                    && project
+                                        .as_ref()
+                                        .is_none_or(|project| task.project.id == project.id)
+                            })
                         })
                         .cloned(),
                     None => {
@@ -287,6 +300,34 @@ mod tests {
             None,
             None,
             Some(vec!["".to_string()]),
+            None,
+            None,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn edit_entry_without_project_or_task_resolution_fetches_single_entry() {
+        let mut api_client = MockApiClient::new();
+        let entry = mock_entry();
+        api_client
+            .expect_get_time_entry()
+            .withf(|id| *id == 42)
+            .returning(move |_| Ok(entry.clone()));
+        api_client
+            .expect_update_time_entry()
+            .withf(|entry| entry.id == 42 && entry.description == "Renamed entry")
+            .returning(|entry| Ok(entry.id));
+
+        let result = EditCommand::execute(
+            api_client,
+            Some(42),
+            Some("Renamed entry".to_string()),
+            None,
+            None,
+            None,
+            None,
             None,
             None,
         )

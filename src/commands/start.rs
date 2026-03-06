@@ -140,12 +140,23 @@ impl StartCommand {
         }
 
         let workspace_id = (api_client.get_user().await?).default_workspace_id;
-        let entities = api_client.get_entities().await?;
+        let track_config = config::locate::locate_config_path()
+            .ok()
+            .and_then(|path| config::parser::get_config_from_file(path).ok());
+        let needs_entities =
+            interactive || project_name.is_some() || task_name.is_some() || track_config.is_some();
+        let entities = if needs_entities {
+            Some(api_client.get_entities().await?)
+        } else {
+            None
+        };
 
-        let default_time_entry = config::locate::locate_config_path()
-            .and_then(config::parser::get_config_from_file)
-            .and_then(|track_config| track_config.get_default_entry(entities.clone()))
-            .unwrap_or_else(|_| TimeEntry::default());
+        let default_time_entry = match (&track_config, &entities) {
+            (Some(track_config), Some(entities)) => track_config
+                .get_default_entry(entities.clone())
+                .unwrap_or_else(|_| TimeEntry::default()),
+            _ => TimeEntry::default(),
+        };
 
         let workspace_id = if default_time_entry.workspace_id != -1 {
             default_time_entry.workspace_id
@@ -156,9 +167,9 @@ impl StartCommand {
         let project = project_name
             .and_then(|name| {
                 entities
-                    .projects
-                    .clone()
-                    .into_values()
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|entities| entities.projects.clone().into_values())
                     .find(|p| p.name == name)
             })
             .or(default_time_entry.project.clone());
@@ -166,7 +177,9 @@ impl StartCommand {
         let task = task_name
             .as_deref()
             .and_then(|name| {
-                resolve_task_from_name(&entities, name, project.as_ref().map(|p| p.id))
+                entities.as_ref().and_then(|entities| {
+                    resolve_task_from_name(&entities, name, project.as_ref().map(|p| p.id))
+                })
             })
             .or(default_time_entry.task.clone());
 
@@ -191,7 +204,11 @@ impl StartCommand {
                 ..TimeEntry::default()
             };
             if interactive {
-                interactively_create_time_entry(initial_entry, entities.clone(), picker)
+                interactively_create_time_entry(
+                    initial_entry,
+                    entities.expect("interactive mode requires entities"),
+                    picker,
+                )
             } else {
                 initial_entry
             }

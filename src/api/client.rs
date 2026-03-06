@@ -52,6 +52,12 @@ pub trait ApiClient {
         until: Option<String>,
     ) -> ResultWithDefaultError<Vec<TimeEntry>>;
 
+    async fn get_time_entries_filtered_minimal(
+        &self,
+        since: Option<String>,
+        until: Option<String>,
+    ) -> ResultWithDefaultError<Vec<TimeEntry>>;
+
     async fn delete_time_entry(
         &self,
         workspace_id: i64,
@@ -685,6 +691,32 @@ impl ApiClient for V9ApiClient {
             .collect();
 
         Ok(entries)
+    }
+
+    async fn get_time_entries_filtered_minimal(
+        &self,
+        since: Option<String>,
+        until: Option<String>,
+    ) -> ResultWithDefaultError<Vec<TimeEntry>> {
+        let network_entries = self
+            .get_time_entries(since.as_deref(), until.as_deref())
+            .await?;
+        Ok(network_entries
+            .into_iter()
+            .map(|te| TimeEntry {
+                id: te.id,
+                description: te.description,
+                start: te.start,
+                stop: te.stop,
+                duration: te.duration,
+                billable: te.billable,
+                workspace_id: te.workspace_id,
+                tags: te.tags.unwrap_or_default(),
+                project: None,
+                task: None,
+                ..Default::default()
+            })
+            .collect())
     }
 
     async fn create_project(

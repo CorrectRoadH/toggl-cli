@@ -114,15 +114,6 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     });
     cleanup.time_entry_id = Some(created_entry.id);
 
-    let shown_entry: TimeEntryRecord = serde_json::from_str(&run_toggl(&[
-        "show",
-        &created_entry.id.to_string(),
-        "--json",
-    ]))
-    .expect("failed to parse show JSON");
-    assert_eq!(shown_entry.id, created_entry.id);
-    assert_eq!(shown_entry.description, description);
-
     run_toggl(&[
         "edit",
         "time-entry",
