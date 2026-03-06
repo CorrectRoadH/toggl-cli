@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use serde_json::Value;
 use std::process::Command;
 use std::thread::sleep;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -85,6 +86,29 @@ fn try_run_toggl(args: &[&str]) -> std::io::Result<std::process::Output> {
 fn list_entries_on_test_day() -> Vec<TimeEntryRecord> {
     let output = run_toggl(&["list", "--json", "--since", TEST_DAY, "--until", TEST_DAY]);
     serde_json::from_str(&output).expect("failed to parse time entry list JSON")
+}
+
+fn run_json_array_command(args: &[&str]) -> Option<Vec<Value>> {
+    match try_run_toggl_checked(args) {
+        Ok(output) => {
+            let parsed: Value =
+                serde_json::from_str(&output).expect("failed to parse command JSON output");
+            Some(
+                parsed
+                    .as_array()
+                    .cloned()
+                    .expect("expected command JSON output to be an array"),
+            )
+        }
+        Err(SkipReason::RateLimited(message)) => {
+            eprintln!(
+                "Skipping live CLI test because Toggl API rate limit was hit while running `toggl {}`.\nstderr:\n{}",
+                args.join(" "),
+                message
+            );
+            None
+        }
+    }
 }
 
 fn is_rate_limited(stderr: &str) -> bool {
@@ -202,4 +226,32 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
         }),
         "time entry cleanup did not restore baseline"
     );
+}
+
+#[test]
+fn live_cli_list_commands_cover_workspace_resources() {
+    if !should_run_live_tests() {
+        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
+        return;
+    }
+
+    let commands: [&[&str]; 5] = [
+        &["list", "project", "--json"],
+        &["list", "client", "--json"],
+        &["list", "task", "--json"],
+        &["list", "workspace", "--json"],
+        &["list", "tag", "--json"],
+    ];
+
+    for args in commands {
+        let Some(items) = run_json_array_command(args) else {
+            return;
+        };
+
+        assert!(
+            items.iter().all(Value::is_object),
+            "expected every item from `toggl {}` to be a JSON object",
+            args.join(" ")
+        );
+    }
 }
