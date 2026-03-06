@@ -14,34 +14,44 @@ use api::client::V9ApiClient;
 use arguments::Command::Auth;
 use arguments::Command::Config;
 use arguments::Command::Continue;
+use arguments::Command::CreateClient;
 use arguments::Command::CreateProject;
 use arguments::Command::CreateTag;
 use arguments::Command::Current;
 use arguments::Command::Delete;
+use arguments::Command::DeleteClient;
 use arguments::Command::DeleteProject;
 use arguments::Command::DeleteTag;
 use arguments::Command::Edit;
 use arguments::Command::List;
 use arguments::Command::Logout;
+use arguments::Command::Me;
+use arguments::Command::RenameClient;
 use arguments::Command::RenameProject;
 use arguments::Command::RenameTag;
 use arguments::Command::Running;
+use arguments::Command::Show;
 use arguments::Command::Start;
 use arguments::Command::Stop;
 use arguments::CommandLineArguments;
 use arguments::ConfigSubCommand;
 use commands::auth::AuthenticationCommand;
 use commands::cont::ContinueCommand;
+use commands::create_client::CreateClientCommand;
 use commands::create_project::CreateProjectCommand;
 use commands::create_tag::CreateTagCommand;
 use commands::delete::DeleteCommand;
+use commands::delete_client::DeleteClientCommand;
 use commands::delete_project::DeleteProjectCommand;
 use commands::delete_tag::DeleteTagCommand;
 use commands::edit::EditCommand;
 use commands::list::ListCommand;
+use commands::me::MeCommand;
+use commands::rename_client::RenameClientCommand;
 use commands::rename_project::RenameProjectCommand;
 use commands::rename_tag::RenameTagCommand;
 use commands::running::RunningTimeEntryCommand;
+use commands::show::ShowCommand;
 use commands::start::StartCommand;
 use commands::stop::{StopCommand, StopCommandOrigin};
 use credentials::get_storage;
@@ -181,6 +191,22 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
             RenameTag { old_name, new_name } => {
                 RenameTagCommand::execute(get_default_api_client()?, old_name, new_name).await?
             }
+
+            CreateClient { name } => {
+                CreateClientCommand::execute(get_default_api_client()?, name).await?
+            }
+
+            DeleteClient { name } => {
+                DeleteClientCommand::execute(get_default_api_client()?, name).await?
+            }
+
+            RenameClient { old_name, new_name } => {
+                RenameClientCommand::execute(get_default_api_client()?, old_name, new_name).await?
+            }
+
+            Show { id, json } => ShowCommand::execute(get_default_api_client()?, id, json).await?,
+
+            Me => MeCommand::execute(get_default_api_client()?).await?,
 
             Auth { api_token } => {
                 let credentials = Credentials { api_token };

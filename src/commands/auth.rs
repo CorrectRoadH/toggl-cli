@@ -53,6 +53,12 @@ mod tests {
             fullname: Some(MOCK_USER_NAME.to_string()),
             timezone: "UTC".to_string(),
             default_workspace_id: 1,
+            beginning_of_week: None,
+            image_url: None,
+            created_at: None,
+            updated_at: None,
+            country_id: None,
+            has_password: None,
         };
 
         api_client

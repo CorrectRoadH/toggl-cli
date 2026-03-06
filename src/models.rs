@@ -54,6 +54,18 @@ pub struct User {
     pub fullname: Option<String>,
     pub timezone: String,
     pub default_workspace_id: i64,
+    #[serde(default)]
+    pub beginning_of_week: Option<i32>,
+    #[serde(default)]
+    pub image_url: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub country_id: Option<i64>,
+    #[serde(default)]
+    pub has_password: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -191,12 +203,31 @@ pub struct Client {
     pub workspace_id: i64,
 }
 
+impl std::fmt::Display for Client {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl std::fmt::Display for Workspace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let role = if self.admin { "admin" } else { "member" };
+        write!(f, "{} ({})", self.name, role)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Task {
     pub id: i64,
     pub name: String,
     pub workspace_id: i64,
     pub project: Project,
+}
+
+impl std::fmt::Display for Task {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} @{}", self.name, self.project.name)
+    }
 }
 
 impl TimeEntry {

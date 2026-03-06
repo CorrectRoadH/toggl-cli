@@ -164,6 +164,32 @@ pub enum Command {
         #[structopt(help = "New name for the tag")]
         new_name: String,
     },
+    #[structopt(about = "Show details of a single time entry by ID")]
+    Show {
+        #[structopt(help = "ID of the time entry to show")]
+        id: i64,
+        #[structopt(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
+    #[structopt(about = "Show current user profile information")]
+    Me,
+    #[structopt(about = "Create a new client in your workspace")]
+    CreateClient {
+        #[structopt(help = "Name of the client to create")]
+        name: String,
+    },
+    #[structopt(about = "Delete a client from your workspace by name")]
+    DeleteClient {
+        #[structopt(help = "Name of the client to delete")]
+        name: String,
+    },
+    #[structopt(about = "Rename a client in your workspace")]
+    RenameClient {
+        #[structopt(help = "Current name of the client")]
+        old_name: String,
+        #[structopt(help = "New name for the client")]
+        new_name: String,
+    },
     #[structopt(about = "Manage auto-tracking configuration")]
     Config {
         #[structopt(
@@ -194,6 +220,18 @@ pub enum Entity {
         json: bool,
     },
     Tag {
+        #[structopt(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
+    Client {
+        #[structopt(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
+    Workspace {
+        #[structopt(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
+    Task {
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },
