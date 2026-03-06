@@ -14,40 +14,51 @@ pub struct CommandLineArguments {
     #[structopt(long, help = "Use custom proxy")]
     pub proxy: Option<String>,
 
-    #[structopt(long, help = "Use fzf instead of the default picker")]
+    #[structopt(
+        long,
+        help = "Use fzf for interactive selections instead of the default picker"
+    )]
     pub fzf: bool,
 }
 
 #[derive(Debug, StructOpt)]
 pub enum Command {
+    #[structopt(about = "Show the current time entry")]
     Current,
-    #[structopt()]
+    #[structopt(
+        about = "List time entries or workspace resources",
+        long_about = "List time entries by default, or list projects, tags, clients, workspaces, or tasks via a subcommand.\n\nExamples:\n  toggl list\n  toggl list --since 2026-03-01 --until 2026-03-06\n  toggl list project\n  toggl list tag --json"
+    )]
     List {
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "Maximum number of items to print")]
         number: Option<usize>,
-        #[structopt(short, long, help = "Output in JSON format")]
+        #[structopt(
+            short,
+            long,
+            help = "Output in JSON format (applies to the default time-entry listing)"
+        )]
         json: bool,
         #[structopt(
             long,
-            help = "Filter entries starting on or after this date (YYYY-MM-DD)"
+            help = "Filter time entries starting on or after this date (YYYY-MM-DD)"
         )]
         since: Option<String>,
         #[structopt(
             long,
-            help = "Filter entries starting on or before this date (YYYY-MM-DD)"
+            help = "Filter time entries starting on or before this date (YYYY-MM-DD)"
         )]
         until: Option<String>,
         #[structopt(subcommand)]
         entity: Option<Entity>,
     },
+    #[structopt(about = "Show the currently running time entry")]
     Running,
+    #[structopt(about = "Stop the currently running time entry")]
     Stop,
     #[structopt(
         about = "Authenticate with the Toggl API. Find your API token at https://track.toggl.com/profile#api-token"
     )]
-    Auth {
-        api_token: String,
-    },
+    Auth { api_token: String },
     #[structopt(about = "Clear stored credentials")]
     Logout,
     #[structopt(
@@ -88,6 +99,7 @@ pub enum Command {
         )]
         end: Option<String>,
     },
+    #[structopt(about = "Continue a previous time entry")]
     Continue {
         #[structopt(short, long)]
         interactive: bool,
@@ -321,26 +333,32 @@ pub enum RenameEntity {
 
 #[derive(Debug, StructOpt)]
 pub enum Entity {
+    #[structopt(about = "List projects")]
     Project {
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },
+    #[structopt(about = "List time entries")]
     TimeEntry {
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },
+    #[structopt(about = "List tags in the current workspace")]
     Tag {
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },
+    #[structopt(about = "List clients in the current workspace")]
     Client {
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },
+    #[structopt(about = "List workspaces")]
     Workspace {
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },
+    #[structopt(about = "List tasks")]
     Task {
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
