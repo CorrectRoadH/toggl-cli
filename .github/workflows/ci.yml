@@ -29,15 +29,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libssl-dev pkg-config
       - name: Generate coverage report
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
-      - name: Generate coverage summary
-        run: cargo llvm-cov report --summary-only > coverage-summary.txt
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-lcov
-          path: |
-            lcov.info
-            coverage-summary.txt
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
