@@ -436,10 +436,29 @@ impl V9ApiClient {
     async fn send<T: de::DeserializeOwned>(request: RequestBuilder) -> ResultWithDefaultError<T> {
         match request.send().await {
             Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
-            Ok(response) => match response.json::<T>().await {
-                Err(_) => Err(Box::new(ApiError::Deserialization)),
-                Ok(parsed_response) => Ok(parsed_response),
-            },
+            Ok(response) => {
+                let status = response.status();
+                let body = response.text().await.map_err(|error| {
+                    Box::new(ApiError::NetworkWithMessage(error.to_string()))
+                        as Box<dyn std::error::Error + Send>
+                })?;
+
+                if !status.is_success() {
+                    return Err(Box::new(ApiError::NetworkWithMessage(format!(
+                        "HTTP {} {}",
+                        status.as_u16(),
+                        summarize_response_body(&body)
+                    ))));
+                }
+
+                serde_json::from_str::<T>(&body).map_err(|error| {
+                    Box::new(ApiError::DeserializationWithMessage(format!(
+                        "{}; response body: {}",
+                        error,
+                        summarize_response_body(&body)
+                    ))) as Box<dyn std::error::Error + Send>
+                })
+            }
         }
     }
 
@@ -454,6 +473,21 @@ impl V9ApiClient {
                 }
             }
         }
+    }
+}
+
+fn summarize_response_body(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return "(empty response body)".to_string();
+    }
+
+    const MAX_LEN: usize = 400;
+    let summary: String = trimmed.chars().take(MAX_LEN).collect();
+    if trimmed.chars().count() > MAX_LEN {
+        format!("{summary}...")
+    } else {
+        summary
     }
 }
 

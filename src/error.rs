@@ -10,6 +10,7 @@ pub enum ApiError {
     Network,
     NetworkWithMessage(String),
     Deserialization,
+    DeserializationWithMessage(String),
 }
 
 impl Display for ApiError {
@@ -25,6 +26,14 @@ impl Display for ApiError {
             ApiError::Deserialization => format!(
                 "{}\n{} {}",
                 constants::DESERIALIZATION_ERROR_MESSAGE.red(),
+                constants::OUTDATED_APP_ERROR_MESSAGE.blue().bold(),
+                constants::ISSUE_LINK.blue().bold().underline()
+            ),
+            ApiError::DeserializationWithMessage(message) => format!(
+                "{}\n{}: {}\n{} {}",
+                constants::DESERIALIZATION_ERROR_MESSAGE.red(),
+                "Details".yellow().bold(),
+                message,
                 constants::OUTDATED_APP_ERROR_MESSAGE.blue().bold(),
                 constants::ISSUE_LINK.blue().bold().underline()
             ),
