@@ -168,6 +168,16 @@ fn parse_workspaces(output: &str) -> Vec<WorkspaceRecord> {
     serde_json::from_str(output).expect("failed to parse workspace list JSON")
 }
 
+fn editable_preferences_payload(preferences_json: &Value) -> String {
+    for key in ["date_format", "timeofday_format", "duration_format"] {
+        if !preferences_json[key].is_null() {
+            return serde_json::json!({ key: preferences_json[key].clone() }).to_string();
+        }
+    }
+
+    panic!("could not find a stable editable preference field");
+}
+
 fn default_workspace_id_from_me(output: &str) -> i64 {
     output
         .lines()
@@ -675,9 +685,9 @@ fn live_cli_preferences_round_trip_succeeds() {
     let preferences_json: Value =
         serde_json::from_str(&preferences_output).expect("failed to parse preferences JSON");
     assert!(preferences_json.is_object());
+    let payload = editable_preferences_payload(&preferences_json);
 
-    let Some(updated_output) = run_checked_or_skip(&["edit", "preferences", &preferences_output])
-    else {
+    let Some(updated_output) = run_checked_or_skip(&["edit", "preferences", &payload]) else {
         return;
     };
     assert!(

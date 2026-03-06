@@ -359,18 +359,32 @@ impl V9ApiClient {
         match self.http_client.get(url).send().await {
             Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
-                if response.status() == reqwest::StatusCode::NOT_FOUND
-                    || response.status() == reqwest::StatusCode::NO_CONTENT
+                let status = response.status();
+                if status == reqwest::StatusCode::NOT_FOUND
+                    || status == reqwest::StatusCode::NO_CONTENT
                 {
                     return Ok(None);
                 }
-                if !response.status().is_success() {
-                    return Err(Box::new(ApiError::Deserialization));
+                let body = response.text().await.map_err(|error| {
+                    Box::new(ApiError::NetworkWithMessage(error.to_string()))
+                        as Box<dyn std::error::Error + Send>
+                })?;
+                if !status.is_success() {
+                    return Err(Box::new(ApiError::NetworkWithMessage(format!(
+                        "HTTP {} {}",
+                        status.as_u16(),
+                        summarize_response_body(&body)
+                    ))));
                 }
-                match response.json::<NetworkTimeEntry>().await {
-                    Err(_) => Err(Box::new(ApiError::Deserialization)),
-                    Ok(entry) => Ok(Some(entry)),
-                }
+                serde_json::from_str::<NetworkTimeEntry>(&body)
+                    .map(Some)
+                    .map_err(|error| {
+                        Box::new(ApiError::DeserializationWithMessage(format!(
+                            "{}; response body: {}",
+                            error,
+                            summarize_response_body(&body)
+                        ))) as Box<dyn std::error::Error + Send>
+                    })
             }
         }
     }
@@ -475,7 +489,16 @@ impl V9ApiClient {
                 if response.status().is_success() {
                     Ok(())
                 } else {
-                    Err(Box::new(ApiError::Deserialization))
+                    let status = response.status();
+                    let body = response.text().await.map_err(|error| {
+                        Box::new(ApiError::NetworkWithMessage(error.to_string()))
+                            as Box<dyn std::error::Error + Send>
+                    })?;
+                    Err(Box::new(ApiError::NetworkWithMessage(format!(
+                        "HTTP {} {}",
+                        status.as_u16(),
+                        summarize_response_body(&body)
+                    ))))
                 }
             }
         }
