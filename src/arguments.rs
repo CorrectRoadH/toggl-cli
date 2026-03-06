@@ -173,6 +173,13 @@ pub enum Command {
     },
     #[structopt(about = "Show current user profile information")]
     Me,
+    #[structopt(about = "Show current user preferences")]
+    Preferences,
+    #[structopt(about = "Update current user preferences with a JSON payload")]
+    UpdatePreferences {
+        #[structopt(help = "JSON object to send to /me/preferences")]
+        json: String,
+    },
     #[structopt(about = "Create a new client in your workspace")]
     CreateClient {
         #[structopt(help = "Name of the client to create")]
@@ -203,6 +210,45 @@ pub enum Command {
         old_name: String,
         #[structopt(help = "New name for the workspace")]
         new_name: String,
+    },
+    #[structopt(about = "Create a task inside a project")]
+    CreateTask {
+        #[structopt(
+            short,
+            long,
+            help = "Exact name of the project that should contain the task"
+        )]
+        project: String,
+        #[structopt(help = "Name of the task to create")]
+        name: String,
+        #[structopt(long, help = "Task active state (true/false)")]
+        active: Option<bool>,
+        #[structopt(long, help = "Estimated duration for the task in seconds")]
+        estimated_seconds: Option<i64>,
+        #[structopt(long, help = "Assign the task to a specific user ID")]
+        user_id: Option<i64>,
+    },
+    #[structopt(about = "Update a task inside a project")]
+    UpdateTask {
+        #[structopt(short, long, help = "Exact name of the project that contains the task")]
+        project: String,
+        #[structopt(help = "Current name of the task")]
+        name: String,
+        #[structopt(long, help = "New name for the task")]
+        new_name: Option<String>,
+        #[structopt(long, help = "Task active state (true/false)")]
+        active: Option<bool>,
+        #[structopt(long, help = "Estimated duration for the task in seconds")]
+        estimated_seconds: Option<i64>,
+        #[structopt(long, help = "Assign the task to a specific user ID")]
+        user_id: Option<i64>,
+    },
+    #[structopt(about = "Delete a task from a project by name")]
+    DeleteTask {
+        #[structopt(short, long, help = "Exact name of the project that contains the task")]
+        project: String,
+        #[structopt(help = "Name of the task to delete")]
+        name: String,
     },
     #[structopt(about = "Manage auto-tracking configuration")]
     Config {

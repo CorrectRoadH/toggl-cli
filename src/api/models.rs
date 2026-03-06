@@ -46,6 +46,14 @@ pub struct NetworkTask {
     pub name: String,
     pub workspace_id: i64,
     pub project_id: i64,
+    #[serde(default)]
+    pub active: Option<bool>,
+    #[serde(default)]
+    pub estimated_seconds: Option<i64>,
+    #[serde(default)]
+    pub external_reference: Option<String>,
+    #[serde(default)]
+    pub user_id: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -109,6 +117,29 @@ pub struct NetworkCreateWorkspace {
 pub struct NetworkUpdateWorkspace {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NetworkCreateTask {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_seconds: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct NetworkUpdateTask {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_seconds: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<i64>,
 }
 
 impl From<TimeEntry> for NetworkTimeEntry {

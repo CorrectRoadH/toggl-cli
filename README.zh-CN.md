@@ -58,11 +58,16 @@ toggl list -n 10                                # 列出最近10条记录
 toggl edit [ID] --description "新描述"          # 编辑时间条目
 toggl delete [ID]                               # 删除时间条目
 toggl create-project "新项目"                   # 创建项目
+toggl create-task --project 我的项目 "代码评审"   # 在项目下创建任务
 toggl rename-project "旧名" "新名"              # 重命名项目
 toggl create-tag "新标签"                       # 创建标签
 toggl rename-tag "旧名" "新名"                  # 重命名标签
 toggl create-workspace 12345 "新空间"           # 在指定组织下创建 workspace
 toggl rename-workspace "旧空间" "新空间"         # 重命名 workspace
+toggl preferences                               # 查看当前偏好设置
+toggl update-preferences '{"time_format":"H:mm"}' # 更新偏好设置
+toggl update-task --project 我的项目 "代码评审" --new-name "CR" # 更新任务
+toggl delete-task --project 我的项目 "CR"        # 删除任务
 ```
 
 ---

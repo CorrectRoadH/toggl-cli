@@ -18,11 +18,13 @@ use models::{ResultWithDefaultError, User};
 use reqwest::Client;
 use reqwest::{header, RequestBuilder};
 use serde::{de, Serialize};
+use serde_json::Value;
 
 use super::models::NetworkClient;
 use super::models::NetworkCreateClient;
 use super::models::NetworkCreateProject;
 use super::models::NetworkCreateTag;
+use super::models::NetworkCreateTask;
 use super::models::NetworkCreateWorkspace;
 use super::models::NetworkProject;
 use super::models::NetworkRenameClient;
@@ -31,6 +33,7 @@ use super::models::NetworkRenameTag;
 use super::models::NetworkTag;
 use super::models::NetworkTask;
 use super::models::NetworkTimeEntry;
+use super::models::NetworkUpdateTask;
 use super::models::NetworkUpdateWorkspace;
 use super::models::NetworkWorkspace;
 
@@ -118,6 +121,39 @@ pub trait ApiClient {
         workspace_id: i64,
         new_name: String,
     ) -> ResultWithDefaultError<Workspace>;
+
+    async fn get_preferences(&self) -> ResultWithDefaultError<Value>;
+
+    async fn update_preferences(&self, preferences: Value) -> ResultWithDefaultError<Value>;
+
+    async fn create_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        name: String,
+        active: Option<bool>,
+        estimated_seconds: Option<i64>,
+        user_id: Option<i64>,
+    ) -> ResultWithDefaultError<Task>;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn update_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        task_id: i64,
+        name: Option<String>,
+        active: Option<bool>,
+        estimated_seconds: Option<i64>,
+        user_id: Option<i64>,
+    ) -> ResultWithDefaultError<Task>;
+
+    async fn delete_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        task_id: i64,
+    ) -> ResultWithDefaultError<()>;
 }
 
 pub struct V9ApiClient {
@@ -171,6 +207,42 @@ impl V9ApiClient {
     ) -> ResultWithDefaultError<Vec<NetworkTag>> {
         let url = format!("{}/workspaces/{}/tags", self.base_url, workspace_id);
         self.get::<Vec<NetworkTag>>(url).await
+    }
+
+    fn network_project_to_project(network_project: NetworkProject) -> Project {
+        Project {
+            id: network_project.id,
+            name: network_project.name,
+            workspace_id: network_project.workspace_id,
+            client: None,
+            is_private: network_project.is_private,
+            active: network_project.active,
+            at: network_project.at,
+            created_at: network_project.created_at,
+            color: network_project.color,
+            billable: network_project.billable,
+        }
+    }
+
+    fn network_task_to_task(network_task: NetworkTask, project: Project) -> Task {
+        Task {
+            id: network_task.id,
+            name: network_task.name,
+            project,
+            workspace_id: network_task.workspace_id,
+        }
+    }
+
+    async fn get_project_by_id(&self, project_id: i64) -> ResultWithDefaultError<Project> {
+        let network_project = self
+            .get_projects()
+            .await?
+            .into_iter()
+            .find(|project| project.id == project_id)
+            .ok_or_else(|| -> Box<dyn std::error::Error + Send> {
+                Box::new(ApiError::Deserialization)
+            })?;
+        Ok(Self::network_project_to_project(network_project))
     }
 
     pub fn from_credentials(
@@ -615,6 +687,83 @@ impl ApiClient for V9ApiClient {
             name: network_workspace.name,
             admin: network_workspace.admin,
         })
+    }
+
+    async fn get_preferences(&self) -> ResultWithDefaultError<Value> {
+        let url = format!("{}/me/preferences", self.base_url);
+        self.get::<Value>(url).await
+    }
+
+    async fn update_preferences(&self, preferences: Value) -> ResultWithDefaultError<Value> {
+        let url = format!("{}/me/preferences", self.base_url);
+        self.post::<Value, Value>(url, &preferences).await
+    }
+
+    async fn create_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        name: String,
+        active: Option<bool>,
+        estimated_seconds: Option<i64>,
+        user_id: Option<i64>,
+    ) -> ResultWithDefaultError<Task> {
+        let url = format!(
+            "{}/workspaces/{}/projects/{}/tasks",
+            self.base_url, workspace_id, project_id
+        );
+        let body = NetworkCreateTask {
+            name,
+            active,
+            estimated_seconds,
+            user_id,
+        };
+        let network_task = self
+            .post::<NetworkTask, NetworkCreateTask>(url, &body)
+            .await?;
+        let project = self.get_project_by_id(project_id).await?;
+        Ok(Self::network_task_to_task(network_task, project))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn update_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        task_id: i64,
+        name: Option<String>,
+        active: Option<bool>,
+        estimated_seconds: Option<i64>,
+        user_id: Option<i64>,
+    ) -> ResultWithDefaultError<Task> {
+        let url = format!(
+            "{}/workspaces/{}/projects/{}/tasks/{}",
+            self.base_url, workspace_id, project_id, task_id
+        );
+        let body = NetworkUpdateTask {
+            name,
+            active,
+            estimated_seconds,
+            user_id,
+        };
+        let network_task = self
+            .put::<NetworkTask, NetworkUpdateTask>(url, &body)
+            .await?;
+        let project = self.get_project_by_id(project_id).await?;
+        Ok(Self::network_task_to_task(network_task, project))
+    }
+
+    async fn delete_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        task_id: i64,
+    ) -> ResultWithDefaultError<()> {
+        let url = format!(
+            "{}/workspaces/{}/projects/{}/tasks/{}",
+            self.base_url, workspace_id, project_id, task_id
+        );
+        self.delete(url).await
     }
 
     async fn get_entities(&self) -> ResultWithDefaultError<Entities> {
