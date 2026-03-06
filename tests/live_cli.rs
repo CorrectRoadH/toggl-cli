@@ -197,6 +197,16 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     });
     cleanup.time_entry_id = Some(created_entry.id);
 
+    let Some(shown_entry_output) =
+        run_checked_or_skip(&["show", &created_entry.id.to_string(), "--json"])
+    else {
+        return;
+    };
+    let shown_entry: TimeEntryRecord =
+        serde_json::from_str(&shown_entry_output).expect("failed to parse show time entry JSON");
+    assert_eq!(shown_entry.id, created_entry.id);
+    assert_eq!(shown_entry.description, description);
+
     if try_run_toggl_checked(&[
         "edit",
         "time-entry",
@@ -295,4 +305,23 @@ fn live_cli_read_only_profile_commands_succeed() {
         preferences_json.is_object(),
         "expected `toggl preferences` output to be a JSON object"
     );
+}
+
+#[test]
+fn live_cli_running_commands_succeed() {
+    if !should_run_live_tests() {
+        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
+        return;
+    }
+
+    for args in [&["running"][..], &[][..], &["current"][..]] {
+        let Some(output) = run_checked_or_skip(args) else {
+            return;
+        };
+        assert!(
+            !output.trim().is_empty(),
+            "expected `toggl {}` to produce some output",
+            args.join(" ")
+        );
+    }
 }

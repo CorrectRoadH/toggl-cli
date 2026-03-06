@@ -12,11 +12,7 @@ impl ShowCommand {
         json: bool,
     ) -> ResultWithDefaultError<()> {
         match api_client.get_time_entry(id).await {
-            Err(error) => println!(
-                "{}\n{}",
-                format!("Couldn't fetch time entry with ID {id}").red(),
-                error
-            ),
+            Err(error) => return Err(error),
             Ok(entry) => {
                 let stdout = io::stdout();
                 let mut handle = BufWriter::new(stdout);
@@ -91,7 +87,7 @@ mod tests {
     use crate::error::ApiError;
     use crate::models::TimeEntry;
     use chrono::Utc;
-    use tokio_test::assert_ok;
+    use tokio_test::{assert_err, assert_ok};
 
     fn mock_time_entry() -> TimeEntry {
         TimeEntry {
@@ -135,14 +131,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn show_returns_ok_even_on_api_failure() {
+    async fn show_returns_error_on_api_failure() {
         let mut api_client = MockApiClient::new();
         api_client
             .expect_get_time_entry()
             .returning(|_| Err(Box::new(ApiError::Network)));
 
         let result = ShowCommand::execute(api_client, 999, false).await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 
     #[tokio::test]
