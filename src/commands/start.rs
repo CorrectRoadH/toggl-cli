@@ -86,6 +86,18 @@ fn interactively_create_time_entry(
     }
 }
 
+fn resolve_task_from_name(
+    entities: &Entities,
+    task_name: &str,
+    project_id: Option<i64>,
+) -> Option<models::Task> {
+    entities
+        .tasks
+        .values()
+        .find(|task| task.name == task_name && project_id.is_none_or(|id| task.project.id == id))
+        .cloned()
+}
+
 impl StartCommand {
     #[allow(clippy::too_many_arguments)]
     pub async fn execute(
@@ -93,6 +105,7 @@ impl StartCommand {
         picker: Box<dyn ItemPicker>,
         description: Option<String>,
         project_name: Option<String>,
+        task_name: Option<String>,
         tags: Option<Vec<String>>,
         billable: bool,
         interactive: bool,
@@ -150,6 +163,15 @@ impl StartCommand {
             })
             .or(default_time_entry.project.clone());
 
+        let task = task_name
+            .as_deref()
+            .and_then(|name| {
+                resolve_task_from_name(&entities, name, project.as_ref().map(|p| p.id))
+            })
+            .or(default_time_entry.task.clone());
+
+        let project = task.as_ref().map(|task| task.project.clone()).or(project);
+
         let tags = tags.unwrap_or(default_time_entry.tags.clone());
 
         let billable = billable
@@ -162,6 +184,7 @@ impl StartCommand {
             let initial_entry = TimeEntry {
                 description,
                 project,
+                task,
                 tags,
                 billable,
                 workspace_id,

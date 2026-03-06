@@ -12,48 +12,64 @@ mod utilities;
 use api::client::ApiClient;
 use api::client::V9ApiClient;
 use arguments::Command::Auth;
+use arguments::Command::BulkEditTimeEntries;
 use arguments::Command::Config;
 use arguments::Command::Continue;
 use arguments::Command::CreateClient;
 use arguments::Command::CreateProject;
 use arguments::Command::CreateTag;
+use arguments::Command::CreateTask;
+use arguments::Command::CreateWorkspace;
 use arguments::Command::Current;
 use arguments::Command::Delete;
 use arguments::Command::DeleteClient;
 use arguments::Command::DeleteProject;
 use arguments::Command::DeleteTag;
+use arguments::Command::DeleteTask;
 use arguments::Command::Edit;
 use arguments::Command::List;
 use arguments::Command::Logout;
 use arguments::Command::Me;
+use arguments::Command::Preferences;
 use arguments::Command::RenameClient;
 use arguments::Command::RenameProject;
 use arguments::Command::RenameTag;
+use arguments::Command::RenameWorkspace;
 use arguments::Command::Running;
 use arguments::Command::Show;
 use arguments::Command::Start;
 use arguments::Command::Stop;
+use arguments::Command::UpdatePreferences;
+use arguments::Command::UpdateTask;
 use arguments::CommandLineArguments;
 use arguments::ConfigSubCommand;
 use commands::auth::AuthenticationCommand;
+use commands::bulk_edit_time_entries::BulkEditTimeEntriesCommand;
 use commands::cont::ContinueCommand;
 use commands::create_client::CreateClientCommand;
 use commands::create_project::CreateProjectCommand;
 use commands::create_tag::CreateTagCommand;
+use commands::create_task::CreateTaskCommand;
+use commands::create_workspace::CreateWorkspaceCommand;
 use commands::delete::DeleteCommand;
 use commands::delete_client::DeleteClientCommand;
 use commands::delete_project::DeleteProjectCommand;
 use commands::delete_tag::DeleteTagCommand;
+use commands::delete_task::DeleteTaskCommand;
 use commands::edit::EditCommand;
 use commands::list::ListCommand;
 use commands::me::MeCommand;
+use commands::preferences::PreferencesCommand;
 use commands::rename_client::RenameClientCommand;
 use commands::rename_project::RenameProjectCommand;
 use commands::rename_tag::RenameTagCommand;
+use commands::rename_workspace::RenameWorkspaceCommand;
 use commands::running::RunningTimeEntryCommand;
 use commands::show::ShowCommand;
 use commands::start::StartCommand;
 use commands::stop::{StopCommand, StopCommandOrigin};
+use commands::update_preferences::UpdatePreferencesCommand;
+use commands::update_task::UpdateTaskCommand;
 use credentials::get_storage;
 use credentials::Credentials;
 use models::ResultWithDefaultError;
@@ -128,6 +144,7 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 billable,
                 description,
                 project,
+                task,
                 tags,
                 start,
                 end,
@@ -137,6 +154,7 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                     picker,
                     description,
                     project,
+                    task,
                     tags,
                     billable,
                     interactive,
@@ -149,7 +167,9 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
             Edit {
                 id,
                 description,
+                billable,
                 project,
+                task,
                 tags,
                 start,
                 end,
@@ -158,7 +178,9 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                     get_default_api_client()?,
                     id,
                     description,
+                    billable,
                     project,
+                    task,
                     tags,
                     start,
                     end,
@@ -167,6 +189,10 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
             }
 
             Delete { id } => DeleteCommand::execute(get_default_api_client()?, id).await?,
+
+            BulkEditTimeEntries { ids, json } => {
+                BulkEditTimeEntriesCommand::execute(get_default_api_client()?, ids, json).await?
+            }
 
             CreateProject { name, color } => {
                 CreateProjectCommand::execute(get_default_api_client()?, name, color).await?
@@ -204,9 +230,70 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 RenameClientCommand::execute(get_default_api_client()?, old_name, new_name).await?
             }
 
+            CreateWorkspace {
+                organization_id,
+                name,
+            } => {
+                CreateWorkspaceCommand::execute(get_default_api_client()?, organization_id, name)
+                    .await?
+            }
+
+            RenameWorkspace { old_name, new_name } => {
+                RenameWorkspaceCommand::execute(get_default_api_client()?, old_name, new_name)
+                    .await?
+            }
+
+            CreateTask {
+                project,
+                name,
+                active,
+                estimated_seconds,
+                user_id,
+            } => {
+                CreateTaskCommand::execute(
+                    get_default_api_client()?,
+                    project,
+                    name,
+                    active,
+                    estimated_seconds,
+                    user_id,
+                )
+                .await?
+            }
+
+            UpdateTask {
+                project,
+                name,
+                new_name,
+                active,
+                estimated_seconds,
+                user_id,
+            } => {
+                UpdateTaskCommand::execute(
+                    get_default_api_client()?,
+                    project,
+                    name,
+                    new_name,
+                    active,
+                    estimated_seconds,
+                    user_id,
+                )
+                .await?
+            }
+
+            DeleteTask { project, name } => {
+                DeleteTaskCommand::execute(get_default_api_client()?, project, name).await?
+            }
+
             Show { id, json } => ShowCommand::execute(get_default_api_client()?, id, json).await?,
 
             Me => MeCommand::execute(get_default_api_client()?).await?,
+
+            Preferences => PreferencesCommand::execute(get_default_api_client()?).await?,
+
+            UpdatePreferences { json } => {
+                UpdatePreferencesCommand::execute(get_default_api_client()?, json).await?
+            }
 
             Auth { api_token } => {
                 let credentials = Credentials { api_token };

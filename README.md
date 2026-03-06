@@ -76,6 +76,7 @@ SUBCOMMANDS:
     auth              Authenticate with the Toggl API
     config            Manage auto-tracking configuration
     continue
+    bulk-edit-time-entries  Bulk edit multiple time entries with a JSON Patch payload
     current
     list              List time entries (supports date filtering)
     logout            Clear stored credentials
@@ -85,11 +86,18 @@ SUBCOMMANDS:
     edit              Edit a time entry
     delete            Delete a time entry
     create-project    Create a new project
+    create-task       Create a task inside a project
     rename-project    Rename a project
     delete-project    Delete a project
     create-tag        Create a new tag
+    delete-task       Delete a task from a project by name
+    preferences       Show current user preferences
     rename-tag        Rename a tag
     delete-tag        Delete a tag
+    create-workspace  Create a new workspace in an organization
+    rename-workspace  Rename a workspace
+    update-preferences    Update current user preferences with a JSON payload
+    update-task       Update a task inside a project
     help              Prints this message or the help of the given subcommand(s)
 ```
 

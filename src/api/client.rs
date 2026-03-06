@@ -18,11 +18,14 @@ use models::{ResultWithDefaultError, User};
 use reqwest::Client;
 use reqwest::{header, RequestBuilder};
 use serde::{de, Serialize};
+use serde_json::Value;
 
 use super::models::NetworkClient;
 use super::models::NetworkCreateClient;
 use super::models::NetworkCreateProject;
 use super::models::NetworkCreateTag;
+use super::models::NetworkCreateTask;
+use super::models::NetworkCreateWorkspace;
 use super::models::NetworkProject;
 use super::models::NetworkRenameClient;
 use super::models::NetworkRenameProject;
@@ -30,6 +33,8 @@ use super::models::NetworkRenameTag;
 use super::models::NetworkTag;
 use super::models::NetworkTask;
 use super::models::NetworkTimeEntry;
+use super::models::NetworkUpdateTask;
+use super::models::NetworkUpdateWorkspace;
 use super::models::NetworkWorkspace;
 
 #[cfg_attr(test, automock)]
@@ -52,6 +57,21 @@ pub trait ApiClient {
         workspace_id: i64,
         time_entry_id: i64,
     ) -> ResultWithDefaultError<()>;
+
+    async fn get_current_time_entry(&self) -> ResultWithDefaultError<Option<TimeEntry>>;
+
+    async fn stop_time_entry(
+        &self,
+        workspace_id: i64,
+        time_entry_id: i64,
+    ) -> ResultWithDefaultError<TimeEntry>;
+
+    async fn bulk_update_time_entries(
+        &self,
+        workspace_id: i64,
+        time_entry_ids: Vec<i64>,
+        patch: Value,
+    ) -> ResultWithDefaultError<Value>;
 
     async fn create_project(
         &self,
@@ -104,6 +124,51 @@ pub trait ApiClient {
     async fn delete_client(&self, workspace_id: i64, client_id: i64) -> ResultWithDefaultError<()>;
 
     async fn get_time_entry(&self, time_entry_id: i64) -> ResultWithDefaultError<TimeEntry>;
+
+    async fn create_workspace(
+        &self,
+        organization_id: i64,
+        name: String,
+    ) -> ResultWithDefaultError<Workspace>;
+
+    async fn rename_workspace(
+        &self,
+        workspace_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<Workspace>;
+
+    async fn get_preferences(&self) -> ResultWithDefaultError<Value>;
+
+    async fn update_preferences(&self, preferences: Value) -> ResultWithDefaultError<Value>;
+
+    async fn create_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        name: String,
+        active: Option<bool>,
+        estimated_seconds: Option<i64>,
+        user_id: Option<i64>,
+    ) -> ResultWithDefaultError<Task>;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn update_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        task_id: i64,
+        name: Option<String>,
+        active: Option<bool>,
+        estimated_seconds: Option<i64>,
+        user_id: Option<i64>,
+    ) -> ResultWithDefaultError<Task>;
+
+    async fn delete_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        task_id: i64,
+    ) -> ResultWithDefaultError<()>;
 }
 
 pub struct V9ApiClient {
@@ -159,6 +224,151 @@ impl V9ApiClient {
         self.get::<Vec<NetworkTag>>(url).await
     }
 
+    fn network_project_to_project(network_project: NetworkProject) -> Project {
+        Project {
+            id: network_project.id,
+            name: network_project.name,
+            workspace_id: network_project.workspace_id,
+            client: None,
+            is_private: network_project.is_private,
+            active: network_project.active,
+            at: network_project.at,
+            created_at: network_project.created_at,
+            color: network_project.color,
+            billable: network_project.billable,
+        }
+    }
+
+    fn network_task_to_task(network_task: NetworkTask, project: Project) -> Task {
+        Task {
+            id: network_task.id,
+            name: network_task.name,
+            project,
+            workspace_id: network_task.workspace_id,
+        }
+    }
+
+    fn map_clients(network_clients: Vec<NetworkClient>) -> HashMap<i64, crate::models::Client> {
+        network_clients
+            .into_iter()
+            .map(|client| {
+                (
+                    client.id,
+                    crate::models::Client {
+                        id: client.id,
+                        name: client.name,
+                        workspace_id: client.wid,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    fn map_projects(
+        network_projects: Vec<NetworkProject>,
+        clients: &HashMap<i64, crate::models::Client>,
+    ) -> HashMap<i64, Project> {
+        network_projects
+            .into_iter()
+            .map(|project| {
+                (
+                    project.id,
+                    Project {
+                        id: project.id,
+                        name: project.name,
+                        workspace_id: project.workspace_id,
+                        client: clients.get(&project.client_id.unwrap_or(-1)).cloned(),
+                        is_private: project.is_private,
+                        active: project.active,
+                        at: project.at,
+                        created_at: project.created_at,
+                        color: project.color,
+                        billable: project.billable,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    fn map_tasks(
+        network_tasks: Vec<NetworkTask>,
+        projects: &HashMap<i64, Project>,
+    ) -> HashMap<i64, Task> {
+        network_tasks
+            .into_iter()
+            .filter_map(|task| {
+                projects.get(&task.project_id).map(|project| {
+                    (
+                        task.id,
+                        Task {
+                            id: task.id,
+                            name: task.name,
+                            project: project.clone(),
+                            workspace_id: task.workspace_id,
+                        },
+                    )
+                })
+            })
+            .collect()
+    }
+
+    fn map_network_time_entry(
+        network_entry: NetworkTimeEntry,
+        projects: &HashMap<i64, Project>,
+        tasks: &HashMap<i64, Task>,
+    ) -> TimeEntry {
+        TimeEntry {
+            id: network_entry.id,
+            description: network_entry.description,
+            start: network_entry.start,
+            stop: network_entry.stop,
+            duration: network_entry.duration,
+            billable: network_entry.billable,
+            workspace_id: network_entry.workspace_id,
+            tags: network_entry.tags.unwrap_or_default(),
+            project: projects
+                .get(&network_entry.project_id.unwrap_or(-1))
+                .cloned(),
+            task: tasks.get(&network_entry.task_id.unwrap_or(-1)).cloned(),
+            ..Default::default()
+        }
+    }
+
+    async fn get_project_by_id(&self, project_id: i64) -> ResultWithDefaultError<Project> {
+        let network_project = self
+            .get_projects()
+            .await?
+            .into_iter()
+            .find(|project| project.id == project_id)
+            .ok_or_else(|| -> Box<dyn std::error::Error + Send> {
+                Box::new(ApiError::Deserialization)
+            })?;
+        Ok(Self::network_project_to_project(network_project))
+    }
+
+    async fn get_current_network_time_entry(
+        &self,
+    ) -> ResultWithDefaultError<Option<NetworkTimeEntry>> {
+        let url = format!("{}/me/time_entries/current", self.base_url);
+        match self.http_client.get(url).send().await {
+            Err(_) => Err(Box::new(ApiError::Network)),
+            Ok(response) => {
+                if response.status() == reqwest::StatusCode::NOT_FOUND
+                    || response.status() == reqwest::StatusCode::NO_CONTENT
+                {
+                    return Ok(None);
+                }
+                if !response.status().is_success() {
+                    return Err(Box::new(ApiError::Deserialization));
+                }
+                match response.json::<NetworkTimeEntry>().await {
+                    Err(_) => Err(Box::new(ApiError::Deserialization)),
+                    Ok(entry) => Ok(Some(entry)),
+                }
+            }
+        }
+    }
+
     pub fn from_credentials(
         credentials: credentials::Credentials,
         proxy: Option<String>,
@@ -208,6 +418,21 @@ impl V9ApiClient {
         V9ApiClient::send::<T>(self.http_client.post(url).json(body)).await
     }
 
+    async fn patch<T: de::DeserializeOwned, Body: Serialize>(
+        &self,
+        url: String,
+        body: &Body,
+    ) -> ResultWithDefaultError<T> {
+        V9ApiClient::send::<T>(self.http_client.patch(url).json(body)).await
+    }
+
+    async fn patch_without_body<T: de::DeserializeOwned>(
+        &self,
+        url: String,
+    ) -> ResultWithDefaultError<T> {
+        V9ApiClient::send::<T>(self.http_client.patch(url)).await
+    }
+
     async fn send<T: de::DeserializeOwned>(request: RequestBuilder) -> ResultWithDefaultError<T> {
         match request.send().await {
             Err(_) => Err(Box::new(ApiError::Network)),
@@ -240,7 +465,10 @@ impl ApiClient for V9ApiClient {
     }
 
     async fn create_time_entry(&self, time_entry: TimeEntry) -> ResultWithDefaultError<i64> {
-        let url = format!("{}/time_entries", self.base_url);
+        let url = format!(
+            "{}/workspaces/{}/time_entries",
+            self.base_url, time_entry.workspace_id
+        );
         let network_time_entry = self
             .post::<NetworkTimeEntry, NetworkTimeEntry>(url, &time_entry.into())
             .await?;
@@ -248,7 +476,10 @@ impl ApiClient for V9ApiClient {
     }
 
     async fn update_time_entry(&self, time_entry: TimeEntry) -> ResultWithDefaultError<i64> {
-        let url = format!("{}/time_entries/{}", self.base_url, time_entry.id);
+        let url = format!(
+            "{}/workspaces/{}/time_entries/{}",
+            self.base_url, time_entry.workspace_id, time_entry.id
+        );
         let network_time_entry = self
             .put::<NetworkTimeEntry, NetworkTimeEntry>(url, &time_entry.into())
             .await?;
@@ -265,6 +496,73 @@ impl ApiClient for V9ApiClient {
             self.base_url, workspace_id, time_entry_id
         );
         self.delete(url).await
+    }
+
+    async fn get_current_time_entry(&self) -> ResultWithDefaultError<Option<TimeEntry>> {
+        let (network_entry, network_projects, network_tasks, network_clients) = tokio::join!(
+            self.get_current_network_time_entry(),
+            self.get_projects(),
+            self.get_tasks(),
+            self.get_clients(),
+        );
+
+        let network_entry = match network_entry? {
+            Some(entry) => entry,
+            None => return Ok(None),
+        };
+
+        let clients = Self::map_clients(network_clients.unwrap_or_default());
+        let projects = Self::map_projects(network_projects.unwrap_or_default(), &clients);
+        let tasks = Self::map_tasks(network_tasks.unwrap_or_default(), &projects);
+
+        Ok(Some(Self::map_network_time_entry(
+            network_entry,
+            &projects,
+            &tasks,
+        )))
+    }
+
+    async fn stop_time_entry(
+        &self,
+        workspace_id: i64,
+        time_entry_id: i64,
+    ) -> ResultWithDefaultError<TimeEntry> {
+        let url = format!(
+            "{}/workspaces/{}/time_entries/{}/stop",
+            self.base_url, workspace_id, time_entry_id
+        );
+        let network_entry = self.patch_without_body::<NetworkTimeEntry>(url).await?;
+        Ok(TimeEntry {
+            id: network_entry.id,
+            description: network_entry.description,
+            start: network_entry.start,
+            stop: network_entry.stop,
+            duration: network_entry.duration,
+            billable: network_entry.billable,
+            workspace_id: network_entry.workspace_id,
+            tags: network_entry.tags.unwrap_or_default(),
+            project: None,
+            task: None,
+            ..Default::default()
+        })
+    }
+
+    async fn bulk_update_time_entries(
+        &self,
+        workspace_id: i64,
+        time_entry_ids: Vec<i64>,
+        patch: Value,
+    ) -> ResultWithDefaultError<Value> {
+        let ids = time_entry_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let url = format!(
+            "{}/workspaces/{}/time_entries/{}",
+            self.base_url, workspace_id, ids
+        );
+        self.patch::<Value, Value>(url, &patch).await
     }
 
     async fn get_time_entries_filtered(
@@ -562,6 +860,122 @@ impl ApiClient for V9ApiClient {
             task: None,
             ..Default::default()
         })
+    }
+
+    async fn create_workspace(
+        &self,
+        organization_id: i64,
+        name: String,
+    ) -> ResultWithDefaultError<Workspace> {
+        let url = format!(
+            "{}/organizations/{}/workspaces",
+            self.base_url, organization_id
+        );
+        let body = NetworkCreateWorkspace { name };
+        let network_workspace = self
+            .post::<NetworkWorkspace, NetworkCreateWorkspace>(url, &body)
+            .await?;
+        Ok(Workspace {
+            id: network_workspace.id,
+            name: network_workspace.name,
+            admin: network_workspace.admin,
+        })
+    }
+
+    async fn rename_workspace(
+        &self,
+        workspace_id: i64,
+        new_name: String,
+    ) -> ResultWithDefaultError<Workspace> {
+        let url = format!("{}/workspaces/{}", self.base_url, workspace_id);
+        let body = NetworkUpdateWorkspace {
+            name: Some(new_name),
+        };
+        let network_workspace = self
+            .put::<NetworkWorkspace, NetworkUpdateWorkspace>(url, &body)
+            .await?;
+        Ok(Workspace {
+            id: network_workspace.id,
+            name: network_workspace.name,
+            admin: network_workspace.admin,
+        })
+    }
+
+    async fn get_preferences(&self) -> ResultWithDefaultError<Value> {
+        let url = format!("{}/me/preferences", self.base_url);
+        self.get::<Value>(url).await
+    }
+
+    async fn update_preferences(&self, preferences: Value) -> ResultWithDefaultError<Value> {
+        let url = format!("{}/me/preferences", self.base_url);
+        self.post::<Value, Value>(url, &preferences).await
+    }
+
+    async fn create_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        name: String,
+        active: Option<bool>,
+        estimated_seconds: Option<i64>,
+        user_id: Option<i64>,
+    ) -> ResultWithDefaultError<Task> {
+        let url = format!(
+            "{}/workspaces/{}/projects/{}/tasks",
+            self.base_url, workspace_id, project_id
+        );
+        let body = NetworkCreateTask {
+            name,
+            active,
+            estimated_seconds,
+            user_id,
+        };
+        let network_task = self
+            .post::<NetworkTask, NetworkCreateTask>(url, &body)
+            .await?;
+        let project = self.get_project_by_id(project_id).await?;
+        Ok(Self::network_task_to_task(network_task, project))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn update_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        task_id: i64,
+        name: Option<String>,
+        active: Option<bool>,
+        estimated_seconds: Option<i64>,
+        user_id: Option<i64>,
+    ) -> ResultWithDefaultError<Task> {
+        let url = format!(
+            "{}/workspaces/{}/projects/{}/tasks/{}",
+            self.base_url, workspace_id, project_id, task_id
+        );
+        let body = NetworkUpdateTask {
+            name,
+            active,
+            estimated_seconds,
+            user_id,
+        };
+        let network_task = self
+            .put::<NetworkTask, NetworkUpdateTask>(url, &body)
+            .await?;
+        let project = self.get_project_by_id(project_id).await?;
+        Ok(Self::network_task_to_task(network_task, project))
+    }
+
+    async fn delete_task(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        task_id: i64,
+    ) -> ResultWithDefaultError<()> {
+        let url = format!(
+            "{}/workspaces/{}/projects/{}/tasks/{}",
+            self.base_url, workspace_id, project_id, task_id
+        );
+        self.delete(url).await
     }
 
     async fn get_entities(&self) -> ResultWithDefaultError<Entities> {

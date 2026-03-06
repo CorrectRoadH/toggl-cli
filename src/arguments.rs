@@ -65,6 +65,11 @@ pub enum Command {
         )]
         project: Option<String>,
         #[structopt(
+            long,
+            help = "Exact name of the task you want the time entry to be associated with"
+        )]
+        task: Option<String>,
+        #[structopt(
             short,
             long,
             help = "Space separated list of tags to associate with the time entry, e.g. 'tag1 tag2 tag3'"
@@ -87,7 +92,7 @@ pub enum Command {
         #[structopt(short, long)]
         interactive: bool,
     },
-    #[structopt(about = "Edit a time entry's description, project, or tags")]
+    #[structopt(about = "Edit a time entry's description, billable state, project, task, or tags")]
     Edit {
         #[structopt(
             help = "ID of the time entry to edit (omit to edit the currently running entry)"
@@ -95,12 +100,16 @@ pub enum Command {
         id: Option<i64>,
         #[structopt(short, long, help = "New description")]
         description: Option<String>,
+        #[structopt(long, help = "New billable state (true/false)")]
+        billable: Option<bool>,
         #[structopt(
             short,
             long,
             help = "New project name (use empty string \"\" to remove project)"
         )]
         project: Option<String>,
+        #[structopt(long, help = "New task name (use empty string \"\" to remove task)")]
+        task: Option<String>,
         #[structopt(
             short,
             long,
@@ -122,6 +131,13 @@ pub enum Command {
     Delete {
         #[structopt(help = "ID of the time entry to delete")]
         id: i64,
+    },
+    #[structopt(about = "Bulk edit multiple time entries with a JSON Patch payload")]
+    BulkEditTimeEntries {
+        #[structopt(help = "IDs of the time entries to update")]
+        ids: Vec<i64>,
+        #[structopt(long, help = "JSON Patch array to send to the bulk update endpoint")]
+        json: String,
     },
     #[structopt(about = "Create a new project in your workspace")]
     CreateProject {
@@ -173,6 +189,13 @@ pub enum Command {
     },
     #[structopt(about = "Show current user profile information")]
     Me,
+    #[structopt(about = "Show current user preferences")]
+    Preferences,
+    #[structopt(about = "Update current user preferences with a JSON payload")]
+    UpdatePreferences {
+        #[structopt(help = "JSON object to send to /me/preferences")]
+        json: String,
+    },
     #[structopt(about = "Create a new client in your workspace")]
     CreateClient {
         #[structopt(help = "Name of the client to create")]
@@ -189,6 +212,59 @@ pub enum Command {
         old_name: String,
         #[structopt(help = "New name for the client")]
         new_name: String,
+    },
+    #[structopt(about = "Create a new workspace in an organization")]
+    CreateWorkspace {
+        #[structopt(help = "Organization ID that will own the workspace")]
+        organization_id: i64,
+        #[structopt(help = "Name of the workspace to create")]
+        name: String,
+    },
+    #[structopt(about = "Rename one of your workspaces")]
+    RenameWorkspace {
+        #[structopt(help = "Current name of the workspace")]
+        old_name: String,
+        #[structopt(help = "New name for the workspace")]
+        new_name: String,
+    },
+    #[structopt(about = "Create a task inside a project")]
+    CreateTask {
+        #[structopt(
+            short,
+            long,
+            help = "Exact name of the project that should contain the task"
+        )]
+        project: String,
+        #[structopt(help = "Name of the task to create")]
+        name: String,
+        #[structopt(long, help = "Task active state (true/false)")]
+        active: Option<bool>,
+        #[structopt(long, help = "Estimated duration for the task in seconds")]
+        estimated_seconds: Option<i64>,
+        #[structopt(long, help = "Assign the task to a specific user ID")]
+        user_id: Option<i64>,
+    },
+    #[structopt(about = "Update a task inside a project")]
+    UpdateTask {
+        #[structopt(short, long, help = "Exact name of the project that contains the task")]
+        project: String,
+        #[structopt(help = "Current name of the task")]
+        name: String,
+        #[structopt(long, help = "New name for the task")]
+        new_name: Option<String>,
+        #[structopt(long, help = "Task active state (true/false)")]
+        active: Option<bool>,
+        #[structopt(long, help = "Estimated duration for the task in seconds")]
+        estimated_seconds: Option<i64>,
+        #[structopt(long, help = "Assign the task to a specific user ID")]
+        user_id: Option<i64>,
+    },
+    #[structopt(about = "Delete a task from a project by name")]
+    DeleteTask {
+        #[structopt(short, long, help = "Exact name of the project that contains the task")]
+        project: String,
+        #[structopt(help = "Name of the task to delete")]
+        name: String,
     },
     #[structopt(about = "Manage auto-tracking configuration")]
     Config {
