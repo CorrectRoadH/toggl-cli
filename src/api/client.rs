@@ -351,7 +351,7 @@ impl V9ApiClient {
     ) -> ResultWithDefaultError<Option<NetworkTimeEntry>> {
         let url = format!("{}/me/time_entries/current", self.base_url);
         match self.http_client.get(url).send().await {
-            Err(_) => Err(Box::new(ApiError::Network)),
+            Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
                 if response.status() == reqwest::StatusCode::NOT_FOUND
                     || response.status() == reqwest::StatusCode::NO_CONTENT
@@ -435,7 +435,7 @@ impl V9ApiClient {
 
     async fn send<T: de::DeserializeOwned>(request: RequestBuilder) -> ResultWithDefaultError<T> {
         match request.send().await {
-            Err(_) => Err(Box::new(ApiError::Network)),
+            Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => match response.json::<T>().await {
                 Err(_) => Err(Box::new(ApiError::Deserialization)),
                 Ok(parsed_response) => Ok(parsed_response),
@@ -445,7 +445,7 @@ impl V9ApiClient {
 
     async fn delete(&self, url: String) -> ResultWithDefaultError<()> {
         match self.http_client.delete(url).send().await {
-            Err(_) => Err(Box::new(ApiError::Network)),
+            Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
                 if response.status().is_success() {
                     Ok(())

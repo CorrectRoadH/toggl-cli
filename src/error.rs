@@ -6,7 +6,9 @@ use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum ApiError {
+    #[allow(dead_code)]
     Network,
+    NetworkWithMessage(String),
     Deserialization,
 }
 
@@ -14,6 +16,12 @@ impl Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let summary = match self {
             ApiError::Network => format!("{}", constants::NETWORK_ERROR_MESSAGE.red()),
+            ApiError::NetworkWithMessage(message) => format!(
+                "{}\n{}: {}",
+                constants::NETWORK_ERROR_MESSAGE.red(),
+                "Details".yellow().bold(),
+                message
+            ),
             ApiError::Deserialization => format!(
                 "{}\n{} {}",
                 constants::DESERIALIZATION_ERROR_MESSAGE.red(),
