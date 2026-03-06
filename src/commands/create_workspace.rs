@@ -10,14 +10,18 @@ impl CreateWorkspaceCommand {
         organization_id: i64,
         name: String,
     ) -> ResultWithDefaultError<()> {
-        match api_client.create_workspace(organization_id, name).await {
-            Err(error) => println!("{}\n{}", "Couldn't create workspace".red(), error),
-            Ok(workspace) => println!(
-                "{}\n{}",
-                "Workspace created successfully".green(),
-                workspace
-            ),
-        }
+        let workspace = api_client
+            .create_workspace(organization_id, name)
+            .await
+            .map_err(|error| {
+                println!("{}\n{}", "Couldn't create workspace".red(), error);
+                error
+            })?;
+        println!(
+            "{}\n{}",
+            "Workspace created successfully".green(),
+            workspace
+        );
         Ok(())
     }
 }
@@ -28,7 +32,7 @@ mod tests {
     use crate::api::client::MockApiClient;
     use crate::error::ApiError;
     use crate::models::Workspace;
-    use tokio_test::assert_ok;
+    use tokio_test::{assert_err, assert_ok};
 
     #[tokio::test]
     async fn create_workspace_returns_ok_on_success() {
@@ -49,13 +53,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_workspace_returns_ok_on_api_failure() {
+    async fn create_workspace_returns_error_on_api_failure() {
         let mut api_client = MockApiClient::new();
         api_client
             .expect_create_workspace()
             .returning(|_, _| Err(Box::new(ApiError::Network)));
 
         let result = CreateWorkspaceCommand::execute(api_client, 42, "Platform".to_string()).await;
-        assert_ok!(result);
+        assert_err!(result);
     }
 }

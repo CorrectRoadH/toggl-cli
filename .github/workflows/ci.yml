@@ -17,6 +17,7 @@ jobs:
       id-token: write
     env:
       TOGGL_API_TOKEN: ${{ secrets.TOGGL_API_TOKEN }}
+      TOGGL_TEST_ORGANIZATION_ID: ${{ secrets.TOGGL_TEST_ORGANIZATION_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

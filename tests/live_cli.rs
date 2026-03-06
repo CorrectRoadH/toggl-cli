@@ -23,6 +23,7 @@ struct WorkspaceRecord {
 #[derive(Default)]
 struct CleanupState {
     time_entry_id: Option<i64>,
+    extra_time_entry_ids: Vec<i64>,
     project_name: Option<String>,
     tag_name: Option<String>,
     client_name: Option<String>,
@@ -35,6 +36,9 @@ struct CleanupState {
 impl Drop for CleanupState {
     fn drop(&mut self) {
         if let Some(id) = self.time_entry_id {
+            let _ = try_run_toggl(&["delete", &id.to_string()]);
+        }
+        for id in self.extra_time_entry_ids.iter().copied() {
             let _ = try_run_toggl(&["delete", &id.to_string()]);
         }
         if let (Some(project_name), Some(task_name)) =
@@ -70,6 +74,12 @@ fn unique_description(prefix: &str) -> String {
 
 fn should_run_live_tests() -> bool {
     matches!(std::env::var("TOGGL_API_TOKEN"), Ok(token) if !token.trim().is_empty())
+}
+
+fn test_organization_id() -> Option<i64> {
+    std::env::var("TOGGL_TEST_ORGANIZATION_ID")
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok())
 }
 
 fn run_toggl(args: &[&str]) -> String {
@@ -317,6 +327,17 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     });
     assert_eq!(edited_entry.id, created_entry.id);
 
+    let Some(filtered_list_output) =
+        run_checked_or_skip(&["list", "--since", TEST_DAY, "--until", TEST_DAY])
+    else {
+        return;
+    };
+    assert!(
+        filtered_list_output.contains(&renamed_description),
+        "expected filtered non-JSON list to include the edited description, got:\n{}",
+        filtered_list_output
+    );
+
     if try_run_toggl_checked(&["delete", &created_entry.id.to_string()]).is_err() {
         return;
     }
@@ -489,6 +510,88 @@ fn live_cli_start_and_stop_running_entry_succeeds() {
         !running_after_stop_output.contains(&description),
         "expected running entry to be stopped, got:\n{}",
         running_after_stop_output
+    );
+}
+
+#[test]
+fn live_cli_continue_succeeds() {
+    if !should_run_live_tests() {
+        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
+        return;
+    }
+
+    let description = unique_description("continue");
+    let mut cleanup = CleanupState::default();
+    let end = chrono::Utc::now() - chrono::Duration::minutes(5);
+    let start = end - chrono::Duration::minutes(5);
+    let start_string = start.to_rfc3339();
+    let end_string = end.to_rfc3339();
+
+    if run_checked_or_skip(&[
+        "start",
+        &description,
+        "--start",
+        &start_string,
+        "--end",
+        &end_string,
+    ])
+    .is_none()
+    {
+        return;
+    }
+
+    let today = current_utc_day();
+    let stopped_entry =
+        wait_for(
+            "stopped source entry missing from current-day list",
+            || match run_checked_or_skip(&["list", "--json", "--since", &today, "--until", &today])
+            {
+                Some(output) => serde_json::from_str::<Vec<TimeEntryRecord>>(&output)
+                    .expect("failed to parse current-day time entry list JSON")
+                    .into_iter()
+                    .find(|entry| entry.description == description),
+                None => None,
+            },
+        );
+    cleanup.extra_time_entry_ids.push(stopped_entry.id);
+
+    let Some(continue_output) = run_checked_or_skip(&["continue"]) else {
+        return;
+    };
+    assert!(
+        continue_output.contains("Time entry continued successfully"),
+        "expected continue command to report success, got:\n{}",
+        continue_output
+    );
+
+    let Some(running_output) = run_checked_or_skip(&["running"]) else {
+        return;
+    };
+    assert!(
+        running_output.contains(&description),
+        "expected continued entry to be running, got:\n{}",
+        running_output
+    );
+
+    let running_entry = wait_for(
+        "continued running entry missing from current-day list",
+        || match run_checked_or_skip(&["list", "--json", "--since", &today, "--until", &today]) {
+            Some(output) => serde_json::from_str::<Vec<TimeEntryRecord>>(&output)
+                .expect("failed to parse current-day time entry list JSON")
+                .into_iter()
+                .find(|entry| entry.description == description && entry.id != stopped_entry.id),
+            None => None,
+        },
+    );
+    cleanup.time_entry_id = Some(running_entry.id);
+
+    let Some(stop_output) = run_checked_or_skip(&["stop"]) else {
+        return;
+    };
+    assert!(
+        stop_output.contains("Time entry stopped successfully"),
+        "expected stop after continue to report success, got:\n{}",
+        stop_output
     );
 }
 
@@ -759,4 +862,61 @@ fn live_cli_workspace_rename_round_trip_succeeds() {
         workspace.id == default_workspace_id
             && workspace.name == cleanup.workspace_original_name.as_deref().unwrap()
     }));
+}
+
+#[test]
+fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
+    if !should_run_live_tests() {
+        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
+        return;
+    }
+
+    let Some(organization_id) = test_organization_id() else {
+        eprintln!(
+            "Skipping live workspace creation test because TOGGL_TEST_ORGANIZATION_ID is not set."
+        );
+        return;
+    };
+
+    let workspace_name = unique_description("workspace");
+
+    let Some(workspaces_before) = run_checked_or_skip(&["list", "workspace", "--json"]) else {
+        return;
+    };
+    let workspaces_before = parse_workspaces(&workspaces_before);
+    assert!(workspaces_before
+        .iter()
+        .all(|workspace| workspace.name != workspace_name));
+
+    let Some(create_output) = run_checked_or_skip(&[
+        "create",
+        "workspace",
+        &organization_id.to_string(),
+        &workspace_name,
+    ]) else {
+        return;
+    };
+    assert!(
+        create_output.contains("Workspace created successfully"),
+        "expected workspace creation command to report success, got:\n{}",
+        create_output
+    );
+
+    let workspaces_after_create =
+        wait_for(
+            "created workspace missing from workspace list",
+            || match run_checked_or_skip(&["list", "workspace", "--json"]) {
+                Some(output) => {
+                    let workspaces = parse_workspaces(&output);
+                    workspaces
+                        .iter()
+                        .any(|workspace| workspace.name == workspace_name)
+                        .then_some(workspaces)
+                }
+                None => None,
+            },
+        );
+    assert!(workspaces_after_create
+        .iter()
+        .any(|workspace| workspace.name == workspace_name));
 }
