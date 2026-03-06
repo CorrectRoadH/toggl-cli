@@ -138,6 +138,11 @@ fn list_entries_on_test_day() -> Vec<TimeEntryRecord> {
     serde_json::from_str(&output).expect("failed to parse time entry list JSON")
 }
 
+fn list_entries_on_day(day: &str) -> Result<Vec<TimeEntryRecord>, SkipReason> {
+    let output = try_run_toggl_checked(&["list", "--json", "--since", day, "--until", day])?;
+    Ok(serde_json::from_str(&output).expect("failed to parse time entry list JSON"))
+}
+
 fn run_json_array_command(args: &[&str]) -> Option<Vec<Value>> {
     match try_run_toggl_checked(args) {
         Ok(output) => {
@@ -241,6 +246,12 @@ fn is_rate_limited(stderr: &str) -> bool {
         || stderr.contains("rate limit")
 }
 
+fn is_workspace_creation_disabled(stderr: &str) -> bool {
+    stderr
+        .to_ascii_lowercase()
+        .contains("multiple workspaces are not enabled in this organization")
+}
+
 fn wait_for<T, F>(message: &str, mut fetch: F) -> T
 where
     F: FnMut() -> Option<T>,
@@ -248,6 +259,31 @@ where
     for _ in 0..10 {
         if let Some(value) = fetch() {
             return value;
+        }
+        sleep(std::time::Duration::from_millis(500));
+    }
+
+    panic!("{message}");
+}
+
+fn wait_for_entry_on_day<F>(message: &str, day: &str, mut predicate: F) -> Option<TimeEntryRecord>
+where
+    F: FnMut(&TimeEntryRecord) -> bool,
+{
+    for _ in 0..10 {
+        match list_entries_on_day(day) {
+            Ok(entries) => {
+                if let Some(entry) = entries.into_iter().find(|entry| predicate(entry)) {
+                    return Some(entry);
+                }
+            }
+            Err(SkipReason::RateLimited(message)) => {
+                eprintln!(
+                    "Skipping live CLI test because Toggl API rate limit was hit while polling `toggl list --json --since {} --until {}`.\nstderr:\n{}",
+                    day, day, message
+                );
+                return None;
+            }
         }
         sleep(std::time::Duration::from_millis(500));
     }
@@ -303,11 +339,13 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
         return;
     }
 
-    let created_entry = wait_for("created time entry missing from list", || {
-        list_entries_on_test_day()
-            .into_iter()
-            .find(|entry| entry.description == description)
-    });
+    let Some(created_entry) =
+        wait_for_entry_on_day("created time entry missing from list", TEST_DAY, |entry| {
+            entry.description == description
+        })
+    else {
+        return;
+    };
     cleanup.time_entry_id = Some(created_entry.id);
 
     let Some(shown_entry_output) =
@@ -336,11 +374,13 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
         return;
     }
 
-    let bulk_edited_entry = wait_for("bulk-edited time entry missing from list", || {
-        list_entries_on_test_day().into_iter().find(|entry| {
-            entry.id == created_entry.id && entry.description == bulk_edited_description
-        })
-    });
+    let Some(bulk_edited_entry) = wait_for_entry_on_day(
+        "bulk-edited time entry missing from list",
+        TEST_DAY,
+        |entry| entry.id == created_entry.id && entry.description == bulk_edited_description,
+    ) else {
+        return;
+    };
     assert_eq!(bulk_edited_entry.id, created_entry.id);
 
     if try_run_toggl_checked(&[
@@ -355,11 +395,13 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
         return;
     }
 
-    let edited_entry = wait_for("edited time entry missing from list", || {
-        list_entries_on_test_day()
-            .into_iter()
-            .find(|entry| entry.id == created_entry.id && entry.description == renamed_description)
-    });
+    let Some(edited_entry) =
+        wait_for_entry_on_day("edited time entry missing from list", TEST_DAY, |entry| {
+            entry.id == created_entry.id && entry.description == renamed_description
+        })
+    else {
+        return;
+    };
     assert_eq!(edited_entry.id, created_entry.id);
 
     let Some(filtered_list_output) =
@@ -540,18 +582,13 @@ fn live_cli_start_and_stop_running_entry_succeeds() {
     }
 
     let today = current_utc_day();
-    let created_entry =
-        wait_for(
-            "running time entry missing from current-day list",
-            || match run_checked_or_skip(&["list", "--json", "--since", &today, "--until", &today])
-            {
-                Some(output) => serde_json::from_str::<Vec<TimeEntryRecord>>(&output)
-                    .expect("failed to parse current-day time entry list JSON")
-                    .into_iter()
-                    .find(|entry| entry.description == description),
-                None => None,
-            },
-        );
+    let Some(created_entry) = wait_for_entry_on_day(
+        "running time entry missing from current-day list",
+        &today,
+        |entry| entry.description == description,
+    ) else {
+        return;
+    };
     cleanup.time_entry_id = Some(created_entry.id);
 
     let Some(running_output) = run_checked_or_skip(&["running"]) else {
@@ -612,18 +649,13 @@ fn live_cli_continue_succeeds() {
     }
 
     let today = current_utc_day();
-    let stopped_entry =
-        wait_for(
-            "stopped source entry missing from current-day list",
-            || match run_checked_or_skip(&["list", "--json", "--since", &today, "--until", &today])
-            {
-                Some(output) => serde_json::from_str::<Vec<TimeEntryRecord>>(&output)
-                    .expect("failed to parse current-day time entry list JSON")
-                    .into_iter()
-                    .find(|entry| entry.description == description),
-                None => None,
-            },
-        );
+    let Some(stopped_entry) = wait_for_entry_on_day(
+        "stopped source entry missing from current-day list",
+        &today,
+        |entry| entry.description == description,
+    ) else {
+        return;
+    };
     cleanup.extra_time_entry_ids.push(stopped_entry.id);
 
     let Some(continue_output) = run_checked_or_skip(&["continue"]) else {
@@ -644,16 +676,13 @@ fn live_cli_continue_succeeds() {
         running_output
     );
 
-    let running_entry = wait_for(
+    let Some(running_entry) = wait_for_entry_on_day(
         "continued running entry missing from current-day list",
-        || match run_checked_or_skip(&["list", "--json", "--since", &today, "--until", &today]) {
-            Some(output) => serde_json::from_str::<Vec<TimeEntryRecord>>(&output)
-                .expect("failed to parse current-day time entry list JSON")
-                .into_iter()
-                .find(|entry| entry.description == description && entry.id != stopped_entry.id),
-            None => None,
-        },
-    );
+        &today,
+        |entry| entry.description == description && entry.id != stopped_entry.id,
+    ) else {
+        return;
+    };
     cleanup.time_entry_id = Some(running_entry.id);
 
     let Some(stop_output) = run_checked_or_skip(&["stop"]) else {
@@ -978,13 +1007,40 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
         .iter()
         .all(|workspace| workspace.name != workspace_name));
 
-    let Some(create_output) = run_checked_or_skip(&[
+    let create_output = match try_run_toggl(&[
         "create",
         "workspace",
         &organization_id.to_string(),
         &workspace_name,
-    ]) else {
-        return;
+    ]) {
+        Ok(output) if output.status.success() => {
+            String::from_utf8(output.stdout).expect("stdout was not valid UTF-8")
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if is_rate_limited(&stderr) {
+                eprintln!(
+                    "Skipping live CLI test because Toggl API rate limit was hit while running `toggl create workspace {}`.\nstderr:\n{}",
+                    organization_id, stderr
+                );
+                return;
+            }
+            if is_workspace_creation_disabled(&stderr) {
+                eprintln!(
+                    "Skipping live workspace creation test because the configured organization does not allow multiple workspaces.\nstderr:\n{}",
+                    stderr
+                );
+                return;
+            }
+            panic!(
+                "command `toggl create workspace {} {}` failed\nstdout:\n{}\nstderr:\n{}",
+                organization_id,
+                workspace_name,
+                String::from_utf8_lossy(&output.stdout),
+                stderr
+            );
+        }
+        Err(error) => panic!("failed to execute toggl: {}", error),
     };
     assert!(
         create_output.contains("Workspace created successfully"),

@@ -200,6 +200,8 @@ pub struct V9ApiClient {
 #[derive(Serialize, Deserialize)]
 struct CachedResponse {
     fetched_at_epoch_seconds: i64,
+    #[serde(default)]
+    url: Option<String>,
     body: String,
 }
 
@@ -391,7 +393,11 @@ impl V9ApiClient {
         &self,
     ) -> ResultWithDefaultError<Option<NetworkTimeEntry>> {
         let url = format!("{}/me/time_entries/current", self.base_url);
-        match self.http_client.get(url).send().await {
+        if let Some(cached_body) = self.read_cached_body(&url) {
+            return deserialize_optional_response_body(&cached_body);
+        }
+
+        match self.http_client.get(&url).send().await {
             Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
                 let status = response.status();
@@ -411,15 +417,9 @@ impl V9ApiClient {
                         summarize_response_body(&body)
                     ))));
                 }
-                serde_json::from_str::<NetworkTimeEntry>(&body)
-                    .map(Some)
-                    .map_err(|error| {
-                        Box::new(ApiError::DeserializationWithMessage(format!(
-                            "{}; response body: {}",
-                            error,
-                            summarize_response_body(&body)
-                        ))) as Box<dyn std::error::Error + Send>
-                    })
+
+                self.write_cached_body(&url, &body);
+                deserialize_optional_response_body(&body)
             }
         }
     }
@@ -519,6 +519,7 @@ impl V9ApiClient {
 
         let cached = CachedResponse {
             fetched_at_epoch_seconds: chrono::Utc::now().timestamp(),
+            url: Some(url.to_string()),
             body: body.to_string(),
         };
         let Ok(serialized) = serde_json::to_string(&cached) else {
@@ -547,9 +548,40 @@ impl V9ApiClient {
         }
     }
 
+    fn invalidate_cached_urls_matching<F>(&self, mut predicate: F)
+    where
+        F: FnMut(&str) -> bool,
+    {
+        let Some(dir) = cache_root_dir().map(|root| root.join(&self.cache_namespace)) else {
+            return;
+        };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(contents) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let Ok(cached) = serde_json::from_str::<CachedResponse>(&contents) else {
+                continue;
+            };
+            let Some(cached_url) = cached.url.as_deref() else {
+                continue;
+            };
+            if predicate(cached_url) {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+
     fn invalidate_caches_for_mutation(&self, mutation_url: &str) {
-        let urls = cache_urls_affected_by_mutation(&self.base_url, mutation_url);
-        self.invalidate_cached_urls(&urls);
+        let invalidation = cache_invalidation_for_mutation(&self.base_url, mutation_url);
+        self.invalidate_cached_urls(&invalidation.exact_urls);
+        if invalidation.invalidate_time_entries {
+            self.invalidate_cached_urls_matching(|url| url.contains("/me/time_entries"));
+        }
     }
 
     async fn put<T: de::DeserializeOwned, Body: Serialize>(
@@ -662,6 +694,25 @@ fn deserialize_response_body<T: de::DeserializeOwned>(body: &str) -> ResultWithD
     })
 }
 
+fn deserialize_optional_response_body<T: de::DeserializeOwned>(
+    body: &str,
+) -> ResultWithDefaultError<Option<T>> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() || trimmed == "null" {
+        return Ok(None);
+    }
+
+    serde_json::from_str::<T>(trimmed)
+        .map(Some)
+        .map_err(|error| {
+            Box::new(ApiError::DeserializationWithMessage(format!(
+                "{}; response body: {}",
+                error,
+                summarize_response_body(trimmed)
+            ))) as Box<dyn std::error::Error + Send>
+        })
+}
+
 fn cache_root_dir() -> Option<PathBuf> {
     directories::ProjectDirs::from("studio.watercooler", "labs", "toggl-cli")
         .map(|dirs| dirs.cache_dir().join("http"))
@@ -689,7 +740,7 @@ fn cache_ttl_seconds() -> i64 {
         .ok()
         .and_then(|value| value.parse::<i64>().ok())
         .filter(|value| *value >= 0)
-        .unwrap_or(15)
+        .unwrap_or(30)
 }
 
 fn is_cacheable_get_url(url: &str) -> bool {
@@ -700,6 +751,7 @@ fn is_cacheable_get_url(url: &str) -> bool {
         || url.ends_with("/me/workspaces")
         || url.ends_with("/me/organizations")
         || url.ends_with("/me/preferences")
+        || url.contains("/me/time_entries")
     {
         return true;
     }
@@ -714,13 +766,24 @@ fn is_cacheable_get_url(url: &str) -> bool {
     url.contains("/workspaces/") && url.ends_with("/tags")
 }
 
-fn cache_urls_affected_by_mutation(base_url: &str, mutation_url: &str) -> Vec<String> {
+struct CacheInvalidation {
+    exact_urls: Vec<String>,
+    invalidate_time_entries: bool,
+}
+
+fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheInvalidation {
     if mutation_url == format!("{base_url}/me/preferences") {
-        return vec![format!("{base_url}/me/preferences")];
+        return CacheInvalidation {
+            exact_urls: vec![format!("{base_url}/me/preferences")],
+            invalidate_time_entries: false,
+        };
     }
 
     if mutation_url.contains("/time_entries") {
-        return Vec::new();
+        return CacheInvalidation {
+            exact_urls: Vec::new(),
+            invalidate_time_entries: true,
+        };
     }
 
     if mutation_url.contains("/organizations/") && mutation_url.ends_with("/workspaces") {
@@ -729,33 +792,48 @@ fn cache_urls_affected_by_mutation(base_url: &str, mutation_url: &str) -> Vec<St
             .rsplit('/')
             .next()
             .unwrap_or_default();
-        return vec![
-            format!("{base_url}/me/workspaces"),
-            format!("{base_url}/me/organizations"),
-            format!("{base_url}/organizations/{organization_id}"),
-        ];
+        return CacheInvalidation {
+            exact_urls: vec![
+                format!("{base_url}/me/workspaces"),
+                format!("{base_url}/me/organizations"),
+                format!("{base_url}/organizations/{organization_id}"),
+            ],
+            invalidate_time_entries: false,
+        };
     }
 
     if mutation_url.contains("/workspaces/") && mutation_url.contains("/projects/") {
-        return vec![
-            format!("{base_url}/me/projects"),
-            format!("{base_url}/me/tasks"),
-        ];
+        return CacheInvalidation {
+            exact_urls: vec![
+                format!("{base_url}/me/projects"),
+                format!("{base_url}/me/tasks"),
+            ],
+            invalidate_time_entries: false,
+        };
     }
 
     if mutation_url.ends_with("/projects") {
-        return vec![
-            format!("{base_url}/me/projects"),
-            format!("{base_url}/me/tasks"),
-        ];
+        return CacheInvalidation {
+            exact_urls: vec![
+                format!("{base_url}/me/projects"),
+                format!("{base_url}/me/tasks"),
+            ],
+            invalidate_time_entries: false,
+        };
     }
 
     if mutation_url.contains("/workspaces/") && mutation_url.contains("/tasks") {
-        return vec![format!("{base_url}/me/tasks")];
+        return CacheInvalidation {
+            exact_urls: vec![format!("{base_url}/me/tasks")],
+            invalidate_time_entries: false,
+        };
     }
 
     if mutation_url.contains("/workspaces/") && mutation_url.contains("/clients") {
-        return vec![format!("{base_url}/me/clients")];
+        return CacheInvalidation {
+            exact_urls: vec![format!("{base_url}/me/clients")],
+            invalidate_time_entries: false,
+        };
     }
 
     if mutation_url.contains("/workspaces/") && mutation_url.contains("/tags") {
@@ -764,15 +842,24 @@ fn cache_urls_affected_by_mutation(base_url: &str, mutation_url: &str) -> Vec<St
             .nth(1)
             .and_then(|suffix| suffix.split('/').next())
         {
-            return vec![format!("{base_url}/workspaces/{workspace_id}/tags")];
+            return CacheInvalidation {
+                exact_urls: vec![format!("{base_url}/workspaces/{workspace_id}/tags")],
+                invalidate_time_entries: false,
+            };
         }
     }
 
     if mutation_url.contains("/workspaces/") && !mutation_url.contains("/time_entries") {
-        return vec![format!("{base_url}/me/workspaces")];
+        return CacheInvalidation {
+            exact_urls: vec![format!("{base_url}/me/workspaces")],
+            invalidate_time_entries: false,
+        };
     }
 
-    Vec::new()
+    CacheInvalidation {
+        exact_urls: Vec::new(),
+        invalidate_time_entries: false,
+    }
 }
 
 fn summarize_response_body(body: &str) -> String {
