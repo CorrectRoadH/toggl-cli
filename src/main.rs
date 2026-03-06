@@ -11,36 +11,7 @@ mod utilities;
 
 use api::client::ApiClient;
 use api::client::V9ApiClient;
-use arguments::Command::Auth;
-use arguments::Command::BulkEditTimeEntries;
-use arguments::Command::Config;
-use arguments::Command::Continue;
-use arguments::Command::CreateClient;
-use arguments::Command::CreateProject;
-use arguments::Command::CreateTag;
-use arguments::Command::CreateTask;
-use arguments::Command::CreateWorkspace;
-use arguments::Command::Current;
-use arguments::Command::Delete;
-use arguments::Command::DeleteClient;
-use arguments::Command::DeleteProject;
-use arguments::Command::DeleteTag;
-use arguments::Command::DeleteTask;
-use arguments::Command::Edit;
-use arguments::Command::List;
-use arguments::Command::Logout;
-use arguments::Command::Me;
-use arguments::Command::Preferences;
-use arguments::Command::RenameClient;
-use arguments::Command::RenameProject;
-use arguments::Command::RenameTag;
-use arguments::Command::RenameWorkspace;
-use arguments::Command::Running;
-use arguments::Command::Show;
-use arguments::Command::Start;
-use arguments::Command::Stop;
-use arguments::Command::UpdatePreferences;
-use arguments::Command::UpdateTask;
+use arguments::{Command, CreateEntity, DeleteEntity, EditEntity, RenameEntity};
 use arguments::CommandLineArguments;
 use arguments::ConfigSubCommand;
 use commands::auth::AuthenticationCommand;
@@ -107,17 +78,17 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
     match command {
         None => RunningTimeEntryCommand::execute(get_default_api_client()?).await?,
         Some(subcommand) => match subcommand {
-            Stop => {
+            Command::Stop => {
                 StopCommand::execute(&get_default_api_client()?, StopCommandOrigin::CommandLine)
                     .await?;
             }
 
-            Continue { interactive } => {
+            Command::Continue { interactive } => {
                 let picker = if interactive { Some(picker) } else { None };
                 ContinueCommand::execute(get_default_api_client()?, picker).await?
             }
 
-            List {
+            Command::List {
                 number,
                 json,
                 since,
@@ -135,11 +106,11 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 .await?
             }
 
-            Current | Running => {
+            Command::Current | Command::Running => {
                 RunningTimeEntryCommand::execute(get_default_api_client()?).await?
             }
 
-            Start {
+            Command::Start {
                 interactive,
                 billable,
                 description,
@@ -164,18 +135,8 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 .await?
             }
 
-            Edit {
-                id,
-                description,
-                billable,
-                project,
-                task,
-                tags,
-                start,
-                end,
-            } => {
-                EditCommand::execute(
-                    get_default_api_client()?,
+            Command::Edit { entity } => match entity {
+                EditEntity::TimeEntry {
                     id,
                     description,
                     billable,
@@ -184,130 +145,155 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                     tags,
                     start,
                     end,
-                )
-                .await?
-            }
-
-            Delete { id } => DeleteCommand::execute(get_default_api_client()?, id).await?,
-
-            BulkEditTimeEntries { ids, json } => {
-                BulkEditTimeEntriesCommand::execute(get_default_api_client()?, ids, json).await?
-            }
-
-            CreateProject { name, color } => {
-                CreateProjectCommand::execute(get_default_api_client()?, name, color).await?
-            }
-
-            DeleteProject { name } => {
-                DeleteProjectCommand::execute(get_default_api_client()?, name).await?
-            }
-
-            RenameProject { old_name, new_name } => {
-                RenameProjectCommand::execute(get_default_api_client()?, old_name, new_name).await?
-            }
-
-            CreateTag { name } => {
-                CreateTagCommand::execute(get_default_api_client()?, name).await?
-            }
-
-            DeleteTag { name } => {
-                DeleteTagCommand::execute(get_default_api_client()?, name).await?
-            }
-
-            RenameTag { old_name, new_name } => {
-                RenameTagCommand::execute(get_default_api_client()?, old_name, new_name).await?
-            }
-
-            CreateClient { name } => {
-                CreateClientCommand::execute(get_default_api_client()?, name).await?
-            }
-
-            DeleteClient { name } => {
-                DeleteClientCommand::execute(get_default_api_client()?, name).await?
-            }
-
-            RenameClient { old_name, new_name } => {
-                RenameClientCommand::execute(get_default_api_client()?, old_name, new_name).await?
-            }
-
-            CreateWorkspace {
-                organization_id,
-                name,
-            } => {
-                CreateWorkspaceCommand::execute(get_default_api_client()?, organization_id, name)
+                } => {
+                    EditCommand::execute(
+                        get_default_api_client()?,
+                        id,
+                        description,
+                        billable,
+                        project,
+                        task,
+                        tags,
+                        start,
+                        end,
+                    )
                     .await?
-            }
-
-            RenameWorkspace { old_name, new_name } => {
-                RenameWorkspaceCommand::execute(get_default_api_client()?, old_name, new_name)
-                    .await?
-            }
-
-            CreateTask {
-                project,
-                name,
-                active,
-                estimated_seconds,
-                user_id,
-            } => {
-                CreateTaskCommand::execute(
-                    get_default_api_client()?,
-                    project,
-                    name,
-                    active,
-                    estimated_seconds,
-                    user_id,
-                )
-                .await?
-            }
-
-            UpdateTask {
-                project,
-                name,
-                new_name,
-                active,
-                estimated_seconds,
-                user_id,
-            } => {
-                UpdateTaskCommand::execute(
-                    get_default_api_client()?,
+                }
+                EditEntity::Task {
                     project,
                     name,
                     new_name,
                     active,
                     estimated_seconds,
                     user_id,
-                )
-                .await?
+                } => {
+                    UpdateTaskCommand::execute(
+                        get_default_api_client()?,
+                        project,
+                        name,
+                        new_name,
+                        active,
+                        estimated_seconds,
+                        user_id,
+                    )
+                    .await?
+                }
+                EditEntity::Preferences { json } => {
+                    UpdatePreferencesCommand::execute(get_default_api_client()?, json).await?
+                }
+            },
+
+            Command::Delete { entity, id } => match entity {
+                Some(delete_entity) => match delete_entity {
+                    DeleteEntity::Project { name } => {
+                        DeleteProjectCommand::execute(get_default_api_client()?, name).await?
+                    }
+                    DeleteEntity::Tag { name } => {
+                        DeleteTagCommand::execute(get_default_api_client()?, name).await?
+                    }
+                    DeleteEntity::Client { name } => {
+                        DeleteClientCommand::execute(get_default_api_client()?, name).await?
+                    }
+                    DeleteEntity::Task { project, name } => {
+                        DeleteTaskCommand::execute(get_default_api_client()?, project, name).await?
+                    }
+                },
+                None => match id {
+                    Some(id) => {
+                        DeleteCommand::execute(get_default_api_client()?, id).await?
+                    }
+                    None => {
+                        eprintln!("Provide a time entry ID or a subcommand (project, tag, client, task).");
+                        std::process::exit(1);
+                    }
+                },
+            },
+
+            Command::BulkEditTimeEntries { ids, json } => {
+                BulkEditTimeEntriesCommand::execute(get_default_api_client()?, ids, json).await?
             }
 
-            DeleteTask { project, name } => {
-                DeleteTaskCommand::execute(get_default_api_client()?, project, name).await?
+            Command::Create { entity } => match entity {
+                CreateEntity::Project { name, color } => {
+                    CreateProjectCommand::execute(get_default_api_client()?, name, color).await?
+                }
+                CreateEntity::Tag { name } => {
+                    CreateTagCommand::execute(get_default_api_client()?, name).await?
+                }
+                CreateEntity::Client { name } => {
+                    CreateClientCommand::execute(get_default_api_client()?, name).await?
+                }
+                CreateEntity::Workspace {
+                    organization_id,
+                    name,
+                } => {
+                    CreateWorkspaceCommand::execute(
+                        get_default_api_client()?,
+                        organization_id,
+                        name,
+                    )
+                    .await?
+                }
+                CreateEntity::Task {
+                    project,
+                    name,
+                    active,
+                    estimated_seconds,
+                    user_id,
+                } => {
+                    CreateTaskCommand::execute(
+                        get_default_api_client()?,
+                        project,
+                        name,
+                        active,
+                        estimated_seconds,
+                        user_id,
+                    )
+                    .await?
+                }
+            },
+
+            Command::Rename { entity } => match entity {
+                RenameEntity::Project { old_name, new_name } => {
+                    RenameProjectCommand::execute(get_default_api_client()?, old_name, new_name)
+                        .await?
+                }
+                RenameEntity::Tag { old_name, new_name } => {
+                    RenameTagCommand::execute(get_default_api_client()?, old_name, new_name).await?
+                }
+                RenameEntity::Client { old_name, new_name } => {
+                    RenameClientCommand::execute(get_default_api_client()?, old_name, new_name)
+                        .await?
+                }
+                RenameEntity::Workspace { old_name, new_name } => {
+                    RenameWorkspaceCommand::execute(get_default_api_client()?, old_name, new_name)
+                        .await?
+                }
+            },
+
+            Command::Show { id, json } => {
+                ShowCommand::execute(get_default_api_client()?, id, json).await?
             }
 
-            Show { id, json } => ShowCommand::execute(get_default_api_client()?, id, json).await?,
+            Command::Me => MeCommand::execute(get_default_api_client()?).await?,
 
-            Me => MeCommand::execute(get_default_api_client()?).await?,
-
-            Preferences => PreferencesCommand::execute(get_default_api_client()?).await?,
-
-            UpdatePreferences { json } => {
-                UpdatePreferencesCommand::execute(get_default_api_client()?, json).await?
+            Command::Preferences => {
+                PreferencesCommand::execute(get_default_api_client()?).await?
             }
 
-            Auth { api_token } => {
+            Command::Auth { api_token } => {
                 let credentials = Credentials { api_token };
                 let api_client = V9ApiClient::from_credentials(credentials, args.proxy)?;
                 AuthenticationCommand::execute(io::stdout(), api_client, get_storage()).await?
             }
 
-            Logout => {
+            Command::Logout => {
                 let storage = get_storage();
                 storage.clear()?;
                 println!("Successfully logged out.");
             }
 
-            Config {
+            Command::Config {
                 delete,
                 cmd,
                 edit,

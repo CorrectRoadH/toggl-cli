@@ -1,375 +1,171 @@
 ---
 name: toggl-cli
 description: >
-  Use this skill whenever the user wants to manage their Toggl Track time entries, projects, tags, or clients
-  via the command line. Trigger this skill for starting, stopping, continuing, listing, editing, and deleting
-  time entries; creating, listing, renaming, and deleting projects/tags/clients; viewing user profile, workspaces,
-  and tasks; showing individual time entry details; and setting up auto-tracking config.
-  Also trigger when the user says things like "log my time", "track time for X", "what am I tracking",
-  "stop the timer", "start a new timer", "show my recent entries", "which project", "who am I",
-  "my profile", "list my clients", "show entry details", or similar
-  time-tracking requests — even if they don't explicitly say "Toggl" or "toggl-cli".
+  Manage Toggl Track time entries, projects, tags, clients, tasks, and workspaces via CLI.
+  Trigger for any time-tracking request: starting/stopping timers, listing entries, managing resources,
+  viewing profile — even without explicitly mentioning "Toggl".
 ---
 
 # Toggl CLI Skill
 
-This skill helps you manage Toggl Track from the command line using the `toggl` binary only.
+- Install: `npm install -g @correctroadh/toggl-cli`
+- Auth: `toggl auth <TOKEN>`
 
-## Prerequisites
+## Quick Reference
 
-- `toggl` binary installed (`npm install -g @correctroadh/toggl-cli`)
-- Authenticated: `toggl auth <TOKEN>`
+| Verb | Noun | Example |
+|------|------|---------|
+| `start` | | `toggl start "desc" -p Proj -t "tag1 tag2" -b` |
+| `stop` | | `toggl stop` |
+| `continue` | | `toggl continue` |
+| `running` | | `toggl running` |
+| `show` | | `toggl show <id> -j` |
+| `me` | | `toggl me` |
+| `list` | *(entity)* | `toggl list` / `toggl list project -j` |
+| `create` | project | `toggl create project "name" --color "#06aaf5"` |
+| `create` | tag | `toggl create tag "name"` |
+| `create` | client | `toggl create client "name"` |
+| `create` | workspace | `toggl create workspace <org_id> "name"` |
+| `create` | task | `toggl create task -p "Project" "name"` |
+| `delete` | *(id)* | `toggl delete <time_entry_id>` |
+| `delete` | project/tag/client | `toggl delete project "name"` |
+| `delete` | task | `toggl delete task -p "Project" "name"` |
+| `edit` | time-entry | `toggl edit time-entry [id] -d "desc" -p "Proj"` |
+| `edit` | task | `toggl edit task -p "Project" "name" --new-name "X"` |
+| `edit` | preferences | `toggl edit preferences '{"key":"val"}'` |
+| `rename` | project/tag/client/workspace | `toggl rename project "old" "new"` |
+| `auth` | | `toggl auth <TOKEN>` |
+| `logout` | | `toggl logout` |
+| `preferences` | | `toggl preferences` |
+| `config` | | `toggl config init` / `toggl config -e` |
 
----
+## Time Entries
 
-## Command Reference
-
-### Check Current Status
+### start
 
 ```bash
-# Show the currently running time entry (if any)
-toggl running
+toggl start "description" -p "Project" -t "tag1 tag2" -b
+toggl start "Backfill" --start "2026-03-05 09:00"
+toggl start "Meeting" --start "2026-03-05 09:00" --end "2026-03-05 10:30"
+toggl start -i                          # interactive mode
+toggl --fzf start -i                    # use fzf picker
+```
+
+- Starting a new entry auto-stops any running entry.
+- `--start` + `--end` creates a closed historical entry without stopping the running one.
+- `--end` requires `--start`.
+
+### stop / continue
+
+```bash
+toggl stop
+toggl continue                          # restart most recent entry
+toggl continue -i                       # interactive picker
+```
+
+### show / running
+
+```bash
+toggl running                           # current entry
+toggl show <id>                         # details by ID
+toggl show <id> -j                      # JSON output
 ```
 
 Output format: `[$] [HH:MM:SS]* - description @Project #[tag1, tag2]`
-- `$` prefix = billable
-- `*` suffix on duration = currently running
+(`$` = billable, `*` = running)
 
----
-
-### List Time Entries
+### edit time-entry
 
 ```bash
-# List recent time entries (default: last 90 days)
-toggl list
+toggl edit time-entry -d "new desc" -p "Project" -t "tag1 tag2"
+toggl edit time-entry <id> -d "desc"    # by ID (omit for running entry)
+toggl edit time-entry -p ""             # remove project
+toggl edit time-entry -t ""             # clear tags
+toggl edit time-entry --start "2026-03-05 09:00" --end "2026-03-05 11:00"
+```
 
-# Limit to N most recent entries
-toggl list -n 10
-toggl list --number 10
+### delete time entry
 
-# Output as JSON
-toggl list --json
-toggl list -j
+```bash
+toggl delete <id>
+```
 
-# Filter by date range
-toggl list --since 2026-03-01
-toggl list --until 2026-03-05
+### bulk edit
+
+```bash
+toggl bulk-edit-time-entries <id1> <id2> --json '[{"op":"replace","path":"/description","value":"X"}]'
+```
+
+## Resource Management
+
+Resources: **project**, **tag**, **client**, **workspace**, **task**.
+
+### create
+
+```bash
+toggl create project "name"             # default color #06aaf5
+toggl create project "name" --color "#ff0000"
+toggl create tag "name"
+toggl create client "name"
+toggl create workspace <org_id> "name"
+toggl create task -p "Project" "name" --active true --estimated-seconds 3600
+```
+
+### rename
+
+```bash
+toggl rename project "old" "new"
+toggl rename tag "old" "new"
+toggl rename client "old" "new"
+toggl rename workspace "old" "new"
+```
+
+### delete
+
+```bash
+toggl delete project "name"
+toggl delete tag "name"
+toggl delete client "name"
+toggl delete task -p "Project" "name"
+```
+
+### edit task / preferences
+
+```bash
+toggl edit task -p "Project" "name" --new-name "X" --active false
+toggl edit preferences '{"time_format":"H:mm"}'
+```
+
+## List
+
+```bash
+toggl list                              # time entries (last 90 days)
+toggl list -n 10                        # limit count
+toggl list -j                           # JSON output
 toggl list --since 2026-03-01 --until 2026-03-05
+toggl list project                      # list projects
+toggl list tag | client | workspace | task
+toggl list project -j                   # JSON output for any entity
 ```
 
-### List Projects / Tags / Clients / Workspaces / Tasks
+## Auth & Config
 
 ```bash
-# List projects
-toggl list project
-toggl list project --json
-
-# List tags
-toggl list tag
-toggl list tag --json
-
-# List clients
-toggl list client
-toggl list client --json
-
-# List workspaces
-toggl list workspace
-toggl list workspace --json
-
-# List tasks (requires paid plan)
-toggl list task
-toggl list task --json
-```
-
----
-
-### Show User Profile
-
-```bash
-# Display current user info (name, email, timezone, workspace)
-toggl me
-```
-
-Output includes: Name, Email, Timezone, Default Workspace ID, Week Starts On, Avatar URL, Created At.
-
----
-
-### Show Time Entry Details
-
-```bash
-# Show a specific time entry by ID
-toggl show 123456789
-
-# Show in JSON format
-toggl show 123456789 --json
-toggl show 123456789 -j
-```
-
-Use `toggl list --json` to find time entry IDs, then `toggl show <id>` for full details.
-
----
-
-### Start a Time Entry
-
-```bash
-# Start with description
-toggl start "Writing documentation"
-
-# Start with project
-toggl start "Fix login bug" --project "MyApp"
-toggl start "Fix login bug" -p "MyApp"
-
-# Start with tags (space-separated)
-toggl start "Client call" --tags "meeting billing"
-toggl start "Client call" -t "meeting billing"
-
-# Mark as billable
-toggl start "Consulting" --billable
-toggl start "Consulting" -b
-
-# Combine options
-toggl start "Feature work" -p "ClientProject" -t "dev review" -b
-
-# Start from a specific start time (creates a running entry)
-toggl start "Backfill" --start "2026-03-05 09:00"
-
-# Create a closed time entry with explicit start/end
-toggl start "Sprint planning" --start "2026-03-05 09:00" --end "2026-03-05 10:30"
-
-# Interactive mode
-toggl start --interactive
-toggl start -i
-toggl start "description" -i
-
-# Use fzf picker
-toggl --fzf start -i
-```
-
-Behavior:
-- Starting a running entry stops any currently running entry.
-- If `--start` and `--end` are both provided, a stopped historical entry is created and running entries are not touched.
-- `--end` requires `--start`.
-
-Accepted datetime formats:
-- RFC3339: `2026-03-05T09:00:00+08:00`
-- Local time: `YYYY-MM-DD HH:MM[:SS]` or `YYYY-MM-DDTHH:MM[:SS]`
-- Date only: `YYYY-MM-DD` (interpreted as `00:00:00` local time)
-
----
-
-### Stop / Continue
-
-```bash
-# Stop current entry
-toggl stop
-
-# Continue most recent stopped entry
-toggl continue
-
-# Interactive continue picker
-toggl continue --interactive
-toggl continue -i
-
-# Use fzf picker
-toggl --fzf continue -i
-```
-
----
-
-### Edit / Delete Time Entries
-
-```bash
-# Edit currently running entry
-toggl edit -d "Updated description"
-toggl edit -p "New Project"
-toggl edit -t "tag1 tag2"
-toggl edit --start "2026-03-05 09:00"
-toggl edit --end "2026-03-05 10:30"
-
-# Remove project / clear tags on current entry
-toggl edit -p ""
-toggl edit -t ""
-toggl edit --end ""
-
-# Edit a specific entry by ID
-toggl edit 123456789 -d "Updated description" -p "Project" -t "tag1 tag2"
-toggl edit 123456789 --start "2026-03-05 09:00" --end "2026-03-05 11:00"
-
-# Delete by ID
-toggl delete 123456789
-```
-
----
-
-### Manage Projects
-
-```bash
-# Create project
-toggl create-project "New Project Name"
-
-# Create with color
-toggl create-project "New Project Name" --color "#06aaf5"
-
-# Rename project
-toggl rename-project "Old Project" "New Project"
-
-# Delete project
-toggl delete-project "Project Name"
-```
-
----
-
-### Manage Tags
-
-```bash
-# Create tag
-toggl create-tag "meeting"
-
-# Rename tag
-toggl rename-tag "meeting" "client-meeting"
-
-# Delete tag
-toggl delete-tag "client-meeting"
-```
-
----
-
-### Manage Clients
-
-```bash
-# Create client
-toggl create-client "Acme Corp"
-
-# Rename client
-toggl rename-client "Acme Corp" "Acme Corporation"
-
-# Delete client
-toggl delete-client "Acme Corporation"
-```
-
----
-
-### Authentication
-
-```bash
-# Save token
-toggl auth YOUR_TOKEN
-
-# Clear stored credentials
+toggl auth <TOKEN>
 toggl logout
+toggl me                                # profile info
+toggl preferences                       # show preferences
+toggl config init                       # create config file
+toggl config -e                         # edit in $EDITOR
+toggl config -p                         # show config path
+toggl config -d                         # delete config
+toggl config active                     # show active block for cwd
 ```
 
----
+## Datetime Formats
 
-### Auto-tracking Configuration
+Accepted by `--start`, `--end`, `--since`, `--until`:
 
-```bash
-# Initialize config
-toggl config init
-
-# Edit in $EDITOR
-toggl config --edit
-toggl config -e
-
-# Show config path
-toggl config --path
-toggl config -p
-
-# Delete config
-toggl config --delete
-toggl config -d
-
-# Show active block for current directory
-toggl config active
-```
-
-Config file format (TOML, `~/.config/toggl-cli/config.toml`):
-
-```toml
-['*']
-workspace = "Default"
-description = "Working on {{branch}}"
-project = "MyProject"
-tags = ["{{branch}}", "dev"]
-billable = false
-
-['feature/.+']
-description = "Feature: {{branch}}"
-project = "FeatureProject"
-billable = true
-```
-
-Template variables:
-- `{{branch}}` current git branch name
-- `{{base_dir}}` directory name of the config file location
-- `{{current_dir}}` current working directory name
-- `{{git_root}}` root directory name of the current git repo
-- `{{$ shell_command}}` output of a shell command
-
----
-
-## Common Workflows
-
-### "What am I tracking right now?"
-```bash
-toggl running
-```
-
-### "Start tracking for a project"
-```bash
-toggl start "Task description" -p "Project Name"
-```
-
-### "Log time for a meeting with tags"
-```bash
-toggl start "Weekly sync" -p "Management" -t "meeting internal" -b
-```
-
-### "See what I worked on today"
-```bash
-toggl list -n 20 --since 2026-03-05 --until 2026-03-05
-```
-
-### "Continue where I left off"
-```bash
-toggl continue
-```
-
-### "Switch to a different task"
-```bash
-toggl start "New task" -p "New Project"
-```
-
-### "Parse time entries with a script"
-```bash
-toggl list --json | jq '.[] | {desc: .description, project: .project.name, duration: .duration}'
-```
-
-### "Who am I? / Check my profile"
-```bash
-toggl me
-```
-
-### "Show details of a specific time entry"
-```bash
-# First find the ID
-toggl list -n 5 --json
-# Then show details
-toggl show 4317653032
-```
-
-### "List all my clients"
-```bash
-toggl list client
-```
-
-### "Add a new client and start tracking for them"
-```bash
-toggl create-client "New Client"
-toggl start "Onboarding call" -p "ClientProject" -t "meeting" -b
-```
-
-### "What workspaces do I have access to?"
-```bash
-toggl list workspace
-```
+- RFC3339: `2026-03-05T09:00:00+08:00`
+- Local: `2026-03-05 09:00` or `2026-03-05T09:00:00`
+- Date only: `2026-03-05` (interpreted as `00:00:00` local time)

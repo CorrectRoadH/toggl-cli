@@ -77,27 +77,19 @@ SUBCOMMANDS:
     config            Manage auto-tracking configuration
     continue
     bulk-edit-time-entries  Bulk edit multiple time entries with a JSON Patch payload
+    create            Create a new resource (project, tag, client, workspace, task)
     current
+    delete            Delete a resource or a time entry by ID
+    edit              Edit a resource (time-entry, task, preferences)
     list              List time entries (supports date filtering)
     logout            Clear stored credentials
+    me                Show current user profile information
+    preferences       Show current user preferences
+    rename            Rename a resource (project, tag, client, workspace)
     running
+    show              Show details of a single time entry by ID
     start             Start a new time entry
     stop
-    edit              Edit a time entry
-    delete            Delete a time entry
-    create-project    Create a new project
-    create-task       Create a task inside a project
-    rename-project    Rename a project
-    delete-project    Delete a project
-    create-tag        Create a new tag
-    delete-task       Delete a task from a project by name
-    preferences       Show current user preferences
-    rename-tag        Rename a tag
-    delete-tag        Delete a tag
-    create-workspace  Create a new workspace in an organization
-    rename-workspace  Rename a workspace
-    update-preferences    Update current user preferences with a JSON payload
-    update-task       Update a task inside a project
     help              Prints this message or the help of the given subcommand(s)
 ```
 
