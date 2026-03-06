@@ -11,9 +11,9 @@ mod utilities;
 
 use api::client::ApiClient;
 use api::client::V9ApiClient;
-use arguments::{Command, CreateEntity, DeleteEntity, EditEntity, RenameEntity};
 use arguments::CommandLineArguments;
 use arguments::ConfigSubCommand;
+use arguments::{Command, CreateEntity, DeleteEntity, EditEntity, RenameEntity};
 use commands::auth::AuthenticationCommand;
 use commands::bulk_edit_time_entries::BulkEditTimeEntriesCommand;
 use commands::cont::ContinueCommand;
@@ -198,15 +198,15 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                         DeleteTaskCommand::execute(get_default_api_client()?, project, name).await?
                     }
                 },
-                None => match id {
-                    Some(id) => {
-                        DeleteCommand::execute(get_default_api_client()?, id).await?
+                None => {
+                    match id {
+                        Some(id) => DeleteCommand::execute(get_default_api_client()?, id).await?,
+                        None => {
+                            eprintln!("Provide a time entry ID or a subcommand (project, tag, client, task).");
+                            std::process::exit(1);
+                        }
                     }
-                    None => {
-                        eprintln!("Provide a time entry ID or a subcommand (project, tag, client, task).");
-                        std::process::exit(1);
-                    }
-                },
+                }
             },
 
             Command::BulkEditTimeEntries { ids, json } => {
@@ -277,9 +277,7 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
 
             Command::Me => MeCommand::execute(get_default_api_client()?).await?,
 
-            Command::Preferences => {
-                PreferencesCommand::execute(get_default_api_client()?).await?
-            }
+            Command::Preferences => PreferencesCommand::execute(get_default_api_client()?).await?,
 
             Command::Auth { api_token } => {
                 let credentials = Credentials { api_token };

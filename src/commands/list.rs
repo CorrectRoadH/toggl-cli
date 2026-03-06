@@ -283,13 +283,16 @@ mod tests {
         api_client
             .expect_get_user()
             .returning(move || Ok(user.clone()));
-        api_client.expect_get_tags().withf(|wid| *wid == 1).returning(|wid| {
-            Ok(vec![Tag {
-                id: 10,
-                name: "backend".to_string(),
-                workspace_id: wid,
-            }])
-        });
+        api_client
+            .expect_get_tags()
+            .withf(|wid| *wid == 1)
+            .returning(|wid| {
+                Ok(vec![Tag {
+                    id: 10,
+                    name: "backend".to_string(),
+                    workspace_id: wid,
+                }])
+            });
 
         let result = ListCommand::execute(
             api_client,

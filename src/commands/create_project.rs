@@ -102,9 +102,12 @@ mod tests {
             .expect_get_user()
             .returning(|| Err(Box::new(ApiError::Network)));
 
-        let result =
-            CreateProjectCommand::execute(api_client, "Platform".to_string(), "#06aaf5".to_string())
-                .await;
+        let result = CreateProjectCommand::execute(
+            api_client,
+            "Platform".to_string(),
+            "#06aaf5".to_string(),
+        )
+        .await;
         assert_err!(result);
     }
 }
