@@ -111,6 +111,20 @@ fn run_json_array_command(args: &[&str]) -> Option<Vec<Value>> {
     }
 }
 
+fn run_checked_or_skip(args: &[&str]) -> Option<String> {
+    match try_run_toggl_checked(args) {
+        Ok(output) => Some(output),
+        Err(SkipReason::RateLimited(message)) => {
+            eprintln!(
+                "Skipping live CLI test because Toggl API rate limit was hit while running `toggl {}`.\nstderr:\n{}",
+                args.join(" "),
+                message
+            );
+            None
+        }
+    }
+}
+
 fn is_rate_limited(stderr: &str) -> bool {
     let stderr = stderr.to_ascii_lowercase();
     stderr.contains("hourly limit for api calls")
@@ -254,4 +268,31 @@ fn live_cli_list_commands_cover_workspace_resources() {
             args.join(" ")
         );
     }
+}
+
+#[test]
+fn live_cli_read_only_profile_commands_succeed() {
+    if !should_run_live_tests() {
+        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
+        return;
+    }
+
+    let Some(me_output) = run_checked_or_skip(&["me"]) else {
+        return;
+    };
+    assert!(
+        me_output.contains("User Profile") && me_output.contains("Email:"),
+        "expected `toggl me` output to contain basic profile fields, got:\n{}",
+        me_output
+    );
+
+    let Some(preferences_output) = run_checked_or_skip(&["preferences"]) else {
+        return;
+    };
+    let preferences_json: Value = serde_json::from_str(&preferences_output)
+        .expect("expected `toggl preferences` to return JSON");
+    assert!(
+        preferences_json.is_object(),
+        "expected `toggl preferences` output to be a JSON object"
+    );
 }
