@@ -37,7 +37,7 @@ mod tests {
         api_client
             .expect_update_preferences()
             .withf(|value| value["decimal_format"] == ".")
-            .returning(|value| Ok(value));
+            .returning(Ok);
 
         let result =
             UpdatePreferencesCommand::execute(api_client, "{\"decimal_format\":\".\"}".to_string())

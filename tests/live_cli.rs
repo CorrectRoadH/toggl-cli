@@ -39,7 +39,7 @@ impl Drop for CleanupState {
         if let Some(id) = self.time_entry_id {
             let _ = try_run_toggl(&["delete", &id.to_string()]);
         }
-        for id in self.extra_time_entry_ids.iter().copied() {
+        for id in &self.extra_time_entry_ids {
             let _ = try_run_toggl(&["delete", &id.to_string()]);
         }
         if let (Some(project_name), Some(task_name)) =

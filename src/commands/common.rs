@@ -46,6 +46,7 @@ impl CommandUtils {
     }
 
     /// Print success message for resource update
+    #[allow(dead_code)]
     pub fn print_update_success(resource_type: &str, resource_display: &dyn std::fmt::Display) {
         println!(
             "{} updated successfully\n{}",

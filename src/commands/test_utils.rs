@@ -1,8 +1,10 @@
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 pub mod test_utils {
     use crate::models::User;
 
     /// Create a mock user for testing
+    #[allow(dead_code)]
     pub fn mock_user() -> User {
         User {
             api_token: "token".to_string(),
