@@ -500,6 +500,7 @@ impl V9ApiClient {
                 if let Some(last_mutation_time) = *last_mutation {
                     let now = chrono::Utc::now().timestamp();
                     // Skip cache for 10 seconds after a time entry mutation
+                    // Only for time entry related endpoints, not all /me endpoints
                     if now - last_mutation_time < 10 {
                         return None;
                     }
