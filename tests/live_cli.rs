@@ -292,7 +292,7 @@ where
 }
 
 fn current_utc_day() -> String {
-    chrono::Utc::now().format("%Y-%m-%d").to_string()
+    TEST_DAY.to_string()
 }
 
 #[test]
