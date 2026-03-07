@@ -196,6 +196,7 @@ pub struct V9ApiClient {
     base_url: String,
     cache_namespace: String,
     last_time_entry_mutation: std::sync::Arc<std::sync::Mutex<Option<i64>>>,
+    last_related_mutation: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, i64>>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -453,6 +454,7 @@ impl V9ApiClient {
             base_url: "https://api.track.toggl.com/api/v9".to_string(),
             cache_namespace,
             last_time_entry_mutation: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            last_related_mutation: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         };
         Ok(api_client)
     }
@@ -508,11 +510,21 @@ impl V9ApiClient {
             }
         }
 
+        // Skip cache for related endpoints if there was a recent mutation affecting them
+        if let Ok(related_mutations) = self.last_related_mutation.lock() {
+            let now = chrono::Utc::now().timestamp();
+            for (endpoint_pattern, last_mutation_time) in related_mutations.iter() {
+                if url.contains(endpoint_pattern) && now - last_mutation_time < 10 {
+                    return None;
+                }
+            }
+        }
+
         let cache_path = self.cache_file_path(url)?;
         let contents = fs::read_to_string(cache_path).ok()?;
         let cached = serde_json::from_str::<CachedResponse>(&contents).ok()?;
         let age = chrono::Utc::now().timestamp() - cached.fetched_at_epoch_seconds;
-        if age < 0 || age > cache_ttl_seconds() {
+        if age < 0 || age > cache_ttl_seconds_for_url(url) {
             return None;
         }
         Some(cached.body)
@@ -600,6 +612,16 @@ impl V9ApiClient {
             // Record the time of this time entry mutation
             if let Ok(mut last_mutation) = self.last_time_entry_mutation.lock() {
                 *last_mutation = Some(chrono::Utc::now().timestamp());
+            }
+        }
+
+        // Record mutations for related endpoints that should bypass cache temporarily
+        if !invalidation.bypass_related_endpoints.is_empty() {
+            if let Ok(mut related_mutations) = self.last_related_mutation.lock() {
+                let now = chrono::Utc::now().timestamp();
+                for endpoint in &invalidation.bypass_related_endpoints {
+                    related_mutations.insert(endpoint.clone(), now);
+                }
             }
         }
     }
@@ -763,6 +785,57 @@ fn cache_ttl_seconds() -> i64 {
         .unwrap_or(30)
 }
 
+fn cache_ttl_seconds_for_url(url: &str) -> i64 {
+    // Check for specific TTL environment variables first
+    if url.contains("/me/preferences") || url.contains("/me") && url.ends_with("/me") {
+        // User profile data changes rarely
+        return std::env::var("TOGGL_HTTP_CACHE_TTL_USER_PROFILE_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value >= 0)
+            .unwrap_or(300); // 5 minutes default
+    }
+
+    if url.contains("/organizations/") && !url.contains("/workspaces") {
+        // Organization data changes rarely
+        return std::env::var("TOGGL_HTTP_CACHE_TTL_ORGANIZATIONS_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value >= 0)
+            .unwrap_or(180); // 3 minutes default
+    }
+
+    if url.contains("/me/workspaces") || url.contains("/workspaces/") && url.contains("/tags") {
+        // Workspace and tags data changes less frequently
+        return std::env::var("TOGGL_HTTP_CACHE_TTL_WORKSPACES_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value >= 0)
+            .unwrap_or(120); // 2 minutes default
+    }
+
+    if url.contains("/me/projects") || url.contains("/me/clients") || url.contains("/me/tasks") {
+        // Project-related data changes moderately
+        return std::env::var("TOGGL_HTTP_CACHE_TTL_PROJECTS_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value >= 0)
+            .unwrap_or(60); // 1 minute default
+    }
+
+    if url.contains("/time_entries") {
+        // Time entries change frequently
+        return std::env::var("TOGGL_HTTP_CACHE_TTL_TIME_ENTRIES_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value >= 0)
+            .unwrap_or(15); // 15 seconds default
+    }
+
+    // Default TTL for other endpoints
+    cache_ttl_seconds()
+}
+
 fn is_cacheable_get_url(url: &str) -> bool {
     if url.ends_with("/me")
         || url.ends_with("/me/projects")
@@ -789,6 +862,7 @@ fn is_cacheable_get_url(url: &str) -> bool {
 struct CacheInvalidation {
     exact_urls: Vec<String>,
     invalidate_time_entries: bool,
+    bypass_related_endpoints: Vec<String>, // New field for endpoints that should bypass cache temporarily
 }
 
 fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheInvalidation {
@@ -796,6 +870,7 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
         return CacheInvalidation {
             exact_urls: vec![format!("{base_url}/me/preferences")],
             invalidate_time_entries: false,
+            bypass_related_endpoints: vec!["/me/preferences".to_string()],
         };
     }
 
@@ -803,6 +878,7 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
         return CacheInvalidation {
             exact_urls: Vec::new(),
             invalidate_time_entries: true,
+            bypass_related_endpoints: Vec::new(), // Time entries use the existing mechanism
         };
     }
 
@@ -819,6 +895,11 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
                 format!("{base_url}/organizations/{organization_id}"),
             ],
             invalidate_time_entries: false,
+            bypass_related_endpoints: vec![
+                "/me/workspaces".to_string(),
+                "/me/organizations".to_string(),
+                format!("/organizations/{organization_id}"),
+            ],
         };
     }
 
@@ -829,6 +910,10 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
                 format!("{base_url}/me/tasks"),
             ],
             invalidate_time_entries: false,
+            bypass_related_endpoints: vec![
+                "/me/projects".to_string(),
+                "/me/tasks".to_string(),
+            ],
         };
     }
 
@@ -839,6 +924,10 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
                 format!("{base_url}/me/tasks"),
             ],
             invalidate_time_entries: false,
+            bypass_related_endpoints: vec![
+                "/me/projects".to_string(),
+                "/me/tasks".to_string(),
+            ],
         };
     }
 
@@ -846,6 +935,7 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
         return CacheInvalidation {
             exact_urls: vec![format!("{base_url}/me/tasks")],
             invalidate_time_entries: false,
+            bypass_related_endpoints: vec!["/me/tasks".to_string()],
         };
     }
 
@@ -853,6 +943,7 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
         return CacheInvalidation {
             exact_urls: vec![format!("{base_url}/me/clients")],
             invalidate_time_entries: false,
+            bypass_related_endpoints: vec!["/me/clients".to_string()],
         };
     }
 
@@ -865,6 +956,7 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
             return CacheInvalidation {
                 exact_urls: vec![format!("{base_url}/workspaces/{workspace_id}/tags")],
                 invalidate_time_entries: false,
+                bypass_related_endpoints: vec![format!("/workspaces/{workspace_id}/tags")],
             };
         }
     }
@@ -873,12 +965,14 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
         return CacheInvalidation {
             exact_urls: vec![format!("{base_url}/me/workspaces")],
             invalidate_time_entries: false,
+            bypass_related_endpoints: vec!["/me/workspaces".to_string()],
         };
     }
 
     CacheInvalidation {
         exact_urls: Vec::new(),
         invalidate_time_entries: false,
+        bypass_related_endpoints: Vec::new(),
     }
 }
 

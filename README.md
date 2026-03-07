@@ -48,8 +48,14 @@ npx skills find toggl
 
 ### Performance Optimizations
 
-- **HTTP Response Caching**: Read-only API responses are cached locally for 30 seconds by default to reduce API calls and improve performance
-  - Cache TTL can be customized via `TOGGL_HTTP_CACHE_TTL_SECONDS` environment variable
+- **HTTP Response Caching**: Read-only API responses are cached locally with differentiated TTL based on data type to reduce API calls and improve performance
+  - Default cache TTL can be customized via `TOGGL_HTTP_CACHE_TTL_SECONDS` environment variable (30 seconds default)
+  - Specific endpoint TTL can be customized via:
+    - `TOGGL_HTTP_CACHE_TTL_USER_PROFILE_SECONDS` - User profile data (300 seconds default)
+    - `TOGGL_HTTP_CACHE_TTL_ORGANIZATIONS_SECONDS` - Organization data (180 seconds default)
+    - `TOGGL_HTTP_CACHE_TTL_WORKSPACES_SECONDS` - Workspaces and tags (120 seconds default)
+    - `TOGGL_HTTP_CACHE_TTL_PROJECTS_SECONDS` - Projects, clients, tasks (60 seconds default)
+    - `TOGGL_HTTP_CACHE_TTL_TIME_ENTRIES_SECONDS` - Time entries (15 seconds default)
   - Cache can be disabled by setting `TOGGL_HTTP_CACHE_DISABLED=1`
   - Automatic cache invalidation when data is modified
 
