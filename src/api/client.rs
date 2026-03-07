@@ -195,6 +195,7 @@ pub struct V9ApiClient {
     http_client: Client,
     base_url: String,
     cache_namespace: String,
+    last_time_entry_mutation: std::sync::Arc<std::sync::Mutex<Option<i64>>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -451,6 +452,7 @@ impl V9ApiClient {
             http_client,
             base_url: "https://api.track.toggl.com/api/v9".to_string(),
             cache_namespace,
+            last_time_entry_mutation: std::sync::Arc::new(std::sync::Mutex::new(None)),
         };
         Ok(api_client)
     }
@@ -490,6 +492,19 @@ impl V9ApiClient {
     fn read_cached_body(&self, url: &str) -> Option<String> {
         if !is_cacheable_get_url(url) || is_http_cache_disabled() {
             return None;
+        }
+
+        // Skip cache for time entry requests if there was a recent mutation
+        if url.contains("/me/time_entries") {
+            if let Ok(last_mutation) = self.last_time_entry_mutation.lock() {
+                if let Some(last_mutation_time) = *last_mutation {
+                    let now = chrono::Utc::now().timestamp();
+                    // Skip cache for 2 seconds after a time entry mutation
+                    if now - last_mutation_time < 2 {
+                        return None;
+                    }
+                }
+            }
         }
 
         let cache_path = self.cache_file_path(url)?;
@@ -581,6 +596,10 @@ impl V9ApiClient {
         self.invalidate_cached_urls(&invalidation.exact_urls);
         if invalidation.invalidate_time_entries {
             self.invalidate_cached_urls_matching(|url| url.contains("/me/time_entries"));
+            // Record the time of this time entry mutation
+            if let Ok(mut last_mutation) = self.last_time_entry_mutation.lock() {
+                *last_mutation = Some(chrono::Utc::now().timestamp());
+            }
         }
     }
 
