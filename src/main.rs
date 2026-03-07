@@ -198,17 +198,16 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                         DeleteTaskCommand::execute(get_default_api_client()?, project, name).await?
                     }
                 },
-                None => {
-                    match id {
-                        Some(id) => DeleteCommand::execute(get_default_api_client()?, id).await?,
-                        None => print_delete_help()?,
-                    }
-                }
+                None => match id {
+                    Some(id) => DeleteCommand::execute(get_default_api_client()?, id).await?,
+                    None => print_delete_help()?,
+                },
             },
 
             Command::BulkEditTimeEntries { ids, json } => match json {
                 Some(json) => {
-                    BulkEditTimeEntriesCommand::execute(get_default_api_client()?, ids, json).await?
+                    BulkEditTimeEntriesCommand::execute(get_default_api_client()?, ids, json)
+                        .await?
                 }
                 None => print_bulk_edit_time_entries_help()?,
             },
