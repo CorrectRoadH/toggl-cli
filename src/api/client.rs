@@ -499,8 +499,8 @@ impl V9ApiClient {
             if let Ok(last_mutation) = self.last_time_entry_mutation.lock() {
                 if let Some(last_mutation_time) = *last_mutation {
                     let now = chrono::Utc::now().timestamp();
-                    // Skip cache for 2 seconds after a time entry mutation
-                    if now - last_mutation_time < 2 {
+                    // Skip cache for 10 seconds after a time entry mutation
+                    if now - last_mutation_time < 10 {
                         return None;
                     }
                 }
