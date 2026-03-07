@@ -58,7 +58,7 @@ pub enum Command {
     #[structopt(
         about = "Authenticate with the Toggl API. Find your API token at https://track.toggl.com/profile#api-token"
     )]
-    Auth { api_token: String },
+    Auth { api_token: Option<String> },
     #[structopt(about = "Clear stored credentials")]
     Logout,
     #[structopt(
@@ -121,7 +121,7 @@ pub enum Command {
         #[structopt(help = "IDs of the time entries to update")]
         ids: Vec<i64>,
         #[structopt(long, help = "JSON Patch array to send to the bulk update endpoint")]
-        json: String,
+        json: Option<String>,
     },
     #[structopt(about = "Create a new resource in your workspace")]
     Create {
@@ -136,7 +136,7 @@ pub enum Command {
     #[structopt(about = "Show details of a single time entry by ID")]
     Show {
         #[structopt(help = "ID of the time entry to show")]
-        id: i64,
+        id: Option<i64>,
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },
@@ -403,6 +403,39 @@ mod tests {
 
         match parsed.cmd {
             Some(Command::Organization { entity: None }) => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auth_command_allows_missing_token() {
+        let parsed = CommandLineArguments::from_iter_safe(["toggl", "auth"])
+            .expect("auth command should parse without a token");
+
+        match parsed.cmd {
+            Some(Command::Auth { api_token: None }) => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn show_command_allows_missing_id() {
+        let parsed = CommandLineArguments::from_iter_safe(["toggl", "show"])
+            .expect("show command should parse without an id");
+
+        match parsed.cmd {
+            Some(Command::Show { id: None, json: false }) => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn bulk_edit_command_allows_missing_json() {
+        let parsed = CommandLineArguments::from_iter_safe(["toggl", "bulk-edit-time-entries"])
+            .expect("bulk edit command should parse without json");
+
+        match parsed.cmd {
+            Some(Command::BulkEditTimeEntries { ids, json: None }) if ids.is_empty() => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
     }

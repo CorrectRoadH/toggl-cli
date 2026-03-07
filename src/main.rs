@@ -206,9 +206,12 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 }
             },
 
-            Command::BulkEditTimeEntries { ids, json } => {
-                BulkEditTimeEntriesCommand::execute(get_default_api_client()?, ids, json).await?
-            }
+            Command::BulkEditTimeEntries { ids, json } => match json {
+                Some(json) => {
+                    BulkEditTimeEntriesCommand::execute(get_default_api_client()?, ids, json).await?
+                }
+                None => print_bulk_edit_time_entries_help()?,
+            },
 
             Command::Create { entity } => match entity {
                 CreateEntity::Project { name, color } => {
@@ -268,9 +271,10 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 }
             },
 
-            Command::Show { id, json } => {
-                ShowCommand::execute(get_default_api_client()?, id, json).await?
-            }
+            Command::Show { id, json } => match id {
+                Some(id) => ShowCommand::execute(get_default_api_client()?, id, json).await?,
+                None => print_show_help()?,
+            },
 
             Command::Me => MeCommand::execute(get_default_api_client()?).await?,
 
@@ -294,11 +298,14 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
 
             Command::Preferences => PreferencesCommand::execute(get_default_api_client()?).await?,
 
-            Command::Auth { api_token } => {
-                let credentials = Credentials { api_token };
-                let api_client = V9ApiClient::from_credentials(credentials, args.proxy)?;
-                AuthenticationCommand::execute(io::stdout(), api_client, get_storage()).await?
-            }
+            Command::Auth { api_token } => match api_token {
+                Some(api_token) => {
+                    let credentials = Credentials { api_token };
+                    let api_client = V9ApiClient::from_credentials(credentials, args.proxy)?;
+                    AuthenticationCommand::execute(io::stdout(), api_client, get_storage()).await?
+                }
+                None => print_auth_help()?,
+            },
 
             Command::Logout => {
                 let storage = get_storage();
@@ -342,6 +349,18 @@ fn print_organization_help() -> ResultWithDefaultError<()> {
 
 fn print_delete_help() -> ResultWithDefaultError<()> {
     print_nested_help(["toggl", "delete", "--help"])
+}
+
+fn print_auth_help() -> ResultWithDefaultError<()> {
+    print_nested_help(["toggl", "auth", "--help"])
+}
+
+fn print_show_help() -> ResultWithDefaultError<()> {
+    print_nested_help(["toggl", "show", "--help"])
+}
+
+fn print_bulk_edit_time_entries_help() -> ResultWithDefaultError<()> {
+    print_nested_help(["toggl", "bulk-edit-time-entries", "--help"])
 }
 
 fn print_nested_help(args: [&str; 3]) -> ResultWithDefaultError<()> {
