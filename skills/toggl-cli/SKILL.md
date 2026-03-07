@@ -1,7 +1,8 @@
 ---
 name: toggl-cli
 description: >
-  Manage Toggl Track time entries, projects, tags, clients, tasks, and workspaces via the `toggl` CLI.
+  Manage Toggl Track time entries, projects, tags, clients, tasks, workspaces, and organizations via the `toggl` CLI.
+  Features HTTP response caching for improved performance and reduced API calls.
   Use for time-tracking requests like start/stop/continue/list/edit/delete, profile/preferences, and resource management,
   even when the user does not explicitly mention Toggl.
 ---
@@ -24,7 +25,9 @@ Time entries:
 - `toggl bulk-edit-time-entries <id...> --json '<patch>'`
 
 Resources:
-- `toggl list [project|tag|client|workspace|task] [-j]`
+- `toggl list [project|tag|client|workspace|task|organization] [-j]`
+- `toggl organization list [-j]`
+- `toggl organization show <id> [-j]`
 - `toggl create project <name> [--color HEX]`
 - `toggl create tag <name>`
 - `toggl create client <name>`
@@ -59,6 +62,8 @@ Resources:
 - `delete` is overloaded: `toggl delete <id>` deletes a time entry, while `toggl delete project "name"` deletes a project.
 - `current` and `running` are aliases.
 - `list` and `show` support `-j` for JSON output.
+- **Performance**: Read-only API responses are cached for 30 seconds by default. Cache can be disabled with `TOGGL_HTTP_CACHE_DISABLED=1` or TTL customized with `TOGGL_HTTP_CACHE_TTL_SECONDS`.
+- **Organizations**: Use `toggl organization list` to see available organizations, and `toggl organization show <id>` for detailed info.
 
 ## Minimal Examples
 
@@ -67,6 +72,8 @@ toggl start "Feature work" -p "App" -t dev review -b
 toggl start "Backfill" --start "2026-03-05 09:00" --end "2026-03-05 10:30"
 toggl edit time-entry 123 -d "Updated" --billable false -p "" -t ""
 toggl list project -j
+toggl organization list -j
+toggl organization show 12345
 toggl create project "App" --color "#06aaf5"
 toggl delete task -p "App" "Code Review"
 toggl edit task -p "App" "Code Review" --new-name "CR"

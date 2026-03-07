@@ -44,6 +44,21 @@ npx skills add CorrectRoadH/toggl-cli
 npx skills find toggl
 ```
 
+## Features
+
+### Performance Optimizations
+
+- **HTTP Response Caching**: Read-only API responses are cached locally for 30 seconds by default to reduce API calls and improve performance
+  - Cache TTL can be customized via `TOGGL_HTTP_CACHE_TTL_SECONDS` environment variable
+  - Cache can be disabled by setting `TOGGL_HTTP_CACHE_DISABLED=1`
+  - Automatic cache invalidation when data is modified
+
+### Organization Management
+
+- **Organization Inspection**: View and inspect organizations you have access to
+  - `toggl organization list` - List all organizations
+  - `toggl organization show <id>` - Show detailed organization information
+
 ## Usage
 
 You can invoke the binary using the `toggl` command now.
@@ -66,7 +81,7 @@ USAGE:
     toggl [FLAGS] [OPTIONS] [SUBCOMMAND]
 
 FLAGS:
-        --fzf        Use fzf instead of the default picker
+        --fzf        Use fzf for interactive selections instead of the default picker
     -h, --help       Prints help information
     -V, --version    Prints version information
 
@@ -75,24 +90,26 @@ OPTIONS:
         --proxy <proxy>    Use custom proxy
 
 SUBCOMMANDS:
-    auth              Authenticate with the Toggl API
-    config            Manage auto-tracking configuration
-    continue
-    bulk-edit-time-entries  Bulk edit multiple time entries with a JSON Patch payload
-    create            Create a new resource (project, tag, client, workspace, task)
-    current
-    delete            Delete a resource or a time entry by ID
-    edit              Edit a resource (time-entry, task, preferences)
-    list              List time entries (supports date filtering)
-    logout            Clear stored credentials
-    me                Show current user profile information
-    preferences       Show current user preferences
-    rename            Rename a resource (project, tag, client, workspace)
-    running
-    show              Show details of a single time entry by ID
-    start             Start a new time entry
-    stop
-    help              Prints this message or the help of the given subcommand(s)
+    auth                      Authenticate with the Toggl API. Find your API token at
+                              https://track.toggl.com/profile#api-token
+    bulk-edit-time-entries    Bulk edit multiple time entries with a JSON Patch payload
+    config                    Manage auto-tracking configuration
+    continue                  Continue a previous time entry
+    create                    Create a new resource in your workspace
+    current                   Show the current time entry
+    delete                    Delete a resource or a time entry by ID
+    edit                      Edit a resource (time entry, task, or preferences)
+    help                      Prints this message or the help of the given subcommand(s)
+    list                      List time entries or workspace resources
+    logout                    Clear stored credentials
+    me                        Show current user profile information
+    organization              Inspect organizations available to the current user
+    preferences               Show current user preferences
+    rename                    Rename a resource in your workspace
+    running                   Show the currently running time entry
+    show                      Show details of a single time entry by ID
+    start                     Start a new time entry, call with no arguments to start in interactive mode
+    stop                      Stop the currently running time entry
 ```
 
 The first command you need to run is `auth` to set up your [Toggl API token](https://support.toggl.com/en/articles/3116844-where-is-my-api-token-located).
