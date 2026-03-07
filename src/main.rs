@@ -201,10 +201,7 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
                 None => {
                     match id {
                         Some(id) => DeleteCommand::execute(get_default_api_client()?, id).await?,
-                        None => {
-                            eprintln!("Provide a time entry ID or a subcommand (project, tag, client, task).");
-                            std::process::exit(1);
-                        }
+                        None => print_delete_help()?,
                     }
                 }
             },
@@ -340,7 +337,15 @@ fn get_api_client(proxy: Option<String>) -> ResultWithDefaultError<impl ApiClien
 }
 
 fn print_organization_help() -> ResultWithDefaultError<()> {
-    match CommandLineArguments::from_iter_safe(["toggl", "organization", "--help"]) {
+    print_nested_help(["toggl", "organization", "--help"])
+}
+
+fn print_delete_help() -> ResultWithDefaultError<()> {
+    print_nested_help(["toggl", "delete", "--help"])
+}
+
+fn print_nested_help(args: [&str; 3]) -> ResultWithDefaultError<()> {
+    match CommandLineArguments::from_iter_safe(args) {
         Ok(_) => Ok(()),
         Err(error) => {
             error
