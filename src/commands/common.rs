@@ -34,7 +34,10 @@ impl CommandUtils {
 
     /// Print success message for resource creation
     pub fn print_creation_success(resource_type: &str, resource_display: &dyn std::fmt::Display) {
-        println!("{} created successfully\n{}", resource_type, resource_display);
+        println!(
+            "{} created successfully\n{}",
+            resource_type, resource_display
+        );
     }
 
     /// Print success message for resource deletion
@@ -44,7 +47,10 @@ impl CommandUtils {
 
     /// Print success message for resource update
     pub fn print_update_success(resource_type: &str, resource_display: &dyn std::fmt::Display) {
-        println!("{} updated successfully\n{}", resource_type, resource_display);
+        println!(
+            "{} updated successfully\n{}",
+            resource_type, resource_display
+        );
     }
 }
 
@@ -68,12 +74,8 @@ mod tests {
             },
         ];
 
-        let result = CommandUtils::find_resource_by_name(
-            clients,
-            "Acme",
-            "client",
-            |client| &client.name,
-        );
+        let result =
+            CommandUtils::find_resource_by_name(clients, "Acme", "client", |client| &client.name);
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().id, 1);
@@ -81,20 +83,16 @@ mod tests {
 
     #[test]
     fn find_resource_by_name_returns_error_when_not_found() {
-        let clients = vec![
-            Client {
-                id: 1,
-                name: "Acme".to_string(),
-                workspace_id: 1,
-            },
-        ];
+        let clients = vec![Client {
+            id: 1,
+            name: "Acme".to_string(),
+            workspace_id: 1,
+        }];
 
-        let result = CommandUtils::find_resource_by_name(
-            clients,
-            "NonExistent",
-            "client",
-            |client| &client.name,
-        );
+        let result =
+            CommandUtils::find_resource_by_name(clients, "NonExistent", "client", |client| {
+                &client.name
+            });
 
         assert!(result.is_err());
     }

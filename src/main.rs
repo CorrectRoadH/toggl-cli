@@ -104,68 +104,71 @@ async fn execute_command(
             ContinueCommand::execute(api_client, picker_option).await
         }
 
-        Command::List { number, json, since, until, entity } => {
-            ListCommand::execute(api_client, number, json, since, until, entity).await
-        }
+        Command::List {
+            number,
+            json,
+            since,
+            until,
+            entity,
+        } => ListCommand::execute(api_client, number, json, since, until, entity).await,
 
-        Command::Current | Command::Running => {
-            RunningTimeEntryCommand::execute(api_client).await
-        }
+        Command::Current | Command::Running => RunningTimeEntryCommand::execute(api_client).await,
 
-        Command::Start { interactive, billable, description, project, task, tags, start, end } => {
+        Command::Start {
+            interactive,
+            billable,
+            description,
+            project,
+            task,
+            tags,
+            start,
+            end,
+        } => {
             StartCommand::execute(
-                api_client, picker, description, project, task, tags,
-                billable, interactive, start, end,
-            ).await
+                api_client,
+                picker,
+                description,
+                project,
+                task,
+                tags,
+                billable,
+                interactive,
+                start,
+                end,
+            )
+            .await
         }
 
-        Command::Edit { entity } => {
-            execute_edit_command(entity, api_client).await
-        }
+        Command::Edit { entity } => execute_edit_command(entity, api_client).await,
 
-        Command::Delete { entity, id } => {
-            execute_delete_command(entity, id, api_client).await
-        }
+        Command::Delete { entity, id } => execute_delete_command(entity, id, api_client).await,
 
         Command::BulkEditTimeEntries { ids, json } => {
             execute_bulk_edit_command(ids, json, api_client).await
         }
 
-        Command::Create { entity } => {
-            execute_create_command(entity, api_client).await
-        }
+        Command::Create { entity } => execute_create_command(entity, api_client).await,
 
-        Command::Rename { entity } => {
-            execute_rename_command(entity, api_client).await
-        }
+        Command::Rename { entity } => execute_rename_command(entity, api_client).await,
 
-        Command::Show { id, json } => {
-            execute_show_command(id, json, api_client).await
-        }
+        Command::Show { id, json } => execute_show_command(id, json, api_client).await,
 
-        Command::Me => {
-            MeCommand::execute(api_client).await
-        }
+        Command::Me => MeCommand::execute(api_client).await,
 
-        Command::Organization { entity } => {
-            execute_organization_command(entity, api_client).await
-        }
+        Command::Organization { entity } => execute_organization_command(entity, api_client).await,
 
-        Command::Preferences => {
-            PreferencesCommand::execute(api_client).await
-        }
+        Command::Preferences => PreferencesCommand::execute(api_client).await,
 
-        Command::Auth { api_token } => {
-            execute_auth_command(api_token, proxy).await
-        }
+        Command::Auth { api_token } => execute_auth_command(api_token, proxy).await,
 
-        Command::Logout => {
-            execute_logout_command().await
-        }
+        Command::Logout => execute_logout_command().await,
 
-        Command::Config { delete, cmd, edit, path } => {
-            execute_config_command(cmd, delete, edit, path).await
-        }
+        Command::Config {
+            delete,
+            cmd,
+            edit,
+            path,
+        } => execute_config_command(cmd, delete, edit, path).await,
     }
 }
 
@@ -174,11 +177,47 @@ async fn execute_edit_command(
     api_client: impl ApiClient,
 ) -> ResultWithDefaultError<()> {
     match entity {
-        EditEntity::TimeEntry { id, description, billable, project, task, tags, start, end } => {
-            EditCommand::execute(api_client, id, description, billable, project, task, tags, start, end).await
+        EditEntity::TimeEntry {
+            id,
+            description,
+            billable,
+            project,
+            task,
+            tags,
+            start,
+            end,
+        } => {
+            EditCommand::execute(
+                api_client,
+                id,
+                description,
+                billable,
+                project,
+                task,
+                tags,
+                start,
+                end,
+            )
+            .await
         }
-        EditEntity::Task { project, name, new_name, active, estimated_seconds, user_id } => {
-            UpdateTaskCommand::execute(api_client, project, name, new_name, active, estimated_seconds, user_id).await
+        EditEntity::Task {
+            project,
+            name,
+            new_name,
+            active,
+            estimated_seconds,
+            user_id,
+        } => {
+            UpdateTaskCommand::execute(
+                api_client,
+                project,
+                name,
+                new_name,
+                active,
+                estimated_seconds,
+                user_id,
+            )
+            .await
         }
         EditEntity::Preferences { json } => {
             UpdatePreferencesCommand::execute(api_client, json).await
@@ -193,15 +232,9 @@ async fn execute_delete_command(
 ) -> ResultWithDefaultError<()> {
     match entity {
         Some(delete_entity) => match delete_entity {
-            DeleteEntity::Project { name } => {
-                DeleteProjectCommand::execute(api_client, name).await
-            }
-            DeleteEntity::Tag { name } => {
-                DeleteTagCommand::execute(api_client, name).await
-            }
-            DeleteEntity::Client { name } => {
-                DeleteClientCommand::execute(api_client, name).await
-            }
+            DeleteEntity::Project { name } => DeleteProjectCommand::execute(api_client, name).await,
+            DeleteEntity::Tag { name } => DeleteTagCommand::execute(api_client, name).await,
+            DeleteEntity::Client { name } => DeleteClientCommand::execute(api_client, name).await,
             DeleteEntity::Task { project, name } => {
                 DeleteTaskCommand::execute(api_client, project, name).await
             }
@@ -232,17 +265,28 @@ async fn execute_create_command(
         CreateEntity::Project { name, color } => {
             CreateProjectCommand::execute(api_client, name, color).await
         }
-        CreateEntity::Tag { name } => {
-            CreateTagCommand::execute(api_client, name).await
-        }
-        CreateEntity::Client { name } => {
-            CreateClientCommand::execute(api_client, name).await
-        }
-        CreateEntity::Workspace { organization_id, name } => {
-            CreateWorkspaceCommand::execute(api_client, organization_id, name).await
-        }
-        CreateEntity::Task { project, name, active, estimated_seconds, user_id } => {
-            CreateTaskCommand::execute(api_client, project, name, active, estimated_seconds, user_id).await
+        CreateEntity::Tag { name } => CreateTagCommand::execute(api_client, name).await,
+        CreateEntity::Client { name } => CreateClientCommand::execute(api_client, name).await,
+        CreateEntity::Workspace {
+            organization_id,
+            name,
+        } => CreateWorkspaceCommand::execute(api_client, organization_id, name).await,
+        CreateEntity::Task {
+            project,
+            name,
+            active,
+            estimated_seconds,
+            user_id,
+        } => {
+            CreateTaskCommand::execute(
+                api_client,
+                project,
+                name,
+                active,
+                estimated_seconds,
+                user_id,
+            )
+            .await
         }
     }
 }
@@ -322,12 +366,8 @@ async fn execute_config_command(
 ) -> ResultWithDefaultError<()> {
     match cmd {
         Some(config_command) => match config_command {
-            ConfigSubCommand::Init => {
-                config::init::ConfigInitCommand::execute(edit).await
-            }
-            ConfigSubCommand::Active => {
-                config::active::ConfigActiveCommand::execute().await
-            }
+            ConfigSubCommand::Init => config::init::ConfigInitCommand::execute(edit).await,
+            ConfigSubCommand::Active => config::active::ConfigActiveCommand::execute().await,
         },
         None => config::manage::ConfigManageCommand::execute(delete, edit, path).await,
     }

@@ -9,12 +9,7 @@ impl DeleteClientCommand {
         let workspace_id = CommandUtils::get_workspace_id(&api_client).await?;
         let clients = api_client.get_clients(workspace_id).await?;
 
-        let client = CommandUtils::find_resource_by_name(
-            clients,
-            &name,
-            "client",
-            |c| &c.name,
-        )?;
+        let client = CommandUtils::find_resource_by_name(clients, &name, "client", |c| &c.name)?;
 
         api_client.delete_client(workspace_id, client.id).await?;
         CommandUtils::print_deletion_success("Client");
