@@ -77,6 +77,9 @@ toggl list -n 3
 
 # To list exactly one local day
 toggl list --since 2026-03-06 --until 2026-03-06
+
+# To list an exact local time range
+toggl list --since "2026-03-06 09:00" --until "2026-03-06 18:30"
 ```
 
 For `toggl list`, date-only values are interpreted in local time. `--since YYYY-MM-DD`

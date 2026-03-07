@@ -76,6 +76,7 @@ Resources:
 toggl start "Feature work" -p "App" -t dev review -b
 toggl start "Backfill" --start "2026-03-05 09:00" --end "2026-03-05 10:30"
 toggl edit time-entry 123 -d "Updated" --billable false -p "" -t ""
+toggl list --since "2026-03-06 09:00" --until "2026-03-06 18:30"
 toggl list --since 2026-03-06 --until 2026-03-06
 toggl list project -j
 toggl organization list -j

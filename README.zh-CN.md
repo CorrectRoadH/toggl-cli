@@ -58,6 +58,7 @@ toggl stop                                           # 停止计时
 toggl current                                        # 查看当前计时
 toggl list -n 10                                     # 列出最近10条记录
 toggl list --since 2026-03-06 --until 2026-03-06    # 只看本地时区的某一天
+toggl list --since "2026-03-06 09:00" --until "2026-03-06 18:30" # 只看精确时间区间
 toggl edit time-entry [ID] --description "新描述"     # 编辑时间条目
 toggl delete [ID]                                    # 删除时间条目
 toggl create project "新项目"                        # 创建项目
