@@ -9,32 +9,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  coverage:
-    name: Test & Coverage
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      TOGGL_API_TOKEN: ${{ secrets.TOGGL_API_TOKEN }}
-      TOGGL_TEST_ORGANIZATION_ID: ${{ secrets.TOGGL_TEST_ORGANIZATION_ID }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      - uses: Swatinem/rust-cache@v2
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libssl-dev pkg-config
-      - name: Generate coverage report
-        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: lcov.info
-          fail_ci_if_error: true
-          use_oidc: true
+  # 移除了需要API key的测试和覆盖率检查
+  # 这些现在只在发版时运行以节省API key使用
 
   lints:
     name: Lints

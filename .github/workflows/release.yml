@@ -68,9 +68,42 @@ jobs:
       - name: Run cargo clippy
         run: cargo clippy --locked -- -D warnings
 
+  # 发版前运行完整的测试和覆盖率检查
+  test-and-coverage:
+    name: Test & Coverage (Release)
+    runs-on: ubuntu-latest
+    needs: preflight
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TOGGL_API_TOKEN: ${{ secrets.TOGGL_API_TOKEN }}
+      TOGGL_TEST_ORGANIZATION_ID: ${{ secrets.TOGGL_TEST_ORGANIZATION_ID }}
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libssl-dev pkg-config
+      - name: Generate coverage report
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          fail_ci_if_error: true
+          use_oidc: true
+
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
     runs-on: "ubuntu-latest"
+    needs: [preflight, test-and-coverage]
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
       tag: ${{ !github.event.pull_request && github.ref_name || '' }}

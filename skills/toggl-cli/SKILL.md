@@ -22,7 +22,7 @@ Time entries:
 - `toggl show <id> [-j]`
 - `toggl edit time-entry [id] [-d DESCRIPTION] [--billable true|false] [-p PROJECT] [--task TASK] [-t TAG...] [--start DATETIME] [--end DATETIME|""]`
 - `toggl delete <time_entry_id>`
-- `toggl bulk-edit-time-entries <id...> --json '<patch>'`
+- `toggl bulk-edit-time-entries <id...> --json '<json-patch-array>'`
 
 Resources:
 - `toggl list [project|tag|client|workspace|task|organization] [-j]`
@@ -62,6 +62,7 @@ Resources:
 - `delete` is overloaded: `toggl delete <id>` deletes a time entry, while `toggl delete project "name"` deletes a project.
 - `current` and `running` are aliases.
 - `list` and `show` support `-j` for JSON output.
+- **Bulk editing**: Use JSON Patch format for `bulk-edit-time-entries`. Common operations: `{"op":"replace","path":"/description","value":"new desc"}`, `{"op":"replace","path":"/billable","value":true}`, `{"op":"replace","path":"/tags","value":["tag1","tag2"]}`. All time entries must be in the same workspace.
 - **Performance**: Read-only API responses are cached for 30 seconds by default. Cache can be disabled with `TOGGL_HTTP_CACHE_DISABLED=1` or TTL customized with `TOGGL_HTTP_CACHE_TTL_SECONDS`.
 - **Organizations**: Use `toggl organization list` to see available organizations, and `toggl organization show <id>` for detailed info.
 
@@ -78,6 +79,11 @@ toggl create project "App" --color "#06aaf5"
 toggl delete task -p "App" "Code Review"
 toggl edit task -p "App" "Code Review" --new-name "CR"
 toggl edit preferences '{"time_format":"H:mm"}'
+
+# Bulk edit examples
+toggl bulk-edit-time-entries 123 456 789 --json '[{"op":"replace","path":"/description","value":"Meeting"}]'
+toggl bulk-edit-time-entries 123 456 --json '[{"op":"replace","path":"/billable","value":true}]'
+toggl bulk-edit-time-entries 123 456 --json '[{"op":"replace","path":"/tags","value":["urgent","client-work"]}]'
 ```
 
 ## Output And Time
