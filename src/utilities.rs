@@ -148,8 +148,23 @@ fn normalize_time_entry_list_filter(input: &str, is_until: bool) -> ResultWithDe
             Some(naive) => naive,
             None => return Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
         };
-        // Use UTC directly to avoid timezone issues in CI environments
-        return Ok(Utc.from_utc_datetime(&naive).to_rfc3339());
+        // Convert local time to UTC for API, ensuring proper RFC3339 format
+        return match Local.from_local_datetime(&naive) {
+            LocalResult::Single(local_dt) => {
+                let utc_dt = local_dt.with_timezone(&Utc);
+                Ok(utc_dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+            }
+            LocalResult::None => {
+                // Handle DST gaps by using UTC directly
+                let utc_dt = Utc.from_utc_datetime(&naive);
+                Ok(utc_dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+            }
+            LocalResult::Ambiguous(dt1, _dt2) => {
+                // Handle DST overlaps by using the first option
+                let utc_dt = dt1.with_timezone(&Utc);
+                Ok(utc_dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+            }
+        };
     }
 
     Ok(parse_datetime_input(value)?.to_rfc3339())
