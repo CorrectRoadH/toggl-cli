@@ -454,7 +454,9 @@ impl V9ApiClient {
             base_url: "https://api.track.toggl.com/api/v9".to_string(),
             cache_namespace,
             last_time_entry_mutation: std::sync::Arc::new(std::sync::Mutex::new(None)),
-            last_related_mutation: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+            last_related_mutation: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
         };
         Ok(api_client)
     }
@@ -910,10 +912,7 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
                 format!("{base_url}/me/tasks"),
             ],
             invalidate_time_entries: false,
-            bypass_related_endpoints: vec![
-                "/me/projects".to_string(),
-                "/me/tasks".to_string(),
-            ],
+            bypass_related_endpoints: vec!["/me/projects".to_string(), "/me/tasks".to_string()],
         };
     }
 
@@ -924,10 +923,7 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
                 format!("{base_url}/me/tasks"),
             ],
             invalidate_time_entries: false,
-            bypass_related_endpoints: vec![
-                "/me/projects".to_string(),
-                "/me/tasks".to_string(),
-            ],
+            bypass_related_endpoints: vec!["/me/projects".to_string(), "/me/tasks".to_string()],
         };
     }
 
