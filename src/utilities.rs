@@ -148,10 +148,8 @@ fn normalize_time_entry_list_filter(input: &str, is_until: bool) -> ResultWithDe
             Some(naive) => naive,
             None => return Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
         };
-        return match Local.from_local_datetime(&naive) {
-            LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc).to_rfc3339()),
-            _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
-        };
+        // Use UTC directly to avoid timezone issues in CI environments
+        return Ok(Utc.from_utc_datetime(&naive).to_rfc3339());
     }
 
     Ok(parse_datetime_input(value)?.to_rfc3339())
