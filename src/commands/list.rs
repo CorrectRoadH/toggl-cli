@@ -1,6 +1,7 @@
 use crate::api;
 use crate::arguments::Entity;
 use crate::models;
+use crate::utilities;
 use api::client::ApiClient;
 use models::ResultWithDefaultError;
 use std::io::{self, BufWriter, Write};
@@ -20,6 +21,7 @@ impl ListCommand {
         let has_date_filter = since.is_some() || until.is_some();
 
         if is_time_entry && has_date_filter {
+            let (since, until) = utilities::normalize_time_entry_list_filters(since, until)?;
             let stdout = io::stdout();
             let mut handle = BufWriter::new(stdout);
             let json = match &entity {
@@ -337,11 +339,14 @@ mod tests {
     #[tokio::test]
     async fn list_time_entries_with_date_filter_uses_filtered_endpoint() {
         let mut api_client = MockApiClient::new();
+        let (expected_since, expected_until) = crate::utilities::normalize_time_entry_list_filters(
+            Some("2026-01-01".to_string()),
+            Some("2026-01-31".to_string()),
+        )
+        .expect("date filter should normalize");
         api_client
             .expect_get_time_entries_filtered()
-            .withf(|since, until| {
-                since.as_deref() == Some("2026-01-01") && until.as_deref() == Some("2026-01-31")
-            })
+            .withf(move |since, until| *since == expected_since && *until == expected_until)
             .returning(|_, _| Ok(vec![mock_time_entry()]));
 
         let result = ListCommand::execute(
@@ -359,11 +364,14 @@ mod tests {
     #[tokio::test]
     async fn list_time_entries_with_date_filter_and_json_uses_minimal_endpoint() {
         let mut api_client = MockApiClient::new();
+        let (expected_since, expected_until) = crate::utilities::normalize_time_entry_list_filters(
+            Some("2026-01-01".to_string()),
+            Some("2026-01-31".to_string()),
+        )
+        .expect("date filter should normalize");
         api_client
             .expect_get_time_entries_filtered_minimal()
-            .withf(|since, until| {
-                since.as_deref() == Some("2026-01-01") && until.as_deref() == Some("2026-01-31")
-            })
+            .withf(move |since, until| *since == expected_since && *until == expected_until)
             .returning(|_, _| Ok(vec![mock_time_entry()]));
 
         let result = ListCommand::execute(
@@ -372,6 +380,31 @@ mod tests {
             true,
             Some("2026-01-01".to_string()),
             Some("2026-01-31".to_string()),
+            None,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn list_time_entries_with_same_day_filter_expands_until_to_next_day() {
+        let mut api_client = MockApiClient::new();
+        let (expected_since, expected_until) = crate::utilities::normalize_time_entry_list_filters(
+            Some("2026-03-06".to_string()),
+            Some("2026-03-06".to_string()),
+        )
+        .expect("date filter should normalize");
+        api_client
+            .expect_get_time_entries_filtered()
+            .withf(move |since, until| *since == expected_since && *until == expected_until)
+            .returning(|_, _| Ok(vec![mock_time_entry()]));
+
+        let result = ListCommand::execute(
+            api_client,
+            Some(1),
+            false,
+            Some("2026-03-06".to_string()),
+            Some("2026-03-06".to_string()),
             None,
         )
         .await;

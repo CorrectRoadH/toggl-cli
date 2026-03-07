@@ -118,6 +118,45 @@ pub fn parse_datetime_input(input: &str) -> ResultWithDefaultError<DateTime<Utc>
     Err(Box::new(ArgumentError::InvalidDateTime(input.to_string())))
 }
 
+pub fn normalize_time_entry_list_filters(
+    since: Option<String>,
+    until: Option<String>,
+) -> ResultWithDefaultError<(Option<String>, Option<String>)> {
+    let since = since
+        .as_deref()
+        .map(|value| normalize_time_entry_list_filter(value, false))
+        .transpose()?;
+    let until = until
+        .as_deref()
+        .map(|value| normalize_time_entry_list_filter(value, true))
+        .transpose()?;
+    Ok((since, until))
+}
+
+fn normalize_time_entry_list_filter(input: &str, is_until: bool) -> ResultWithDefaultError<String> {
+    let value = input.trim();
+    if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        let boundary_date = if is_until {
+            match date.succ_opt() {
+                Some(next_date) => next_date,
+                None => return Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+            }
+        } else {
+            date
+        };
+        let naive = match boundary_date.and_hms_opt(0, 0, 0) {
+            Some(naive) => naive,
+            None => return Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+        };
+        return match Local.from_local_datetime(&naive) {
+            LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc).to_rfc3339()),
+            _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+        };
+    }
+
+    Ok(parse_datetime_input(value)?.to_rfc3339())
+}
+
 #[cfg(unix)]
 pub fn get_shell_cmd(command: &str) -> std::process::Command {
     let mut cmd = std::process::Command::new("sh");

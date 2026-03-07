@@ -74,7 +74,13 @@ toggl [command]
 
 # To list the last 3 time-entries
 toggl list -n 3
+
+# To list exactly one local day
+toggl list --since 2026-03-06 --until 2026-03-06
 ```
+
+For `toggl list`, date-only values are interpreted in local time. `--since YYYY-MM-DD`
+means the start of that day, and `--until YYYY-MM-DD` includes the whole day.
 
 Run the `help` command to see a list of available commands.
 

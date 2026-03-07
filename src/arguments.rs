@@ -27,7 +27,7 @@ pub enum Command {
     Current,
     #[structopt(
         about = "List time entries or workspace resources",
-        long_about = "List time entries by default, or list projects, tags, clients, workspaces, or tasks via a subcommand.\n\nExamples:\n  toggl list\n  toggl list --since 2026-03-01 --until 2026-03-06\n  toggl list project\n  toggl list tag --json"
+        long_about = "List time entries by default, or list projects, tags, clients, workspaces, or tasks via a subcommand.\n\nDate-only values for --since/--until are interpreted in local time. --since uses the start of the given day, and --until includes the entire given day.\n\nExamples:\n  toggl list\n  toggl list --since 2026-03-01 --until 2026-03-06\n  toggl list --since 2026-03-06 --until 2026-03-06\n  toggl list project\n  toggl list tag --json"
     )]
     List {
         #[structopt(short, long, help = "Maximum number of items to print")]
@@ -40,12 +40,12 @@ pub enum Command {
         json: bool,
         #[structopt(
             long,
-            help = "Filter time entries starting on or after this date (YYYY-MM-DD)"
+            help = "Filter time entries starting on or after this date/time; date-only values use local 00:00:00"
         )]
         since: Option<String>,
         #[structopt(
             long,
-            help = "Filter time entries starting on or before this date (YYYY-MM-DD)"
+            help = "Filter time entries before this date/time; date-only values include the entire local day"
         )]
         until: Option<String>,
         #[structopt(subcommand)]
@@ -424,7 +424,10 @@ mod tests {
             .expect("show command should parse without an id");
 
         match parsed.cmd {
-            Some(Command::Show { id: None, json: false }) => {}
+            Some(Command::Show {
+                id: None,
+                json: false,
+            }) => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
     }
