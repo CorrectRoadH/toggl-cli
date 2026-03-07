@@ -1,26 +1,23 @@
 use crate::api::client::ApiClient;
-use crate::error::ArgumentError;
+use crate::commands::common::CommandUtils;
 use crate::models::ResultWithDefaultError;
 
 pub struct DeleteClientCommand;
 
 impl DeleteClientCommand {
     pub async fn execute(api_client: impl ApiClient, name: String) -> ResultWithDefaultError<()> {
-        let workspace_id = api_client.get_user().await?.default_workspace_id;
+        let workspace_id = CommandUtils::get_workspace_id(&api_client).await?;
         let clients = api_client.get_clients(workspace_id).await?;
 
-        let client = clients
-            .into_iter()
-            .find(|c| c.name == name)
-            .ok_or_else(|| {
-                Box::new(ArgumentError::ResourceNotFound(format!(
-                    "No client found with name '{name}'"
-                ))) as Box<dyn std::error::Error + Send>
-            })?;
+        let client = CommandUtils::find_resource_by_name(
+            clients,
+            &name,
+            "client",
+            |c| &c.name,
+        )?;
 
         api_client.delete_client(workspace_id, client.id).await?;
-        println!("Client deleted successfully");
-
+        CommandUtils::print_deletion_success("Client");
         Ok(())
     }
 }

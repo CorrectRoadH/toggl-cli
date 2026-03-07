@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod bulk_edit_time_entries;
+pub mod common;
 pub mod cont;
 pub mod create_client;
 pub mod create_project;
@@ -24,5 +25,7 @@ pub mod running;
 pub mod show;
 pub mod start;
 pub mod stop;
+#[cfg(test)]
+pub mod test_utils;
 pub mod update_preferences;
 pub mod update_task;

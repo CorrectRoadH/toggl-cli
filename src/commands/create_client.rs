@@ -1,12 +1,14 @@
 use crate::api::client::ApiClient;
+use crate::commands::common::CommandUtils;
 use crate::models::ResultWithDefaultError;
+
 pub struct CreateClientCommand;
 
 impl CreateClientCommand {
     pub async fn execute(api_client: impl ApiClient, name: String) -> ResultWithDefaultError<()> {
-        let workspace_id = api_client.get_user().await?.default_workspace_id;
+        let workspace_id = CommandUtils::get_workspace_id(&api_client).await?;
         let client = api_client.create_client(workspace_id, name).await?;
-        println!("Client created successfully\n{}", client);
+        CommandUtils::print_creation_success("Client", &client);
         Ok(())
     }
 }
