@@ -47,7 +47,7 @@ use commands::update_task::UpdateTaskCommand;
 use credentials::get_storage;
 use credentials::Credentials;
 use models::ResultWithDefaultError;
-use std::io;
+use std::io::{self, Write};
 use structopt::StructOpt;
 
 #[tokio::main]
@@ -278,20 +278,21 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
             Command::Me => MeCommand::execute(get_default_api_client()?).await?,
 
             Command::Organization { entity } => match entity {
-                OrganizationEntity::List { json } => {
+                Some(OrganizationEntity::List { json }) => {
                     OrganizationCommand::execute(
                         get_default_api_client()?,
                         OrganizationAction::List { json },
                     )
                     .await?
                 }
-                OrganizationEntity::Show { id, json } => {
+                Some(OrganizationEntity::Show { id, json }) => {
                     OrganizationCommand::execute(
                         get_default_api_client()?,
                         OrganizationAction::Show { id, json },
                     )
                     .await?
                 }
+                None => print_organization_help()?,
             },
 
             Command::Preferences => PreferencesCommand::execute(get_default_api_client()?).await?,
@@ -335,5 +336,20 @@ fn get_api_client(proxy: Option<String>) -> ResultWithDefaultError<impl ApiClien
     match credentials_storage.read() {
         Ok(credentials) => V9ApiClient::from_credentials(credentials, proxy),
         Err(err) => Err(err),
+    }
+}
+
+fn print_organization_help() -> ResultWithDefaultError<()> {
+    match CommandLineArguments::from_iter_safe(["toggl", "organization", "--help"]) {
+        Ok(_) => Ok(()),
+        Err(error) => {
+            error
+                .write_to(&mut io::stdout())
+                .map_err(|err| -> Box<dyn std::error::Error + Send> { Box::new(err) })?;
+            io::stdout()
+                .flush()
+                .map_err(|err| -> Box<dyn std::error::Error + Send> { Box::new(err) })?;
+            Ok(())
+        }
     }
 }

@@ -145,7 +145,7 @@ pub enum Command {
     #[structopt(about = "Inspect organizations available to the current user")]
     Organization {
         #[structopt(subcommand)]
-        entity: OrganizationEntity,
+        entity: Option<OrganizationEntity>,
     },
     #[structopt(about = "Show current user preferences")]
     Preferences,
@@ -389,6 +389,23 @@ pub enum OrganizationEntity {
         #[structopt(short, long, help = "Output in JSON format")]
         json: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Command, CommandLineArguments};
+    use structopt::StructOpt;
+
+    #[test]
+    fn organization_command_allows_missing_nested_subcommand() {
+        let parsed = CommandLineArguments::from_iter_safe(["toggl", "organization"])
+            .expect("organization command should parse without a nested subcommand");
+
+        match parsed.cmd {
+            Some(Command::Organization { entity: None }) => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
 }
 #[derive(Debug, StructOpt)]
 pub enum ConfigSubCommand {
