@@ -362,19 +362,6 @@ async fn execute_auth_command(
     api_url: Option<String>,
     proxy: Option<String>,
 ) -> ResultWithDefaultError<()> {
-    let api_token = match api_token {
-        Some(t) => t,
-        None => {
-            println!("Enter your Toggl API token:");
-            utilities::read_from_stdin("> ")
-        }
-    };
-
-    if api_token.is_empty() {
-        eprintln!("API token cannot be empty.");
-        return Ok(());
-    }
-
     let resolved_api_url = match (api_type.as_deref(), api_url) {
         (_, Some(url)) => Some(url),
         (Some("official"), None) => None,
@@ -416,6 +403,19 @@ async fn execute_auth_command(
             }
         }
     };
+
+    let api_token = match api_token {
+        Some(t) => t,
+        None => {
+            println!("Enter your Toggl API token:");
+            utilities::read_from_stdin("> ")
+        }
+    };
+
+    if api_token.is_empty() {
+        eprintln!("API token cannot be empty.");
+        return Ok(());
+    }
 
     let credentials = Credentials {
         api_token,
