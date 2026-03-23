@@ -49,8 +49,11 @@ use commands::update_task::UpdateTaskCommand;
 use credentials::get_storage;
 use credentials::Credentials;
 use models::ResultWithDefaultError;
+use once_cell::sync::OnceCell;
 use std::io::{self, Write};
 use structopt::StructOpt;
+
+static CACHED_CREDENTIALS: OnceCell<Credentials> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> ResultWithDefaultError<()> {
@@ -436,11 +439,11 @@ async fn execute_config_command(
 }
 
 fn get_api_client(proxy: Option<String>) -> ResultWithDefaultError<impl ApiClient> {
-    let credentials_storage = get_storage();
-    match credentials_storage.read() {
-        Ok(credentials) => V9ApiClient::from_credentials(credentials, proxy),
-        Err(err) => Err(err),
-    }
+    let credentials = CACHED_CREDENTIALS.get_or_try_init(|| {
+        let storage = get_storage();
+        storage.read()
+    })?;
+    V9ApiClient::from_credentials(credentials.clone(), proxy)
 }
 
 fn print_help_message(command: &str) -> ResultWithDefaultError<()> {
