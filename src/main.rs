@@ -70,10 +70,20 @@ async fn main() -> ResultWithDefaultError<()> {
 async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultError<()> {
     setup_working_directory(args.directory)?;
 
+    let cmd = args.cmd;
+    if let Some(Command::Auth {
+        api_token,
+        api_type,
+        api_url,
+    }) = cmd
+    {
+        return execute_auth_command(api_token, api_type, api_url, args.proxy).await;
+    }
+
     let api_client = get_api_client(args.proxy.clone())?;
     let picker = picker::get_picker(args.fzf);
 
-    match args.cmd {
+    match cmd {
         None => RunningTimeEntryCommand::execute(api_client).await,
         Some(subcommand) => execute_command(subcommand, api_client, picker, args.proxy).await,
     }
