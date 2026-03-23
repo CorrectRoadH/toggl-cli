@@ -74,10 +74,9 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
     if let Some(Command::Auth {
         api_token,
         api_type,
-        api_url,
     }) = cmd
     {
-        return execute_auth_command(api_token, api_type, api_url, args.proxy).await;
+        return execute_auth_command(api_token, api_type, args.proxy).await;
     }
 
     let api_client = get_api_client(args.proxy.clone())?;
@@ -177,8 +176,7 @@ async fn execute_command(
         Command::Auth {
             api_token,
             api_type,
-            api_url,
-        } => execute_auth_command(api_token, api_type, api_url, proxy).await,
+        } => execute_auth_command(api_token, api_type, proxy).await,
 
         Command::Logout => execute_logout_command().await,
 
@@ -359,46 +357,26 @@ async fn execute_organization_command(
 async fn execute_auth_command(
     api_token: Option<String>,
     api_type: Option<String>,
-    api_url: Option<String>,
     proxy: Option<String>,
 ) -> ResultWithDefaultError<()> {
-    let resolved_api_url = match (api_type.as_deref(), api_url) {
-        (_, Some(url)) => Some(url),
-        (Some("official"), None) => None,
-        (Some("opentoggl"), None) => Some(constants::TOGGL_API_URL_OPENTOGGL.to_string()),
-        (Some(t), None) => {
-            eprintln!(
-                "Invalid --type '{}'. Use 'official' or 'opentoggl', or use --url for a custom URL.",
-                t
-            );
+    let resolved_api_url = match api_type.as_deref() {
+        Some("official") => None,
+        Some("opentoggl") => Some(constants::TOGGL_API_URL_OPENTOGGL.to_string()),
+        Some(t) => {
+            eprintln!("Invalid --type '{}'. Use 'official' or 'opentoggl'.", t);
             return Ok(());
         }
-        (None, None) => {
+        None => {
             println!("Select Toggl service provider:");
             println!("  1) Official Toggl Track (default)");
             println!("  2) OpenToggl (self-hosted)");
-            println!("  3) Custom URL");
             let choice = read_from_stdin_with_constraints(
-                "Enter choice (1/2/3) [1]: ",
-                &[
-                    "1".to_string(),
-                    "2".to_string(),
-                    "3".to_string(),
-                    "".to_string(),
-                ],
+                "Enter choice (1/2) [1]: ",
+                &["1".to_string(), "2".to_string(), "".to_string()],
             );
             match choice.as_str() {
                 "" | "1" => None,
                 "2" => Some(constants::TOGGL_API_URL_OPENTOGGL.to_string()),
-                "3" => {
-                    println!("Enter custom API URL (e.g. https://your-instance.com/api/v9):");
-                    let url = utilities::read_from_stdin("> ");
-                    if url.is_empty() {
-                        eprintln!("URL cannot be empty.");
-                        return Ok(());
-                    }
-                    Some(url)
-                }
                 _ => return Ok(()),
             }
         }
