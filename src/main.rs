@@ -376,7 +376,15 @@ async fn execute_auth_command(
             );
             match choice.as_str() {
                 "" | "1" => None,
-                "2" => Some(constants::TOGGL_API_URL_OPENTOGGL.to_string()),
+                "2" => {
+                    println!("Enter OpenToggl API URL [https://localhost:8080/api/v9]:");
+                    let url = utilities::read_from_stdin("> ");
+                    if url.is_empty() {
+                        Some(constants::TOGGL_API_URL_OPENTOGGL.to_string())
+                    } else {
+                        Some(url)
+                    }
+                }
                 _ => return Ok(()),
             }
         }
