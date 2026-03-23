@@ -3,6 +3,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
+use crate::constants;
 use crate::credentials;
 use crate::error;
 use crate::models;
@@ -449,9 +450,12 @@ impl V9ApiClient {
         }
         .build()
         .expect("Couldn't build a http client");
+        let base_url = credentials
+            .api_url
+            .unwrap_or_else(|| constants::TOGGL_API_URL_OFFICIAL.to_string());
         let api_client = Self {
             http_client,
-            base_url: "https://api.track.toggl.com/api/v9".to_string(),
+            base_url,
             cache_namespace,
             last_time_entry_mutation: std::sync::Arc::new(std::sync::Mutex::new(None)),
             last_related_mutation: std::sync::Arc::new(std::sync::Mutex::new(

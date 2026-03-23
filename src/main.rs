@@ -9,6 +9,8 @@ mod models;
 mod picker;
 mod utilities;
 
+use utilities::read_from_stdin_with_constraints;
+
 use api::client::ApiClient;
 use api::client::V9ApiClient;
 use arguments::CommandLineArguments;
@@ -159,7 +161,11 @@ async fn execute_command(
 
         Command::Preferences => PreferencesCommand::execute(api_client).await,
 
-        Command::Auth { api_token } => execute_auth_command(api_token, proxy).await,
+        Command::Auth {
+            api_token,
+            api_type,
+            api_url,
+        } => execute_auth_command(api_token, api_type, api_url, proxy).await,
 
         Command::Logout => execute_logout_command().await,
 
@@ -339,16 +345,72 @@ async fn execute_organization_command(
 
 async fn execute_auth_command(
     api_token: Option<String>,
+    api_type: Option<String>,
+    api_url: Option<String>,
     proxy: Option<String>,
 ) -> ResultWithDefaultError<()> {
-    match api_token {
-        Some(api_token) => {
-            let credentials = Credentials { api_token };
-            let api_client = V9ApiClient::from_credentials(credentials, proxy)?;
-            AuthenticationCommand::execute(io::stdout(), api_client, get_storage()).await
+    let api_token = match api_token {
+        Some(t) => t,
+        None => {
+            println!("Enter your Toggl API token:");
+            utilities::read_from_stdin("> ")
         }
-        None => print_help_message("auth"),
+    };
+
+    if api_token.is_empty() {
+        eprintln!("API token cannot be empty.");
+        return Ok(());
     }
+
+    let resolved_api_url = match (api_type.as_deref(), api_url) {
+        (_, Some(url)) => Some(url),
+        (Some("official"), None) => None,
+        (Some("opentoggl"), None) => Some(constants::TOGGL_API_URL_OPENTOGGL.to_string()),
+        (Some(t), None) => {
+            eprintln!(
+                "Invalid --type '{}'. Use 'official' or 'opentoggl', or use --url for a custom URL.",
+                t
+            );
+            return Ok(());
+        }
+        (None, None) => {
+            println!("Select Toggl service provider:");
+            println!("  1) Official Toggl Track (default)");
+            println!("  2) OpenToggl (self-hosted)");
+            println!("  3) Custom URL");
+            let choice = read_from_stdin_with_constraints(
+                "Enter choice (1/2/3) [1]: ",
+                &[
+                    "1".to_string(),
+                    "2".to_string(),
+                    "3".to_string(),
+                    "".to_string(),
+                ],
+            );
+            match choice.as_str() {
+                "" | "1" => None,
+                "2" => Some(constants::TOGGL_API_URL_OPENTOGGL.to_string()),
+                "3" => {
+                    println!("Enter custom API URL (e.g. https://your-instance.com/api/v9):");
+                    let url = utilities::read_from_stdin("> ");
+                    if url.is_empty() {
+                        eprintln!("URL cannot be empty.");
+                        return Ok(());
+                    }
+                    Some(url)
+                }
+                _ => return Ok(()),
+            }
+        }
+    };
+
+    let credentials = Credentials {
+        api_token,
+        api_url: resolved_api_url.clone(),
+    };
+    let api_client = V9ApiClient::from_credentials(credentials.clone(), proxy)?;
+    let storage = get_storage();
+    AuthenticationCommand::execute(io::stdout(), api_client, storage, resolved_api_url).await
 }
 
 async fn execute_logout_command() -> ResultWithDefaultError<()> {

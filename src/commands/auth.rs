@@ -15,9 +15,10 @@ impl AuthenticationCommand {
         mut writer: W,
         api_client: impl ApiClient,
         credentials_storage: Box<dyn CredentialsStorage>,
+        api_url: Option<String>,
     ) -> ResultWithDefaultError<()> {
         let user = api_client.get_user().await?;
-        credentials_storage.persist(user.api_token)?;
+        credentials_storage.persist(user.api_token, api_url)?;
         writeln!(
             writer,
             "{} {}",
@@ -79,7 +80,9 @@ mod tests {
 
     fn create_working_credentials_storage() -> MockCredentialsStorage {
         let mut credentials_storage = MockCredentialsStorage::new();
-        credentials_storage.expect_persist().returning(|_| Ok(()));
+        credentials_storage
+            .expect_persist()
+            .returning(|_, _| Ok(()));
         credentials_storage
     }
 
@@ -87,7 +90,7 @@ mod tests {
         let mut credentials_storage = MockCredentialsStorage::new();
         credentials_storage
             .expect_persist()
-            .returning(|_| Err(Box::new(StorageError::Write)));
+            .returning(|_, _| Err(Box::new(StorageError::Write)));
         credentials_storage
     }
 
@@ -100,7 +103,8 @@ mod tests {
 
         // Act
         let result =
-            AuthenticationCommand::execute(&mut output, api_client, credentials_storage).await;
+            AuthenticationCommand::execute(&mut output, api_client, credentials_storage, None)
+                .await;
 
         // Assert
         assert_ok!(result);
@@ -114,7 +118,8 @@ mod tests {
         let credentials_storage = Box::new(create_working_credentials_storage());
 
         // Act
-        let _ = AuthenticationCommand::execute(&mut output, api_client, credentials_storage).await;
+        let _ = AuthenticationCommand::execute(&mut output, api_client, credentials_storage, None)
+            .await;
 
         // Assert
         let expected_output = format!(
@@ -137,7 +142,8 @@ mod tests {
 
         // Act
         let result =
-            AuthenticationCommand::execute(&mut output, api_client, credentials_storage).await;
+            AuthenticationCommand::execute(&mut output, api_client, credentials_storage, None)
+                .await;
 
         // Assert
         assert_err!(result);
@@ -152,7 +158,8 @@ mod tests {
 
         // Act
         let result =
-            AuthenticationCommand::execute(&mut output, api_client, credentials_storage).await;
+            AuthenticationCommand::execute(&mut output, api_client, credentials_storage, None)
+                .await;
 
         // Assert
         assert_err!(result);

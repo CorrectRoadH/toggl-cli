@@ -58,7 +58,16 @@ pub enum Command {
     #[structopt(
         about = "Authenticate with the Toggl API. Find your API token at https://track.toggl.com/profile#api-token"
     )]
-    Auth { api_token: Option<String> },
+    Auth {
+        api_token: Option<String>,
+        #[structopt(long, help = "Toggl service type: 'official' or 'opentoggl'")]
+        api_type: Option<String>,
+        #[structopt(
+            long,
+            help = "Custom API base URL (e.g. https://your-instance.com/api/v9)"
+        )]
+        api_url: Option<String>,
+    },
     #[structopt(about = "Clear stored credentials")]
     Logout,
     #[structopt(
@@ -413,7 +422,11 @@ mod tests {
             .expect("auth command should parse without a token");
 
         match parsed.cmd {
-            Some(Command::Auth { api_token: None }) => {}
+            Some(Command::Auth {
+                api_token: None,
+                api_type: _,
+                api_url: _,
+            }) => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
     }

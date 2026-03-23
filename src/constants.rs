@@ -30,6 +30,10 @@ pub const NO_DESCRIPTION: &str = "(no description)";
 pub const DIRECTORY_NOT_FOUND_ERROR: &str = "Directory not found";
 pub const NOT_A_DIRECTORY_ERROR: &str = "Not a directory";
 
+pub const TOGGL_API_URL_OFFICIAL: &str = "https://api.track.toggl.com/api/v9";
+pub const TOGGL_API_URL_OPENTOGGL: &str = "https://localhost:8080/api/v9";
+pub const TOGGL_API_URL_CREDENTIALS_DELIMITER: &str = "|||";
+
 #[cfg(target_os = "macos")]
 pub const SIMPLE_HOME_PATH: &str = "~/Library/Application Support";
 #[cfg(windows)]
