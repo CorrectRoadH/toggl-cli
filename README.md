@@ -151,7 +151,7 @@ For non-interactive setup, provide the API token and service type directly:
 # Official Toggl Track
 toggl auth <API_TOKEN> --type official
 
-# OpenToggl (self-hosted) with default URL
+# OpenToggl (self-hosted) - will prompt for API URL
 toggl auth <API_TOKEN> --type opentoggl
 ```
 

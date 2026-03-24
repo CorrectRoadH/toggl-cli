@@ -361,7 +361,15 @@ async fn execute_auth_command(
 ) -> ResultWithDefaultError<()> {
     let resolved_api_url = match api_type.as_deref() {
         Some("official") => None,
-        Some("opentoggl") => Some(constants::TOGGL_API_URL_OPENTOGGL.to_string()),
+        Some("opentoggl") => {
+            println!("Enter OpenToggl API URL:");
+            let url = utilities::read_from_stdin("> ");
+            if url.is_empty() {
+                eprintln!("URL cannot be empty.");
+                return Ok(());
+            }
+            Some(url)
+        }
         Some(t) => {
             eprintln!("Invalid --type '{}'. Use 'official' or 'opentoggl'.", t);
             return Ok(());
