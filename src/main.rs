@@ -74,9 +74,10 @@ async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultErro
     if let Some(Command::Auth {
         api_token,
         api_type,
+        api_url,
     }) = cmd
     {
-        return execute_auth_command(api_token, api_type, args.proxy).await;
+        return execute_auth_command(api_token, api_type, api_url, args.proxy).await;
     }
 
     let api_client = get_api_client(args.proxy.clone())?;
@@ -176,7 +177,8 @@ async fn execute_command(
         Command::Auth {
             api_token,
             api_type,
-        } => execute_auth_command(api_token, api_type, proxy).await,
+            api_url,
+        } => execute_auth_command(api_token, api_type, api_url, proxy).await,
 
         Command::Logout => execute_logout_command().await,
 
@@ -357,11 +359,13 @@ async fn execute_organization_command(
 async fn execute_auth_command(
     api_token: Option<String>,
     api_type: Option<String>,
+    api_url: Option<String>,
     proxy: Option<String>,
 ) -> ResultWithDefaultError<()> {
-    let resolved_api_url = match api_type.as_deref() {
-        Some("official") => None,
-        Some("opentoggl") => {
+    let resolved_api_url = match (api_type.as_deref(), api_url) {
+        (_, Some(url)) => Some(url),
+        (Some("official"), None) => None,
+        (Some("opentoggl"), None) => {
             println!("Enter OpenToggl API URL:");
             let url = utilities::read_from_stdin("> ");
             if url.is_empty() {
@@ -370,11 +374,11 @@ async fn execute_auth_command(
             }
             Some(url)
         }
-        Some(t) => {
+        (Some(t), None) => {
             eprintln!("Invalid --type '{}'. Use 'official' or 'opentoggl'.", t);
             return Ok(());
         }
-        None => {
+        (None, None) => {
             println!("Select Toggl service provider:");
             println!("  1) Official Toggl Track (default)");
             println!("  2) OpenToggl (self-hosted)");

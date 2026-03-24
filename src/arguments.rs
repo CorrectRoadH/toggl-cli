@@ -62,6 +62,8 @@ pub enum Command {
         api_token: Option<String>,
         #[structopt(long, help = "Toggl service type: 'official' or 'opentoggl'")]
         api_type: Option<String>,
+        #[structopt(long, help = "API URL for self-hosted Toggl (required for opentoggl)")]
+        api_url: Option<String>,
     },
     #[structopt(about = "Clear stored credentials")]
     Logout,
@@ -420,6 +422,7 @@ mod tests {
             Some(Command::Auth {
                 api_token: None,
                 api_type: _,
+                api_url: _,
             }) => {}
             other => panic!("unexpected parse result: {other:?}"),
         }

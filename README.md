@@ -151,8 +151,8 @@ For non-interactive setup, provide the API token and service type directly:
 # Official Toggl Track
 toggl auth <API_TOKEN> --type official
 
-# OpenToggl (self-hosted) - will prompt for API URL
-toggl auth <API_TOKEN> --type opentoggl
+# OpenToggl (self-hosted) - provide URL via --api-url
+toggl auth <API_TOKEN> --type opentoggl --api-url https://your-instance.com/api/v9
 ```
 
 The API token is stored securely in your Operating System's keychain using the [keyring](https://crates.io/crates/keyring) crate.
