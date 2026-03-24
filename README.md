@@ -141,7 +141,7 @@ You will be prompted to:
 1. Select service provider (Official Toggl Track or OpenToggl self-hosted)
 2. Enter your API token
 
-For OpenToggl, you can accept the default URL (`https://localhost:8080/api/v9`) or enter a custom URL.
+For OpenToggl, you need to enter the full API URL (e.g. `https://your-instance.com/api/v9`).
 
 ### Direct Authentication
 

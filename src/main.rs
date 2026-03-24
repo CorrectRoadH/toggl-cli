@@ -377,13 +377,13 @@ async fn execute_auth_command(
             match choice.as_str() {
                 "" | "1" => None,
                 "2" => {
-                    println!("Enter OpenToggl API URL [https://localhost:8080/api/v9]:");
+                    println!("Enter OpenToggl API URL:");
                     let url = utilities::read_from_stdin("> ");
                     if url.is_empty() {
-                        Some(constants::TOGGL_API_URL_OPENTOGGL.to_string())
-                    } else {
-                        Some(url)
+                        eprintln!("URL cannot be empty.");
+                        return Ok(());
                     }
+                    Some(url)
                 }
                 _ => return Ok(()),
             }
