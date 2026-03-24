@@ -195,6 +195,7 @@ pub trait ApiClient {
 pub struct V9ApiClient {
     http_client: Client,
     base_url: String,
+    is_official_service: bool,
     cache_namespace: String,
     last_time_entry_mutation: std::sync::Arc<std::sync::Mutex<Option<i64>>>,
     last_related_mutation: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, i64>>>,
@@ -414,11 +415,11 @@ impl V9ApiClient {
                         as Box<dyn std::error::Error + Send>
                 })?;
                 if !status.is_success() {
-                    return Err(Box::new(ApiError::NetworkWithMessage(format!(
-                        "HTTP {} {}",
-                        status.as_u16(),
-                        summarize_response_body(&body)
-                    ))));
+                    return Err(Box::new(api_error_for_http_status(
+                        status,
+                        &body,
+                        self.is_official_service,
+                    )));
                 }
 
                 self.write_cached_body(&url, &body);
@@ -450,12 +451,14 @@ impl V9ApiClient {
         }
         .build()
         .expect("Couldn't build a http client");
+        let is_official_service = credentials.api_url.is_none();
         let base_url = credentials
             .api_url
             .unwrap_or_else(|| constants::TOGGL_API_URL_OFFICIAL.to_string());
         let api_client = Self {
             http_client,
             base_url,
+            is_official_service,
             cache_namespace,
             last_time_entry_mutation: std::sync::Arc::new(std::sync::Mutex::new(None)),
             last_related_mutation: std::sync::Arc::new(std::sync::Mutex::new(
@@ -482,11 +485,11 @@ impl V9ApiClient {
                 })?;
 
                 if !status.is_success() {
-                    Err(Box::new(ApiError::NetworkWithMessage(format!(
-                        "HTTP {} {}",
-                        status.as_u16(),
-                        summarize_response_body(&body)
-                    ))) as Box<dyn std::error::Error + Send>)
+                    Err(Box::new(api_error_for_http_status(
+                        status,
+                        &body,
+                        self.is_official_service,
+                    )) as Box<dyn std::error::Error + Send>)
                 } else {
                     self.write_cached_body(&url, &body);
                     deserialize_response_body(&body)
@@ -637,7 +640,11 @@ impl V9ApiClient {
         url: String,
         body: &Body,
     ) -> ResultWithDefaultError<T> {
-        let result = V9ApiClient::send::<T>(self.http_client.put(&url).json(body)).await;
+        let result = V9ApiClient::send::<T>(
+            self.http_client.put(&url).json(body),
+            self.is_official_service,
+        )
+        .await;
         if result.is_ok() {
             self.invalidate_caches_for_mutation(&url);
         }
@@ -649,7 +656,11 @@ impl V9ApiClient {
         url: String,
         body: &Body,
     ) -> ResultWithDefaultError<T> {
-        let result = V9ApiClient::send::<T>(self.http_client.post(&url).json(body)).await;
+        let result = V9ApiClient::send::<T>(
+            self.http_client.post(&url).json(body),
+            self.is_official_service,
+        )
+        .await;
         if result.is_ok() {
             self.invalidate_caches_for_mutation(&url);
         }
@@ -661,7 +672,11 @@ impl V9ApiClient {
         url: String,
         body: &Body,
     ) -> ResultWithDefaultError<T> {
-        let result = V9ApiClient::send::<T>(self.http_client.patch(&url).json(body)).await;
+        let result = V9ApiClient::send::<T>(
+            self.http_client.patch(&url).json(body),
+            self.is_official_service,
+        )
+        .await;
         if result.is_ok() {
             self.invalidate_caches_for_mutation(&url);
         }
@@ -672,14 +687,18 @@ impl V9ApiClient {
         &self,
         url: String,
     ) -> ResultWithDefaultError<T> {
-        let result = V9ApiClient::send::<T>(self.http_client.patch(&url)).await;
+        let result =
+            V9ApiClient::send::<T>(self.http_client.patch(&url), self.is_official_service).await;
         if result.is_ok() {
             self.invalidate_caches_for_mutation(&url);
         }
         result
     }
 
-    async fn send<T: de::DeserializeOwned>(request: RequestBuilder) -> ResultWithDefaultError<T> {
+    async fn send<T: de::DeserializeOwned>(
+        request: RequestBuilder,
+        is_official_service: bool,
+    ) -> ResultWithDefaultError<T> {
         match request.send().await {
             Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))),
             Ok(response) => {
@@ -690,11 +709,11 @@ impl V9ApiClient {
                 })?;
 
                 if !status.is_success() {
-                    return Err(Box::new(ApiError::NetworkWithMessage(format!(
-                        "HTTP {} {}",
-                        status.as_u16(),
-                        summarize_response_body(&body)
-                    ))));
+                    return Err(Box::new(api_error_for_http_status(
+                        status,
+                        &body,
+                        is_official_service,
+                    )));
                 }
 
                 serde_json::from_str::<T>(&body).map_err(|error| {
@@ -721,11 +740,11 @@ impl V9ApiClient {
                         Box::new(ApiError::NetworkWithMessage(error.to_string()))
                             as Box<dyn std::error::Error + Send>
                     })?;
-                    Err(Box::new(ApiError::NetworkWithMessage(format!(
-                        "HTTP {} {}",
-                        status.as_u16(),
-                        summarize_response_body(&body)
-                    ))))
+                    Err(Box::new(api_error_for_http_status(
+                        status,
+                        &body,
+                        self.is_official_service,
+                    )))
                 }
             }
         }
@@ -988,6 +1007,43 @@ fn summarize_response_body(body: &str) -> String {
         format!("{summary}...")
     } else {
         summary
+    }
+}
+
+fn format_http_status_details(status: reqwest::StatusCode, body: &str) -> String {
+    format!("HTTP {} {}", status.as_u16(), summarize_response_body(body))
+}
+
+fn is_official_toggl_usage_limit_error(
+    status: reqwest::StatusCode,
+    body: &str,
+    is_official_service: bool,
+) -> bool {
+    if !is_official_service || status != reqwest::StatusCode::PAYMENT_REQUIRED {
+        return false;
+    }
+
+    let body_lower = body.to_ascii_lowercase();
+    body_lower.contains("hourly limit")
+        || body_lower.contains("quota will reset")
+        || body_lower.contains("upgrade to a paid plan")
+        || body_lower.contains("go to subscriptions page")
+}
+
+fn api_error_for_http_status(
+    status: reqwest::StatusCode,
+    body: &str,
+    is_official_service: bool,
+) -> ApiError {
+    let details = format_http_status_details(status, body);
+    if (status == reqwest::StatusCode::TOO_MANY_REQUESTS && is_official_service)
+        || is_official_toggl_usage_limit_error(status, body, is_official_service)
+    {
+        ApiError::OfficialApiUsageLimitWithMessage(details)
+    } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        ApiError::RateLimitedWithMessage(details)
+    } else {
+        ApiError::NetworkWithMessage(details)
     }
 }
 
@@ -1550,11 +1606,11 @@ impl ApiClient for V9ApiClient {
                 })?;
 
                 if !status.is_success() {
-                    return Err(Box::new(ApiError::NetworkWithMessage(format!(
-                        "HTTP {} {}",
-                        status.as_u16(),
-                        summarize_response_body(&body)
-                    ))));
+                    return Err(Box::new(api_error_for_http_status(
+                        status,
+                        &body,
+                        self.is_official_service,
+                    )));
                 }
 
                 if body.trim().is_empty() {
@@ -1749,5 +1805,56 @@ impl ApiClient for V9ApiClient {
             workspaces,
             tags: Vec::new(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reqwest::StatusCode;
+
+    #[test]
+    fn maps_429_to_official_usage_limit_error_for_official_service() {
+        let error =
+            api_error_for_http_status(StatusCode::TOO_MANY_REQUESTS, "too many requests", true);
+
+        assert_eq!(
+            error,
+            ApiError::OfficialApiUsageLimitWithMessage("HTTP 429 too many requests".to_string())
+        );
+    }
+
+    #[test]
+    fn keeps_429_as_generic_rate_limit_for_self_hosted_service() {
+        let error =
+            api_error_for_http_status(StatusCode::TOO_MANY_REQUESTS, "too many requests", false);
+
+        assert_eq!(
+            error,
+            ApiError::RateLimitedWithMessage("HTTP 429 too many requests".to_string())
+        );
+    }
+
+    #[test]
+    fn maps_hourly_limit_402_to_official_usage_limit_error() {
+        let body =
+            "You have hit your hourly limit for API calls. Your quota will reset in 1838 seconds.";
+        let error = api_error_for_http_status(StatusCode::PAYMENT_REQUIRED, body, true);
+
+        assert_eq!(
+            error,
+            ApiError::OfficialApiUsageLimitWithMessage(format!("HTTP 402 {body}"))
+        );
+    }
+
+    #[test]
+    fn keeps_non_limit_402_as_network_error() {
+        let error =
+            api_error_for_http_status(StatusCode::PAYMENT_REQUIRED, "payment required", true);
+
+        assert_eq!(
+            error,
+            ApiError::NetworkWithMessage("HTTP 402 payment required".to_string())
+        );
     }
 }

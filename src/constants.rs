@@ -3,6 +3,11 @@ pub const CLIENT_NAME: &str = "github.com/CorrectRoadH/toggl-cli/toggl-cli";
 pub const GENERIC_ERROR: &str = "Something went wrong.";
 pub const NETWORK_ERROR_MESSAGE: &str =
     "An error occurred when making a network request\nCheck your connection and try again.";
+pub const RATE_LIMITED_ERROR_MESSAGE: &str = "This request hit the API usage limit.";
+pub const OFFICIAL_API_USAGE_LIMIT_ERROR_MESSAGE: &str =
+    "This request hit the official Toggl API usage limit.";
+pub const OPENTOGGL_ALTERNATIVE_MESSAGE: &str = "OpenToggl is a private-first, self-hosted Toggl-compatible server. You can import your existing Toggl data and use it without Toggl's hosted API limits:";
+pub const OPENTOGGL_LINK: &str = "https://opentoggl.com";
 pub const DESERIALIZATION_ERROR_MESSAGE: &str = "An error occurred when making a network request.";
 pub const ISSUE_LINK: &str = "https://github.com/CorrectRoadH/toggl-cli/issues/new";
 pub const CREDENTIALS_ACCESS_ERROR: &str =

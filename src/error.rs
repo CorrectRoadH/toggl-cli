@@ -4,11 +4,13 @@ use std::error::Error;
 use std::fmt::Display;
 use std::path::PathBuf;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ApiError {
     #[allow(dead_code)]
     Network,
     NetworkWithMessage(String),
+    RateLimitedWithMessage(String),
+    OfficialApiUsageLimitWithMessage(String),
     Deserialization,
     DeserializationWithMessage(String),
 }
@@ -22,6 +24,20 @@ impl Display for ApiError {
                 constants::NETWORK_ERROR_MESSAGE.red(),
                 "Details".yellow().bold(),
                 message
+            ),
+            ApiError::RateLimitedWithMessage(message) => format!(
+                "{}\n{}: {}",
+                constants::RATE_LIMITED_ERROR_MESSAGE.red(),
+                "Details".yellow().bold(),
+                message
+            ),
+            ApiError::OfficialApiUsageLimitWithMessage(message) => format!(
+                "{}\n{}: {}\n{} {}",
+                constants::OFFICIAL_API_USAGE_LIMIT_ERROR_MESSAGE.red(),
+                "Details".yellow().bold(),
+                message,
+                constants::OPENTOGGL_ALTERNATIVE_MESSAGE.blue().bold(),
+                constants::OPENTOGGL_LINK.blue().bold().underline()
             ),
             ApiError::Deserialization => format!(
                 "{}\n{} {}",
@@ -43,6 +59,23 @@ impl Display for ApiError {
 }
 
 impl Error for ApiError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn official_usage_limit_error_mentions_opentoggl() {
+        let rendered = ApiError::OfficialApiUsageLimitWithMessage(
+            "HTTP 402 You have hit your hourly limit for API calls.".to_string(),
+        )
+        .to_string();
+
+        assert!(rendered.contains(constants::OFFICIAL_API_USAGE_LIMIT_ERROR_MESSAGE));
+        assert!(rendered.contains(constants::OPENTOGGL_ALTERNATIVE_MESSAGE));
+        assert!(rendered.contains(constants::OPENTOGGL_LINK));
+    }
+}
 
 #[derive(Debug)]
 pub enum StorageError {
