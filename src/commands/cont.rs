@@ -70,12 +70,20 @@ fn get_first_stopped_time_entry(
     time_entries: Vec<TimeEntry>,
     running_time_entry: Option<TimeEntry>,
 ) -> Option<TimeEntry> {
-    // Don't continue a running entry that was just stopped.
-    let continue_entry_index = match running_time_entry {
-        None => 0,
-        Some(_) => 1,
-    };
-    time_entries.get(continue_entry_index).cloned()
+    let just_stopped_id = running_time_entry.map(|entry| entry.id);
+    let mut stopped_entries = time_entries
+        .into_iter()
+        .filter(|entry| entry.stop.is_some())
+        .filter(|entry| Some(entry.id) != just_stopped_id)
+        .collect::<Vec<_>>();
+
+    stopped_entries.sort_by(|a, b| {
+        let a_key = a.stop.unwrap_or(a.start);
+        let b_key = b.stop.unwrap_or(b.start);
+        b_key.cmp(&a_key)
+    });
+
+    stopped_entries.into_iter().next()
 }
 
 #[cfg(test)]

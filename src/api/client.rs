@@ -1009,17 +1009,16 @@ impl ApiClient for V9ApiClient {
 
     async fn get_tasks_list(&self) -> ResultWithDefaultError<Vec<Task>> {
         let (network_tasks, network_projects) = tokio::join!(self.get_tasks(), self.get_projects());
+        let network_tasks = network_tasks?;
+        let network_projects = network_projects?;
         let projects = network_projects
-            .unwrap_or_default()
             .into_iter()
             .map(|project| (project.id, Self::network_project_to_project(project)))
             .collect::<HashMap<_, _>>();
 
-        Ok(
-            Self::map_tasks(network_tasks.unwrap_or_default(), &projects)
-                .into_values()
-                .collect(),
-        )
+        Ok(Self::map_tasks(network_tasks, &projects)
+            .into_values()
+            .collect())
     }
 
     async fn get_workspaces_list(&self) -> ResultWithDefaultError<Vec<Workspace>> {

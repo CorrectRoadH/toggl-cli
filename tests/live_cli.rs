@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread::sleep;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -73,8 +73,13 @@ fn unique_description(prefix: &str) -> String {
     format!("toggl-cli-{prefix}-{nonce}")
 }
 
-fn should_run_live_tests() -> bool {
-    matches!(std::env::var("TOGGL_API_TOKEN"), Ok(token) if !token.trim().is_empty())
+fn require_live_test_env() {
+    let token = std::env::var("TOGGL_API_TOKEN")
+        .expect("TOGGL_API_TOKEN must be set when running live CLI tests");
+    assert!(
+        !token.trim().is_empty(),
+        "TOGGL_API_TOKEN must not be empty when running live CLI tests"
+    );
 }
 
 fn test_organization_id() -> Option<i64> {
@@ -90,33 +95,15 @@ fn test_workspace_id() -> Option<i64> {
 }
 
 fn run_toggl(args: &[&str]) -> String {
-    match try_run_toggl_checked(args) {
-        Ok(output) => output,
-        Err(SkipReason::RateLimited(message)) => {
-            eprintln!(
-                "Skipping live CLI test because Toggl API rate limit was hit while running `toggl {}`.\nstderr:\n{}",
-                args.join(" "),
-                message
-            );
-            String::new()
-        }
-    }
+    try_run_toggl_checked(args)
 }
 
-enum SkipReason {
-    RateLimited(String),
-}
-
-fn try_run_toggl_checked(args: &[&str]) -> Result<String, SkipReason> {
+fn try_run_toggl_checked(args: &[&str]) -> String {
     let output = try_run_toggl(args).expect("failed to execute toggl");
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     if output.status.success() {
-        return Ok(String::from_utf8(output.stdout).expect("stdout was not valid UTF-8"));
-    }
-
-    if is_rate_limited(&stderr) {
-        return Err(SkipReason::RateLimited(stderr.into_owned()));
+        return String::from_utf8(output.stdout).expect("stdout was not valid UTF-8");
     }
 
     panic!(
@@ -130,6 +117,7 @@ fn try_run_toggl_checked(args: &[&str]) -> Result<String, SkipReason> {
 fn try_run_toggl(args: &[&str]) -> std::io::Result<std::process::Output> {
     Command::new(env!("CARGO_BIN_EXE_toggl"))
         .args(args)
+        .env("TOGGL_DISABLE_HTTP_CACHE", "1")
         .output()
 }
 
@@ -138,46 +126,22 @@ fn list_entries_on_test_day() -> Vec<TimeEntryRecord> {
     serde_json::from_str(&output).expect("failed to parse time entry list JSON")
 }
 
-fn list_entries_on_day(day: &str) -> Result<Vec<TimeEntryRecord>, SkipReason> {
-    let output = try_run_toggl_checked(&["list", "--json", "--since", day, "--until", day])?;
-    Ok(serde_json::from_str(&output).expect("failed to parse time entry list JSON"))
+fn list_entries_on_day(day: &str) -> Vec<TimeEntryRecord> {
+    let output = try_run_toggl_checked(&["list", "--json", "--since", day, "--until", day]);
+    serde_json::from_str(&output).expect("failed to parse time entry list JSON")
 }
 
-fn run_json_array_command(args: &[&str]) -> Option<Vec<Value>> {
-    match try_run_toggl_checked(args) {
-        Ok(output) => {
-            let parsed: Value =
-                serde_json::from_str(&output).expect("failed to parse command JSON output");
-            Some(
-                parsed
-                    .as_array()
-                    .cloned()
-                    .expect("expected command JSON output to be an array"),
-            )
-        }
-        Err(SkipReason::RateLimited(message)) => {
-            eprintln!(
-                "Skipping live CLI test because Toggl API rate limit was hit while running `toggl {}`.\nstderr:\n{}",
-                args.join(" "),
-                message
-            );
-            None
-        }
-    }
+fn run_json_array_command(args: &[&str]) -> Vec<Value> {
+    let output = try_run_toggl_checked(args);
+    let parsed: Value = serde_json::from_str(&output).expect("failed to parse command JSON output");
+    parsed
+        .as_array()
+        .cloned()
+        .expect("expected command JSON output to be an array")
 }
 
-fn run_checked_or_skip(args: &[&str]) -> Option<String> {
-    match try_run_toggl_checked(args) {
-        Ok(output) => Some(output),
-        Err(SkipReason::RateLimited(message)) => {
-            eprintln!(
-                "Skipping live CLI test because Toggl API rate limit was hit while running `toggl {}`.\nstderr:\n{}",
-                args.join(" "),
-                message
-            );
-            None
-        }
-    }
+fn run_checked(args: &[&str]) -> String {
+    try_run_toggl_checked(args)
 }
 
 fn find_item_by_name<'a>(items: &'a [Value], name: &str) -> Option<&'a Value> {
@@ -224,6 +188,14 @@ fn require_default_workspace_matches_test_workspace(me_output: &str) -> i64 {
 }
 
 static TEST_WORKSPACE_SCOPE_CHECK: OnceLock<()> = OnceLock::new();
+static LIVE_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn acquire_live_test_guard() -> MutexGuard<'static, ()> {
+    LIVE_TEST_MUTEX
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 fn ensure_test_workspace_scope() {
     if test_workspace_id().is_none() {
@@ -231,19 +203,9 @@ fn ensure_test_workspace_scope() {
     }
 
     TEST_WORKSPACE_SCOPE_CHECK.get_or_init(|| {
-        let Some(me_output) = run_checked_or_skip(&["me"]) else {
-            return;
-        };
+        let me_output = run_checked(&["me"]);
         require_default_workspace_matches_test_workspace(&me_output);
     });
-}
-
-fn is_rate_limited(stderr: &str) -> bool {
-    let stderr = stderr.to_ascii_lowercase();
-    stderr.contains("hourly limit for api calls")
-        || stderr.contains("quota will reset in")
-        || stderr.contains("too many requests")
-        || stderr.contains("rate limit")
 }
 
 fn is_workspace_creation_disabled(stderr: &str) -> bool {
@@ -271,19 +233,9 @@ where
     F: FnMut(&TimeEntryRecord) -> bool,
 {
     for _ in 0..10 {
-        match list_entries_on_day(day) {
-            Ok(entries) => {
-                if let Some(entry) = entries.into_iter().find(|entry| predicate(entry)) {
-                    return Some(entry);
-                }
-            }
-            Err(SkipReason::RateLimited(message)) => {
-                eprintln!(
-                    "Skipping live CLI test because Toggl API rate limit was hit while polling `toggl list --json --since {} --until {}`.\nstderr:\n{}",
-                    day, day, message
-                );
-                return None;
-            }
+        let entries = list_entries_on_day(day);
+        if let Some(entry) = entries.into_iter().find(|entry| predicate(entry)) {
+            return Some(entry);
         }
         sleep(std::time::Duration::from_millis(500));
     }
@@ -292,33 +244,23 @@ where
 }
 
 fn current_utc_day() -> String {
-    TEST_DAY.to_string()
+    chrono::Utc::now().format("%Y-%m-%d").to_string()
 }
 
 #[test]
 fn live_cli_round_trip_covers_time_entry_lifecycle() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
     let description = unique_description("entry");
     let renamed_description = format!("{description}-edited");
     let mut cleanup = CleanupState::default();
     ensure_test_workspace_scope();
 
-    let entries_before: Vec<TimeEntryRecord> = match try_run_toggl_checked(&[
+    let entries_before: Vec<TimeEntryRecord> = serde_json::from_str(&try_run_toggl_checked(&[
         "list", "--json", "--since", TEST_DAY, "--until", TEST_DAY,
-    ]) {
-        Ok(output) => serde_json::from_str(&output).expect("failed to parse time entry list JSON"),
-        Err(SkipReason::RateLimited(message)) => {
-            eprintln!(
-                "Skipping live CLI test because Toggl API rate limit was hit while loading the baseline list.\nstderr:\n{}",
-                message
-            );
-            return;
-        }
-    };
+    ]))
+    .expect("failed to parse time entry list JSON");
     assert!(
         !entries_before
             .iter()
@@ -326,18 +268,14 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
         "baseline already contains test description {description}"
     );
 
-    if try_run_toggl_checked(&[
+    try_run_toggl_checked(&[
         "start",
         &description,
         "--start",
         TEST_START,
         "--end",
         TEST_END,
-    ])
-    .is_err()
-    {
-        return;
-    }
+    ]);
 
     let Some(created_entry) =
         wait_for_entry_on_day("created time entry missing from list", TEST_DAY, |entry| {
@@ -348,11 +286,7 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     };
     cleanup.time_entry_id = Some(created_entry.id);
 
-    let Some(shown_entry_output) =
-        run_checked_or_skip(&["show", &created_entry.id.to_string(), "--json"])
-    else {
-        return;
-    };
+    let shown_entry_output = run_checked(&["show", &created_entry.id.to_string(), "--json"]);
     let shown_entry: TimeEntryRecord =
         serde_json::from_str(&shown_entry_output).expect("failed to parse show time entry JSON");
     assert_eq!(shown_entry.id, created_entry.id);
@@ -363,16 +297,12 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
         r#"[{{"op":"replace","path":"/description","value":"{}"}}]"#,
         bulk_edited_description
     );
-    if try_run_toggl_checked(&[
+    try_run_toggl_checked(&[
         "bulk-edit-time-entries",
         &created_entry.id.to_string(),
         "--json",
         &bulk_edit_payload,
-    ])
-    .is_err()
-    {
-        return;
-    }
+    ]);
 
     let Some(bulk_edited_entry) = wait_for_entry_on_day(
         "bulk-edited time entry missing from list",
@@ -383,17 +313,13 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     };
     assert_eq!(bulk_edited_entry.id, created_entry.id);
 
-    if try_run_toggl_checked(&[
+    try_run_toggl_checked(&[
         "edit",
         "time-entry",
         &created_entry.id.to_string(),
         "--description",
         &renamed_description,
-    ])
-    .is_err()
-    {
-        return;
-    }
+    ]);
 
     let Some(edited_entry) =
         wait_for_entry_on_day("edited time entry missing from list", TEST_DAY, |entry| {
@@ -404,20 +330,14 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
     };
     assert_eq!(edited_entry.id, created_entry.id);
 
-    let Some(filtered_list_output) =
-        run_checked_or_skip(&["list", "--since", TEST_DAY, "--until", TEST_DAY])
-    else {
-        return;
-    };
+    let filtered_list_output = run_checked(&["list", "--since", TEST_DAY, "--until", TEST_DAY]);
     assert!(
         filtered_list_output.contains(&renamed_description),
         "expected filtered non-JSON list to include the edited description, got:\n{}",
         filtered_list_output
     );
 
-    if try_run_toggl_checked(&["delete", &created_entry.id.to_string()]).is_err() {
-        return;
-    }
+    try_run_toggl_checked(&["delete", &created_entry.id.to_string()]);
     cleanup.time_entry_id = None;
 
     let entries_after_delete = wait_for("time entry cleanup did not restore baseline", || {
@@ -443,10 +363,8 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
 
 #[test]
 fn live_cli_list_commands_cover_workspace_resources() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
     ensure_test_workspace_scope();
 
@@ -459,9 +377,7 @@ fn live_cli_list_commands_cover_workspace_resources() {
     ];
 
     for args in commands {
-        let Some(items) = run_json_array_command(args) else {
-            return;
-        };
+        let items = run_json_array_command(args);
 
         assert!(
             items.iter().all(Value::is_object),
@@ -473,16 +389,12 @@ fn live_cli_list_commands_cover_workspace_resources() {
 
 #[test]
 fn live_cli_default_time_entry_listing_succeeds() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
     ensure_test_workspace_scope();
 
-    let Some(items) = run_json_array_command(&["list", "--json", "--number", "5"]) else {
-        return;
-    };
+    let items = run_json_array_command(&["list", "--json", "--number", "5"]);
 
     assert!(
         items.iter().all(Value::is_object),
@@ -492,23 +404,17 @@ fn live_cli_default_time_entry_listing_succeeds() {
 
 #[test]
 fn live_cli_read_only_profile_commands_succeed() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
-    let Some(me_output) = run_checked_or_skip(&["me"]) else {
-        return;
-    };
+    let me_output = run_checked(&["me"]);
     assert!(
         me_output.contains("User Profile") && me_output.contains("Email:"),
         "expected `toggl me` output to contain basic profile fields, got:\n{}",
         me_output
     );
 
-    let Some(preferences_output) = run_checked_or_skip(&["preferences"]) else {
-        return;
-    };
+    let preferences_output = run_checked(&["preferences"]);
     let preferences_json: Value = serde_json::from_str(&preferences_output)
         .expect("expected `toggl preferences` to return JSON");
     assert!(
@@ -516,10 +422,7 @@ fn live_cli_read_only_profile_commands_succeed() {
         "expected `toggl preferences` output to be a JSON object"
     );
 
-    let Some(organizations_output) = run_checked_or_skip(&["organization", "list", "--json"])
-    else {
-        return;
-    };
+    let organizations_output = run_checked(&["organization", "list", "--json"]);
     let organizations_json: Value = serde_json::from_str(&organizations_output)
         .expect("expected `toggl organization list --json` to return JSON");
     assert!(
@@ -528,14 +431,12 @@ fn live_cli_read_only_profile_commands_succeed() {
     );
 
     if let Some(organization_id) = test_organization_id() {
-        let Some(organization_output) = run_checked_or_skip(&[
+        let organization_output = run_checked(&[
             "organization",
             "show",
             &organization_id.to_string(),
             "--json",
-        ]) else {
-            return;
-        };
+        ]);
         let organization_json: Value = serde_json::from_str(&organization_output)
             .expect("expected `toggl organization show --json` to return JSON");
         assert!(
@@ -547,17 +448,13 @@ fn live_cli_read_only_profile_commands_succeed() {
 
 #[test]
 fn live_cli_running_commands_succeed() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
     ensure_test_workspace_scope();
 
     for args in [&["running"][..], &[][..], &["current"][..]] {
-        let Some(output) = run_checked_or_skip(args) else {
-            return;
-        };
+        let output = run_checked(args);
         assert!(
             !output.trim().is_empty(),
             "expected `toggl {}` to produce some output",
@@ -568,18 +465,14 @@ fn live_cli_running_commands_succeed() {
 
 #[test]
 fn live_cli_start_and_stop_running_entry_succeeds() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
     let description = unique_description("running");
     let mut cleanup = CleanupState::default();
     ensure_test_workspace_scope();
 
-    if run_checked_or_skip(&["start", &description]).is_none() {
-        return;
-    }
+    run_checked(&["start", &description]);
 
     let today = current_utc_day();
     let Some(created_entry) = wait_for_entry_on_day(
@@ -591,18 +484,14 @@ fn live_cli_start_and_stop_running_entry_succeeds() {
     };
     cleanup.time_entry_id = Some(created_entry.id);
 
-    let Some(running_output) = run_checked_or_skip(&["running"]) else {
-        return;
-    };
+    let running_output = run_checked(&["running"]);
     assert!(
         running_output.contains(&description),
         "expected `toggl running` to show the created running entry, got:\n{}",
         running_output
     );
 
-    let Some(stop_output) = run_checked_or_skip(&["stop"]) else {
-        return;
-    };
+    let stop_output = run_checked(&["stop"]);
     assert!(
         stop_output.contains("Time entry stopped successfully"),
         "expected `toggl stop` to report success, got:\n{}",
@@ -610,9 +499,7 @@ fn live_cli_start_and_stop_running_entry_succeeds() {
     );
     cleanup.time_entry_id = None;
 
-    let Some(running_after_stop_output) = run_checked_or_skip(&["running"]) else {
-        return;
-    };
+    let running_after_stop_output = run_checked(&["running"]);
     assert!(
         !running_after_stop_output.contains(&description),
         "expected running entry to be stopped, got:\n{}",
@@ -622,31 +509,25 @@ fn live_cli_start_and_stop_running_entry_succeeds() {
 
 #[test]
 fn live_cli_continue_succeeds() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
     let description = unique_description("continue");
     let mut cleanup = CleanupState::default();
     ensure_test_workspace_scope();
-    let end = chrono::Utc::now() - chrono::Duration::minutes(5);
+    let end = chrono::Utc::now();
     let start = end - chrono::Duration::minutes(5);
     let start_string = start.to_rfc3339();
     let end_string = end.to_rfc3339();
 
-    if run_checked_or_skip(&[
+    run_checked(&[
         "start",
         &description,
         "--start",
         &start_string,
         "--end",
         &end_string,
-    ])
-    .is_none()
-    {
-        return;
-    }
+    ]);
 
     let today = current_utc_day();
     let Some(stopped_entry) = wait_for_entry_on_day(
@@ -658,18 +539,14 @@ fn live_cli_continue_succeeds() {
     };
     cleanup.extra_time_entry_ids.push(stopped_entry.id);
 
-    let Some(continue_output) = run_checked_or_skip(&["continue"]) else {
-        return;
-    };
+    let continue_output = run_checked(&["continue"]);
     assert!(
         continue_output.contains("Time entry continued successfully"),
         "expected continue command to report success, got:\n{}",
         continue_output
     );
 
-    let Some(running_output) = run_checked_or_skip(&["running"]) else {
-        return;
-    };
+    let running_output = run_checked(&["running"]);
     assert!(
         running_output.contains(&description),
         "expected continued entry to be running, got:\n{}",
@@ -685,9 +562,7 @@ fn live_cli_continue_succeeds() {
     };
     cleanup.time_entry_id = Some(running_entry.id);
 
-    let Some(stop_output) = run_checked_or_skip(&["stop"]) else {
-        return;
-    };
+    let stop_output = run_checked(&["stop"]);
     assert!(
         stop_output.contains("Time entry stopped successfully"),
         "expected stop after continue to report success, got:\n{}",
@@ -697,10 +572,8 @@ fn live_cli_continue_succeeds() {
 
 #[test]
 fn live_cli_workspace_resource_crud_succeeds() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
     let mut cleanup = CleanupState::default();
     ensure_test_workspace_scope();
@@ -713,53 +586,37 @@ fn live_cli_workspace_resource_crud_succeeds() {
     let client_name = unique_description("client");
     let renamed_client_name = format!("{client_name}-renamed");
 
-    let Some(projects_before) = run_json_array_command(&["list", "project", "--json"]) else {
-        return;
-    };
+    let projects_before = run_json_array_command(&["list", "project", "--json"]);
     assert!(find_item_by_name(&projects_before, &project_name).is_none());
     assert!(find_item_by_name(&projects_before, &renamed_project_name).is_none());
 
-    if run_checked_or_skip(&["create", "project", &project_name]).is_none() {
-        return;
-    }
+    run_checked(&["create", "project", &project_name]);
     cleanup.project_name = Some(project_name.clone());
 
-    let Some(projects_after_create) = run_json_array_command(&["list", "project", "--json"]) else {
-        return;
-    };
+    let projects_after_create = run_json_array_command(&["list", "project", "--json"]);
     assert!(find_item_by_name(&projects_after_create, &project_name).is_some());
 
-    if run_checked_or_skip(&["rename", "project", &project_name, &renamed_project_name]).is_none() {
-        return;
-    }
+    run_checked(&["rename", "project", &project_name, &renamed_project_name]);
     cleanup.project_name = Some(renamed_project_name.clone());
 
-    let Some(projects_after_rename) = run_json_array_command(&["list", "project", "--json"]) else {
-        return;
-    };
+    let projects_after_rename = run_json_array_command(&["list", "project", "--json"]);
     assert!(find_item_by_name(&projects_after_rename, &project_name).is_none());
     assert!(find_item_by_name(&projects_after_rename, &renamed_project_name).is_some());
 
-    if run_checked_or_skip(&[
+    run_checked(&[
         "create",
         "task",
         "--project",
         &renamed_project_name,
         &task_name,
-    ])
-    .is_none()
-    {
-        return;
-    }
+    ]);
     cleanup.task_project_name = Some(renamed_project_name.clone());
     cleanup.task_name = Some(task_name.clone());
 
-    let Some(tasks_after_create) = run_json_array_command(&["list", "task", "--json"]) else {
-        return;
-    };
+    let tasks_after_create = run_json_array_command(&["list", "task", "--json"]);
     assert!(find_item_by_name(&tasks_after_create, &task_name).is_some());
 
-    if run_checked_or_skip(&[
+    run_checked(&[
         "edit",
         "task",
         "--project",
@@ -771,129 +628,83 @@ fn live_cli_workspace_resource_crud_succeeds() {
         "false",
         "--estimated-seconds",
         "120",
-    ])
-    .is_none()
-    {
-        return;
-    }
+    ]);
     cleanup.task_name = Some(renamed_task_name.clone());
 
-    let Some(tasks_after_update) = run_json_array_command(&["list", "task", "--json"]) else {
-        return;
-    };
+    let tasks_after_update = run_json_array_command(&["list", "task", "--json"]);
     assert!(find_item_by_name(&tasks_after_update, &task_name).is_none());
     assert!(find_item_by_name(&tasks_after_update, &renamed_task_name).is_some());
 
-    if run_checked_or_skip(&[
+    run_checked(&[
         "delete",
         "task",
         "--project",
         &renamed_project_name,
         &renamed_task_name,
-    ])
-    .is_none()
-    {
-        return;
-    }
+    ]);
     cleanup.task_name = None;
     cleanup.task_project_name = None;
 
-    let Some(tasks_after_delete) = run_json_array_command(&["list", "task", "--json"]) else {
-        return;
-    };
+    let tasks_after_delete = run_json_array_command(&["list", "task", "--json"]);
     assert!(find_item_by_name(&tasks_after_delete, &renamed_task_name).is_none());
 
-    if run_checked_or_skip(&["create", "tag", &tag_name]).is_none() {
-        return;
-    }
+    run_checked(&["create", "tag", &tag_name]);
     cleanup.tag_name = Some(tag_name.clone());
 
-    let Some(tags_after_create) = run_json_array_command(&["list", "tag", "--json"]) else {
-        return;
-    };
+    let tags_after_create = run_json_array_command(&["list", "tag", "--json"]);
     assert!(find_item_by_name(&tags_after_create, &tag_name).is_some());
 
-    if run_checked_or_skip(&["rename", "tag", &tag_name, &renamed_tag_name]).is_none() {
-        return;
-    }
+    run_checked(&["rename", "tag", &tag_name, &renamed_tag_name]);
     cleanup.tag_name = Some(renamed_tag_name.clone());
 
-    let Some(tags_after_rename) = run_json_array_command(&["list", "tag", "--json"]) else {
-        return;
-    };
+    let tags_after_rename = run_json_array_command(&["list", "tag", "--json"]);
     assert!(find_item_by_name(&tags_after_rename, &tag_name).is_none());
     assert!(find_item_by_name(&tags_after_rename, &renamed_tag_name).is_some());
 
-    if run_checked_or_skip(&["delete", "tag", &renamed_tag_name]).is_none() {
-        return;
-    }
+    run_checked(&["delete", "tag", &renamed_tag_name]);
     cleanup.tag_name = None;
 
-    let Some(tags_after_delete) = run_json_array_command(&["list", "tag", "--json"]) else {
-        return;
-    };
+    let tags_after_delete = run_json_array_command(&["list", "tag", "--json"]);
     assert!(find_item_by_name(&tags_after_delete, &renamed_tag_name).is_none());
 
-    if run_checked_or_skip(&["create", "client", &client_name]).is_none() {
-        return;
-    }
+    run_checked(&["create", "client", &client_name]);
     cleanup.client_name = Some(client_name.clone());
 
-    let Some(clients_after_create) = run_json_array_command(&["list", "client", "--json"]) else {
-        return;
-    };
+    let clients_after_create = run_json_array_command(&["list", "client", "--json"]);
     assert!(find_item_by_name(&clients_after_create, &client_name).is_some());
 
-    if run_checked_or_skip(&["rename", "client", &client_name, &renamed_client_name]).is_none() {
-        return;
-    }
+    run_checked(&["rename", "client", &client_name, &renamed_client_name]);
     cleanup.client_name = Some(renamed_client_name.clone());
 
-    let Some(clients_after_rename) = run_json_array_command(&["list", "client", "--json"]) else {
-        return;
-    };
+    let clients_after_rename = run_json_array_command(&["list", "client", "--json"]);
     assert!(find_item_by_name(&clients_after_rename, &client_name).is_none());
     assert!(find_item_by_name(&clients_after_rename, &renamed_client_name).is_some());
 
-    if run_checked_or_skip(&["delete", "client", &renamed_client_name]).is_none() {
-        return;
-    }
+    run_checked(&["delete", "client", &renamed_client_name]);
     cleanup.client_name = None;
 
-    let Some(clients_after_delete) = run_json_array_command(&["list", "client", "--json"]) else {
-        return;
-    };
+    let clients_after_delete = run_json_array_command(&["list", "client", "--json"]);
     assert!(find_item_by_name(&clients_after_delete, &renamed_client_name).is_none());
 
-    if run_checked_or_skip(&["delete", "project", &renamed_project_name]).is_none() {
-        return;
-    }
+    run_checked(&["delete", "project", &renamed_project_name]);
     cleanup.project_name = None;
 
-    let Some(projects_after_delete) = run_json_array_command(&["list", "project", "--json"]) else {
-        return;
-    };
+    let projects_after_delete = run_json_array_command(&["list", "project", "--json"]);
     assert!(find_item_by_name(&projects_after_delete, &renamed_project_name).is_none());
 }
 
 #[test]
 fn live_cli_preferences_round_trip_succeeds() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
-    let Some(preferences_output) = run_checked_or_skip(&["preferences"]) else {
-        return;
-    };
+    let preferences_output = run_checked(&["preferences"]);
     let preferences_json: Value =
         serde_json::from_str(&preferences_output).expect("failed to parse preferences JSON");
     assert!(preferences_json.is_object());
     let payload = editable_preferences_payload(&preferences_json);
 
-    let Some(updated_output) = run_checked_or_skip(&["edit", "preferences", &payload]) else {
-        return;
-    };
+    let updated_output = run_checked(&["edit", "preferences", &payload]);
     assert!(
         updated_output.contains("Preferences updated successfully"),
         "expected preferences update command to report success, got:\n{}",
@@ -903,21 +714,15 @@ fn live_cli_preferences_round_trip_succeeds() {
 
 #[test]
 fn live_cli_workspace_rename_round_trip_succeeds() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
     let mut cleanup = CleanupState::default();
-    let Some(me_output) = run_checked_or_skip(&["me"]) else {
-        return;
-    };
+    let me_output = run_checked(&["me"]);
     ensure_test_workspace_scope();
     let default_workspace_id = require_default_workspace_matches_test_workspace(&me_output);
 
-    let Some(workspaces_output) = run_checked_or_skip(&["list", "workspace", "--json"]) else {
-        return;
-    };
+    let workspaces_output = run_checked(&["list", "workspace", "--json"]);
     let workspaces = parse_workspaces(&workspaces_output);
     let workspace = workspaces
         .iter()
@@ -928,37 +733,23 @@ fn live_cli_workspace_rename_round_trip_succeeds() {
     cleanup.workspace_original_name = Some(workspace.name.clone());
     cleanup.workspace_temporary_name = Some(temporary_name.clone());
 
-    if run_checked_or_skip(&["rename", "workspace", &workspace.name, &temporary_name]).is_none() {
-        return;
-    }
+    run_checked(&["rename", "workspace", &workspace.name, &temporary_name]);
 
-    let Some(workspaces_after_rename_output) =
-        run_checked_or_skip(&["list", "workspace", "--json"])
-    else {
-        return;
-    };
+    let workspaces_after_rename_output = run_checked(&["list", "workspace", "--json"]);
     let workspaces_after_rename = parse_workspaces(&workspaces_after_rename_output);
     assert!(workspaces_after_rename
         .iter()
         .any(|workspace| workspace.id == default_workspace_id && workspace.name == temporary_name));
 
-    if run_checked_or_skip(&[
+    run_checked(&[
         "rename",
         "workspace",
         &temporary_name,
         cleanup.workspace_original_name.as_deref().unwrap(),
-    ])
-    .is_none()
-    {
-        return;
-    }
+    ]);
     cleanup.workspace_temporary_name = None;
 
-    let Some(workspaces_after_restore_output) =
-        run_checked_or_skip(&["list", "workspace", "--json"])
-    else {
-        return;
-    };
+    let workspaces_after_restore_output = run_checked(&["list", "workspace", "--json"]);
     let workspaces_after_restore = parse_workspaces(&workspaces_after_restore_output);
     assert!(workspaces_after_restore.iter().any(|workspace| {
         workspace.id == default_workspace_id
@@ -968,10 +759,8 @@ fn live_cli_workspace_rename_round_trip_succeeds() {
 
 #[test]
 fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
-    if !should_run_live_tests() {
-        eprintln!("Skipping live CLI tests because TOGGL_API_TOKEN is not set.");
-        return;
-    }
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
 
     let Some(organization_id) = test_organization_id() else {
         eprintln!(
@@ -983,14 +772,12 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
 
     let workspace_name = unique_description("workspace");
 
-    let Some(organization_output) = run_checked_or_skip(&[
+    let organization_output = run_checked(&[
         "organization",
         "show",
         &organization_id.to_string(),
         "--json",
-    ]) else {
-        return;
-    };
+    ]);
     let organization_json: Value = serde_json::from_str(&organization_output)
         .expect("expected `toggl organization show --json` to return JSON");
     assert!(
@@ -999,9 +786,7 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
         organization_output
     );
 
-    let Some(workspaces_before) = run_checked_or_skip(&["list", "workspace", "--json"]) else {
-        return;
-    };
+    let workspaces_before = run_checked(&["list", "workspace", "--json"]);
     let workspaces_before = parse_workspaces(&workspaces_before);
     assert!(workspaces_before
         .iter()
@@ -1018,13 +803,6 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if is_rate_limited(&stderr) {
-                eprintln!(
-                    "Skipping live CLI test because Toggl API rate limit was hit while running `toggl create workspace {}`.\nstderr:\n{}",
-                    organization_id, stderr
-                );
-                return;
-            }
             if is_workspace_creation_disabled(&stderr) {
                 eprintln!(
                     "Skipping live workspace creation test because the configured organization does not allow multiple workspaces.\nstderr:\n{}",
@@ -1048,20 +826,14 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
         create_output
     );
 
-    let workspaces_after_create =
-        wait_for(
-            "created workspace missing from workspace list",
-            || match run_checked_or_skip(&["list", "workspace", "--json"]) {
-                Some(output) => {
-                    let workspaces = parse_workspaces(&output);
-                    workspaces
-                        .iter()
-                        .any(|workspace| workspace.name == workspace_name)
-                        .then_some(workspaces)
-                }
-                None => None,
-            },
-        );
+    let workspaces_after_create = wait_for("created workspace missing from workspace list", || {
+        let output = run_checked(&["list", "workspace", "--json"]);
+        let workspaces = parse_workspaces(&output);
+        workspaces
+            .iter()
+            .any(|workspace| workspace.name == workspace_name)
+            .then_some(workspaces)
+    });
     assert!(workspaces_after_create
         .iter()
         .any(|workspace| workspace.name == workspace_name));

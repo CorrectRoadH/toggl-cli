@@ -8,16 +8,21 @@ pub struct NetworkTimeEntry {
     pub id: i64,
     pub description: String,
     pub start: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<DateTime<Utc>>,
     pub duration: i64,
     pub billable: bool,
     #[serde(alias = "wid")]
     pub workspace_id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
     #[serde(alias = "pid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub project_id: Option<i64>,
     #[serde(alias = "tid")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub created_with: Option<String>,
 }
 
@@ -70,11 +75,13 @@ pub struct NetworkProject {
     pub name: String,
     pub workspace_id: i64,
     pub client_id: Option<i64>,
+    #[serde(default)]
     pub is_private: bool,
     pub active: bool,
     pub at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub server_deleted_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub color: String,
     pub billable: Option<bool>,
 }
@@ -228,7 +235,8 @@ impl From<TimeEntry> for NetworkTimeEntry {
 
 #[cfg(test)]
 mod tests {
-    use super::NetworkTimeEntry;
+    use super::{NetworkProject, NetworkTimeEntry};
+    use chrono::{DateTime, Utc};
 
     #[test]
     fn network_time_entry_accepts_both_long_and_short_id_fields() {
@@ -254,5 +262,57 @@ mod tests {
         assert_eq!(entry.workspace_id, 3550374);
         assert_eq!(entry.project_id, Some(212780915));
         assert_eq!(entry.task_id, None);
+    }
+
+    #[test]
+    fn network_time_entry_omits_optional_none_fields_when_serialized() {
+        let entry = NetworkTimeEntry {
+            id: 1,
+            description: "entry".to_string(),
+            start: DateTime::parse_from_rfc3339("2026-03-06T15:09:03Z")
+                .expect("valid RFC3339")
+                .with_timezone(&Utc),
+            stop: None,
+            duration: -1,
+            billable: false,
+            workspace_id: 3550374,
+            tags: None,
+            project_id: None,
+            task_id: None,
+            created_with: None,
+        };
+
+        let serialized =
+            serde_json::to_value(entry).expect("expected network time entry to serialize");
+        let object = serialized
+            .as_object()
+            .expect("expected serialized network time entry to be an object");
+
+        assert!(!object.contains_key("stop"));
+        assert!(!object.contains_key("tags"));
+        assert!(!object.contains_key("project_id"));
+        assert!(!object.contains_key("task_id"));
+        assert!(!object.contains_key("created_with"));
+    }
+
+    #[test]
+    fn network_project_defaults_is_private_when_missing() {
+        let project: NetworkProject = serde_json::from_str(
+            r##"{
+                "id": 3,
+                "name": "Project",
+                "workspace_id": 1,
+                "client_id": null,
+                "active": true,
+                "at": "2026-03-06T15:09:03Z",
+                "created_at": "2026-03-06T15:09:03Z",
+                "server_deleted_at": null,
+                "color": "#000000",
+                "billable": null
+            }"##,
+        )
+        .expect("expected network project to deserialize");
+
+        assert!(!project.is_private);
     }
 }
