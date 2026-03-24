@@ -1,18 +1,14 @@
 [English](README.md) | 中文
 
-# toggl-cli（活跃维护 Fork）
+# toggl-cli
 
 [![codecov](https://codecov.io/gh/CorrectRoadH/toggl-cli/graph/badge.svg?branch=main)](https://codecov.io/gh/CorrectRoadH/toggl-cli)
 
-> **注意**：这是 [watercooler-labs/toggl-cli](https://github.com/watercooler-labs/toggl-cli) 的活跃维护 fork。上游项目长期缺乏维护，因此我 fork 出来持续开发，加入了大量新功能，并特别关注 **对 AI Agent 的友好性**。
+`toggl-cli` 是一个用 Rust 编写的非官方命令行工具，可同时连接 [Toggl Track](https://toggl.com/track/) 和 [OpenToggl](https://opentoggl.com)。
 
-非官方的 [Toggl Track](https://toggl.com/track/) 命令行工具，使用 Rust 编写，基于 [v9 API](https://developers.track.toggl.com/docs/)。
-
-这个 fork 更强调功能完整性、日常使用体验，以及与 AI Agent 和自动化工具协作时的顺滑程度。
+不管你使用官方 Toggl，还是自托管的 OpenToggl，都可以保持同一套 CLI 工作流。
 
 ## 安装
-
-### 通过 npm 安装（推荐）
 
 ```shell
 npm install -g @correctroadh/toggl-cli
@@ -24,60 +20,65 @@ npm install -g @correctroadh/toggl-cli
 toggl --help
 ```
 
-## Agent 一键安装（CLI + Skill）
+## 快速开始
 
-### Claude Code
+你可以按下面两种方式接入：
+
+- 如果你只是想直接使用托管服务，就连接官方 Toggl Track
+- 如果你被 Toggl 的 rate limit 困扰，或者你需要 self-hosting，推荐使用 [OpenToggl](https://opentoggl.com)。它是一个可自托管、与 Toggl 1:1 兼容的替代方案
+
+### 连接官方 Toggl Track
 
 ```shell
-npm install -g @correctroadh/toggl-cli && mkdir -p ~/.claude/skills/toggl-cli && wget -qO ~/.claude/skills/toggl-cli/SKILL.md https://raw.githubusercontent.com/CorrectRoadH/toggl-cli/main/skills/toggl-cli/SKILL.md
+toggl auth <YOUR_API_TOKEN>
 ```
 
-### OpenClaw
+### 连接 OpenToggl
 
 ```shell
-npm install -g @correctroadh/toggl-cli && mkdir -p ~/.openclaw/skills/toggl-cli && wget -qO ~/.openclaw/skills/toggl-cli/SKILL.md https://raw.githubusercontent.com/CorrectRoadH/toggl-cli/main/skills/toggl-cli/SKILL.md
+toggl auth <YOUR_API_TOKEN> --type opentoggl --api-url https://your-instance.com/api/v9
 ```
 
-### 首次配置
-
-首先运行 `auth` 命令，配置你的 [Toggl API Token](https://support.toggl.com/en/articles/3116844-where-is-my-api-token-located)。
+也可以使用交互式认证：
 
 ```shell
-toggl auth [API_TOKEN]
+toggl auth
 ```
 
 API Token 会通过 [keyring](https://crates.io/crates/keyring) 安全存储在系统钥匙串中。
 
-> **注意**：在部分 Linux 环境下，keyring 存储在重启后可能不持久。建议在 shell 配置文件中导出环境变量 `TOGGL_API_TOKEN`，CLI 会优先使用该变量，无需再运行 `auth` 命令。
+> 在部分 Linux 环境下，keyring 可能无法跨重启持久保存。这种情况下，建议直接在 shell 配置中设置 `TOGGL_API_TOKEN`。
+
+## 为什么用 `toggl-cli`
+
+- 同时支持官方 Toggl Track 和自托管 OpenToggl
+- 覆盖日常时间追踪、项目、任务、标签等常见操作
+- 内置本地 HTTP 缓存，减少频繁读取时的重复 API 请求
+- 支持交互式认证和命令流程，不想记完整参数时更方便
 
 ## 常用命令
 
 ```shell
-toggl start "写代码" -p 我的项目 -t tag1 tag2        # 开始计时
-toggl stop                                           # 停止计时
-toggl current                                        # 查看当前计时
-toggl list -n 10                                     # 列出最近10条记录
-toggl list --since 2026-03-06 --until 2026-03-06    # 只看本地时区的某一天
-toggl list --since "2026-03-06 09:00" --until "2026-03-06 18:30" # 只看精确时间区间
-toggl edit time-entry [ID] --description "新描述"     # 编辑时间条目
-toggl delete [ID]                                    # 删除时间条目
-toggl create project "新项目"                        # 创建项目
-toggl create task --project 我的项目 "代码评审"       # 在项目下创建任务
-toggl rename project "旧名" "新名"                   # 重命名项目
-toggl create tag "新标签"                            # 创建标签
-toggl rename tag "旧名" "新名"                       # 重命名标签
-toggl create workspace 12345 "新空间"                # 在指定组织下创建 workspace
-toggl rename workspace "旧空间" "新空间"              # 重命名 workspace
-toggl preferences                                    # 查看当前偏好设置
-toggl edit preferences '{"time_format":"H:mm"}'      # 更新偏好设置
-toggl edit task --project 我的项目 "代码评审" --new-name "CR" # 更新任务
-toggl delete task --project 我的项目 "CR"             # 删除任务
-toggl bulk-edit-time-entries 101 102 --json '[{"op":"replace","path":"/description","value":"深度工作"}]' # 批量编辑时间记录
+# 开始和停止计时
+toggl start "写代码" -p 我的项目 -t dev cli
+toggl stop
+toggl current
+
+# 查看记录
+toggl list -n 10
+toggl list --since 2026-03-06 --until 2026-03-06
+toggl list --since "2026-03-06 09:00" --until "2026-03-06 18:30"
+
+# 管理工作区资源
+toggl create project "新项目"
+toggl create task --project 我的项目 "代码评审"
+toggl create tag "deep-work"
 ```
 
-对于 `toggl list`，如果 `--since` / `--until` 传的是纯日期 `YYYY-MM-DD`，会按本地时区解释：
-`--since` 表示当天 `00:00:00` 开始，`--until` 表示包含整天的结束边界。因此要只看某一天，两个参数传同一天即可。
+对于 `toggl list`，如果传入的是纯日期 `YYYY-MM-DD`，会按本地时区解释。`--since` 表示当天开始，`--until` 表示包含整天。
+
+更多命令请运行 `toggl help`。
 
 ---
 
-由 [CorrectRoadH](https://github.com/CorrectRoadH) 维护 | 上游：[Watercooler Studio](https://watercooler.studio/)
+由 [CorrectRoadH](https://github.com/CorrectRoadH) 维护 | 上游：[watercooler-labs/toggl-cli](https://github.com/watercooler-labs/toggl-cli)
