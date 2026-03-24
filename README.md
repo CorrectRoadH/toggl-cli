@@ -129,8 +129,30 @@ SUBCOMMANDS:
 
 The first command you need to run is `auth` to set up your [Toggl API token](https://support.toggl.com/en/articles/3116844-where-is-my-api-token-located).
 
+### Interactive Authentication
+
+Run without arguments for interactive mode:
+
 ```shell
-toggl auth [API_TOKEN]
+toggl auth
+```
+
+You will be prompted to:
+1. Select service provider (Official Toggl Track or OpenToggl self-hosted)
+2. Enter your API token
+
+For OpenToggl, you can accept the default URL (`https://localhost:8080/api/v9`) or enter a custom URL.
+
+### Direct Authentication
+
+For non-interactive setup, provide the API token and service type directly:
+
+```shell
+# Official Toggl Track
+toggl auth <API_TOKEN> --type official
+
+# OpenToggl (self-hosted) with default URL
+toggl auth <API_TOKEN> --type opentoggl
 ```
 
 The API token is stored securely in your Operating System's keychain using the [keyring](https://crates.io/crates/keyring) crate.
