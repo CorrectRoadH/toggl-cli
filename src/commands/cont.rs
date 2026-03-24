@@ -121,8 +121,21 @@ mod tests {
 
     #[test]
     fn get_first_stopped_time_entry_uses_latest_stopped_entry_when_nothing_was_running() {
-        let latest = mock_time_entry(1, "Latest");
-        let older = mock_time_entry(2, "Older");
+        let now = Utc::now();
+        let latest = TimeEntry {
+            id: 1,
+            description: "Latest".to_string(),
+            duration: 60,
+            stop: Some(now),
+            ..Default::default()
+        };
+        let older = TimeEntry {
+            id: 2,
+            description: "Older".to_string(),
+            duration: 60,
+            stop: Some(now - chrono::Duration::seconds(10)),
+            ..Default::default()
+        };
 
         let result = get_first_stopped_time_entry(vec![latest.clone(), older], None);
 
