@@ -419,9 +419,9 @@ pub enum ConfigAction {
 
 #[derive(Subcommand, Debug)]
 pub enum AuthAction {
-    /// Login with your Toggl API token.
+    /// Login with your Toggl API token (interactive if no arguments provided).
     Login {
-        #[arg(help = "API token for authentication")]
+        #[arg(help = "API token for authentication (omit to enter interactively)")]
         api_token: Option<String>,
         #[arg(long, help = "Toggl service type: 'official' or 'opentoggl'")]
         api_type: Option<String>,
