@@ -1,0 +1,40 @@
+{
+  "featureId": "auth-provider-session-redesign",
+  "reviewedAt": "2026-03-25T05:09:00.467605+00:00",
+  "commitId": "66a6b2d",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds an auth status surface and login subcommand, but the implementation does not fully satisfy the milestone auth UX requirements. The status command infers provider/source heuristically instead of reporting the explicit provider model, and it misses actionable handling for invalid custom API URL environment state.",
+    "issues": [
+      {
+        "file": "src/commands/auth_status.rs",
+        "line": 32,
+        "severity": "blocking",
+        "description": "Auth status treats any non-empty TOGGL_API_URL as a valid custom/OpenToggl provider and marks the session authenticated whenever TOGGL_API_TOKEN is non-empty. This bypasses validation of malformed or invalid API URLs, so `toggl auth status` cannot satisfy the requirement for actionable invalid provider/API URL failures and can report a broken env session as healthy."
+      },
+      {
+        "file": "src/commands/auth_status.rs",
+        "line": 162,
+        "severity": "blocking",
+        "description": "The reported credential precedence is hard-coded as `Environment > Keychain > None`, omitting CLI login flags and future profile-ready config that the feature description and validation contract require to be explicit and testable. This output can mislead users because it documents a precedence model the command does not actually resolve or expose."
+      },
+      {
+        "file": "src/main.rs",
+        "line": 498,
+        "severity": "non_blocking",
+        "description": "The new `auth login` surface still falls back to interactive provider/API URL prompts and accepts legacy positional auth args, which keeps auth behavior partly actionless rather than fully resource-first. This weakens the redesign goal and is not called out in shared-state guidance."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The repo library documents env-first local debug behavior but does not record that auth status currently infers provider solely from presence of TOGGL_API_URL and does not validate env-backed custom URLs. Reviewing this feature required reading the new command implementation to discover that gap.",
+      "evidence": ".factory/library/environment.md describes fake env usage, but src/commands/auth_status.rs:32-39 and 48-57 show status classification is derived only from TOGGL_API_URL presence and stored api_url presence."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed commit 66a6b2d, the worker handoff, transcript skeleton, and shared-state docs. The feature is not ready to pass because auth status can present malformed env-backed custom sessions as authenticated/healthy and its precedence output is incomplete relative to the milestone contract."
+}

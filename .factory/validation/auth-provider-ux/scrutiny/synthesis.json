@@ -1,0 +1,51 @@
+{
+  "milestone": "auth-provider-ux",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo test --bin toggl",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo fmt --check && cargo clippy --bin toggl -- -D warnings",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "auth-provider-session-redesign"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "auth-provider-session-redesign",
+      "severity": "blocking",
+      "description": "Auth status treats any non-empty TOGGL_API_URL as a valid custom/OpenToggl provider and reports the session authenticated whenever TOGGL_API_TOKEN is non-empty, so malformed or invalid env-backed API URL state is surfaced as healthy instead of actionable."
+    },
+    {
+      "featureId": "auth-provider-session-redesign",
+      "severity": "blocking",
+      "description": "The reported credential precedence is hard-coded as `Environment > Keychain > None`, omitting CLI login flags and future profile-ready config required by the milestone contract, so the command exposes an incomplete and potentially misleading precedence model."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
+    {
+      "observation": "Document in shared library that auth status infers provider solely from TOGGL_API_URL presence and does not validate env-backed custom URLs.",
+      "reason": "The observation describes a current implementation gap that should be fixed in code rather than documented as project knowledge while the behavior is still incorrect."
+    }
+  ],
+  "previousRound": null
+}
