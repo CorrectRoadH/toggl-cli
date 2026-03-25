@@ -68,7 +68,7 @@ pub enum Command {
         action: WorkspaceAction,
     },
     /// Inspect organizations.
-    Organization {
+    Org {
         #[command(subcommand)]
         action: OrganizationAction,
     },
@@ -600,10 +600,10 @@ mod tests {
     }
 
     #[test]
-    fn organization_list_parses() {
-        let cmd = Cli::try_parse_from(["toggl", "organization", "list"]).expect("should parse");
+    fn org_list_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "org", "list"]).expect("should parse");
         match cmd.cmd {
-            Command::Organization {
+            Command::Org {
                 action: OrganizationAction::List { json: false },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),

@@ -104,7 +104,7 @@ async fn execute_subcommand(args: Cli) -> ResultWithDefaultError<()> {
             let api_client = get_api_client(args.proxy.clone())?;
             execute_workspace_command(action, api_client).await
         }
-        Command::Organization { action } => {
+        Command::Org { action } => {
             let api_client = get_api_client(args.proxy.clone())?;
             execute_organization_command(action, api_client).await
         }
