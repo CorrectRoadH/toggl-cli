@@ -1,0 +1,34 @@
+{
+  "featureId": "foundation-local-env-and-output-contract",
+  "reviewedAt": "2026-03-25T04:26:52Z",
+  "commitId": "8ef4182",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The reviewed commit does not implement this foundation feature. The worker handoff incorrectly claimed the behavior already existed, but the diff for commit 8ef4182 only covers the clap/resource-tree migration and leaves key output/error contract gaps in place.",
+    "issues": [
+      {
+        "file": "src/main.rs",
+        "line": 189,
+        "severity": "blocking",
+        "description": "Missing-argument failures for `entry show`, `entry delete`, and `entry bulk-edit` print an error to stderr but still return `Ok(())`, so the process exits 0 instead of satisfying the required non-zero fatal error contract."
+      },
+      {
+        "file": "src/main.rs",
+        "line": 187,
+        "severity": "blocking",
+        "description": "These missing-argument checks are implemented manually after the authenticated API client is created. For parser-only flows like `entry show` without an ID, the CLI touches `get_api_client()`/credential storage before reporting the usage error, violating the requirement that help/parser-only flows stay keychain-free."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker reported this feature as already implemented without comparing the assigned feature to the actual diff/commit. The handoff claims no code changes were needed even though commit 8ef4182 is a parser-migration commit and does not add the promised output-contract behavior.",
+      "evidence": "Handoff 2026-03-25T04-22-01-327Z__foundation-local-env-and-output-contract__9421933f-ddab-4148-9a20-6bf4746609da.json says 'No code changes were required'; `git show 8ef4182` shows only the clap/resource-tree migration plus .factory scaffolding."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: the assigned feature was not implemented in commit 8ef4182. Fatal usage errors still exit successfully, and parser-only missing-argument flows still bootstrap credentials before failing."
+}
