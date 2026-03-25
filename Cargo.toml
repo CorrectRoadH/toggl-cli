@@ -21,7 +21,7 @@ edition = "2021"
 
 [dependencies]
 # Argument parsing
-structopt = { version = "0.3" }
+clap = { version = "4.5", features = ["derive", "env"] }
 
 # Terminal utilities
 colored = "2.0.0"

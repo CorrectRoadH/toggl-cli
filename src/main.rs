@@ -13,11 +13,12 @@ use utilities::read_from_stdin_with_constraints;
 
 use api::client::ApiClient;
 use api::client::V9ApiClient;
-use arguments::CommandLineArguments;
-use arguments::ConfigSubCommand;
+use arguments::Cli;
 use arguments::{
-    Command, CreateEntity, DeleteEntity, EditEntity, OrganizationEntity, RenameEntity,
+    ClientAction, Command, ConfigAction, EntryAction, OrganizationAction, PreferencesAction,
+    ProjectAction, TagAction, TaskAction, WorkspaceAction,
 };
+use clap::Parser;
 use commands::auth::AuthenticationCommand;
 use commands::bulk_edit_time_entries::BulkEditTimeEntriesCommand;
 use commands::cont::ContinueCommand;
@@ -34,7 +35,7 @@ use commands::delete_task::DeleteTaskCommand;
 use commands::edit::EditCommand;
 use commands::list::ListCommand;
 use commands::me::MeCommand;
-use commands::organization::{OrganizationAction, OrganizationCommand};
+use commands::organization::OrganizationCommand;
 use commands::preferences::PreferencesCommand;
 use commands::rename_client::RenameClientCommand;
 use commands::rename_project::RenameProjectCommand;
@@ -50,14 +51,13 @@ use credentials::get_storage;
 use credentials::Credentials;
 use models::ResultWithDefaultError;
 use once_cell::sync::OnceCell;
-use std::io::{self, Write};
-use structopt::StructOpt;
+use std::io::{self};
 
 static CACHED_CREDENTIALS: OnceCell<Credentials> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> ResultWithDefaultError<()> {
-    let parsed_args = CommandLineArguments::from_args();
+    let parsed_args = Cli::parse();
     match execute_subcommand(parsed_args).await {
         Ok(()) => Ok(()),
         Err(error) => {
@@ -67,25 +67,57 @@ async fn main() -> ResultWithDefaultError<()> {
     }
 }
 
-async fn execute_subcommand(args: CommandLineArguments) -> ResultWithDefaultError<()> {
+async fn execute_subcommand(args: Cli) -> ResultWithDefaultError<()> {
     setup_working_directory(args.directory)?;
 
-    let cmd = args.cmd;
-    if let Some(Command::Auth {
-        api_token,
-        api_type,
-        api_url,
-    }) = cmd
-    {
-        return execute_auth_command(api_token, api_type, api_url, args.proxy).await;
-    }
-
-    let api_client = get_api_client(args.proxy.clone())?;
     let picker = picker::get_picker(args.fzf);
 
-    match cmd {
-        None => RunningTimeEntryCommand::execute(api_client).await,
-        Some(subcommand) => execute_command(subcommand, api_client, picker, args.proxy).await,
+    match args.cmd {
+        Command::Auth {
+            api_token,
+            api_type,
+            api_url,
+        } => execute_auth_command(api_token, api_type, api_url, args.proxy).await,
+        Command::Logout => execute_logout_command().await,
+        Command::Me => {
+            let api_client = get_api_client(args.proxy.clone())?;
+            MeCommand::execute(api_client).await
+        }
+        Command::Entry { action } => execute_entry_command(action, args.proxy, picker).await,
+        Command::Project { action } => {
+            let api_client = get_api_client(args.proxy.clone())?;
+            execute_project_command(action, api_client).await
+        }
+        Command::Tag { action } => {
+            let api_client = get_api_client(args.proxy.clone())?;
+            execute_tag_command(action, api_client).await
+        }
+        Command::Client { action } => {
+            let api_client = get_api_client(args.proxy.clone())?;
+            execute_client_command(action, api_client).await
+        }
+        Command::Task { action } => {
+            let api_client = get_api_client(args.proxy.clone())?;
+            execute_task_command(action, api_client).await
+        }
+        Command::Workspace { action } => {
+            let api_client = get_api_client(args.proxy.clone())?;
+            execute_workspace_command(action, api_client).await
+        }
+        Command::Organization { action } => {
+            let api_client = get_api_client(args.proxy.clone())?;
+            execute_organization_command(action, api_client).await
+        }
+        Command::Preferences { action } => {
+            let api_client = get_api_client(args.proxy.clone())?;
+            execute_preferences_command(action, api_client).await
+        }
+        Command::Config {
+            edit,
+            delete,
+            path,
+            cmd,
+        } => execute_config_command(edit, delete, path, cmd).await,
     }
 }
 
@@ -102,34 +134,28 @@ fn setup_working_directory(directory: Option<std::path::PathBuf>) -> ResultWithD
     Ok(())
 }
 
-async fn execute_command(
-    command: Command,
-    api_client: impl ApiClient,
-    picker: Box<dyn picker::ItemPicker>,
+async fn execute_entry_command(
+    action: EntryAction,
     proxy: Option<String>,
+    picker: Box<dyn picker::ItemPicker>,
 ) -> ResultWithDefaultError<()> {
-    match command {
-        Command::Stop => {
-            StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await?;
-            Ok(())
-        }
+    let api_client = get_api_client(proxy.clone())?;
 
-        Command::Continue { interactive } => {
-            let picker_option = if interactive { Some(picker) } else { None };
-            ContinueCommand::execute(api_client, picker_option).await
+    match action {
+        EntryAction::Current | EntryAction::Running => {
+            RunningTimeEntryCommand::execute(api_client).await
         }
-
-        Command::List {
+        EntryAction::List {
             number,
             json,
             since,
             until,
-            entity,
-        } => ListCommand::execute(api_client, number, json, since, until, entity).await,
-
-        Command::Current | Command::Running => RunningTimeEntryCommand::execute(api_client).await,
-
-        Command::Start {
+        } => ListCommand::execute(api_client, number, json, since, until, None).await,
+        EntryAction::Stop => {
+            StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await?;
+            Ok(())
+        }
+        EntryAction::Start {
             interactive,
             billable,
             description,
@@ -153,50 +179,18 @@ async fn execute_command(
             )
             .await
         }
-
-        Command::Edit { entity } => execute_edit_command(entity, api_client).await,
-
-        Command::Delete { entity, id } => execute_delete_command(entity, id, api_client).await,
-
-        Command::BulkEditTimeEntries { ids, json } => {
-            execute_bulk_edit_command(ids, json, api_client).await
+        EntryAction::Continue { interactive } => {
+            let picker_option = if interactive { Some(picker) } else { None };
+            ContinueCommand::execute(api_client, picker_option).await
         }
-
-        Command::Create { entity } => execute_create_command(entity, api_client).await,
-
-        Command::Rename { entity } => execute_rename_command(entity, api_client).await,
-
-        Command::Show { id, json } => execute_show_command(id, json, api_client).await,
-
-        Command::Me => MeCommand::execute(api_client).await,
-
-        Command::Organization { entity } => execute_organization_command(entity, api_client).await,
-
-        Command::Preferences => PreferencesCommand::execute(api_client).await,
-
-        Command::Auth {
-            api_token,
-            api_type,
-            api_url,
-        } => execute_auth_command(api_token, api_type, api_url, proxy).await,
-
-        Command::Logout => execute_logout_command().await,
-
-        Command::Config {
-            delete,
-            cmd,
-            edit,
-            path,
-        } => execute_config_command(cmd, delete, edit, path).await,
-    }
-}
-
-async fn execute_edit_command(
-    entity: EditEntity,
-    api_client: impl ApiClient,
-) -> ResultWithDefaultError<()> {
-    match entity {
-        EditEntity::TimeEntry {
+        EntryAction::Show { id, json } => match id {
+            Some(id) => ShowCommand::execute(api_client, id, json).await,
+            None => {
+                eprintln!("error: 'show' requires an entry ID");
+                Ok(())
+            }
+        },
+        EntryAction::Update {
             id,
             description,
             billable,
@@ -219,7 +213,131 @@ async fn execute_edit_command(
             )
             .await
         }
-        EditEntity::Task {
+        EntryAction::Delete { id } => match id {
+            Some(id) => DeleteCommand::execute(api_client, id).await,
+            None => {
+                eprintln!("error: 'delete' requires an entry ID");
+                Ok(())
+            }
+        },
+        EntryAction::BulkEdit { ids, json } => match json {
+            Some(json) => BulkEditTimeEntriesCommand::execute(api_client, ids, json).await,
+            None => {
+                eprintln!("error: 'bulk-edit' requires --json flag with JSON payload");
+                Ok(())
+            }
+        },
+    }
+}
+
+async fn execute_project_command(
+    action: ProjectAction,
+    api_client: impl ApiClient,
+) -> ResultWithDefaultError<()> {
+    match action {
+        ProjectAction::List { json } => {
+            ListCommand::execute(
+                api_client,
+                None,
+                json,
+                None,
+                None,
+                Some(arguments::Entity::Project { json }),
+            )
+            .await
+        }
+        ProjectAction::Create { name, color } => {
+            CreateProjectCommand::execute(api_client, name, color).await
+        }
+        ProjectAction::Rename { old_name, new_name } => {
+            RenameProjectCommand::execute(api_client, old_name, new_name).await
+        }
+        ProjectAction::Delete { name } => DeleteProjectCommand::execute(api_client, name).await,
+    }
+}
+
+async fn execute_tag_command(
+    action: TagAction,
+    api_client: impl ApiClient,
+) -> ResultWithDefaultError<()> {
+    match action {
+        TagAction::List { json } => {
+            ListCommand::execute(
+                api_client,
+                None,
+                json,
+                None,
+                None,
+                Some(arguments::Entity::Tag { json }),
+            )
+            .await
+        }
+        TagAction::Create { name } => CreateTagCommand::execute(api_client, name).await,
+        TagAction::Rename { old_name, new_name } => {
+            RenameTagCommand::execute(api_client, old_name, new_name).await
+        }
+        TagAction::Delete { name } => DeleteTagCommand::execute(api_client, name).await,
+    }
+}
+
+async fn execute_client_command(
+    action: ClientAction,
+    api_client: impl ApiClient,
+) -> ResultWithDefaultError<()> {
+    match action {
+        ClientAction::List { json } => {
+            ListCommand::execute(
+                api_client,
+                None,
+                json,
+                None,
+                None,
+                Some(arguments::Entity::Client { json }),
+            )
+            .await
+        }
+        ClientAction::Create { name } => CreateClientCommand::execute(api_client, name).await,
+        ClientAction::Rename { old_name, new_name } => {
+            RenameClientCommand::execute(api_client, old_name, new_name).await
+        }
+        ClientAction::Delete { name } => DeleteClientCommand::execute(api_client, name).await,
+    }
+}
+
+async fn execute_task_command(
+    action: TaskAction,
+    api_client: impl ApiClient,
+) -> ResultWithDefaultError<()> {
+    match action {
+        TaskAction::List { json } => {
+            ListCommand::execute(
+                api_client,
+                None,
+                json,
+                None,
+                None,
+                Some(arguments::Entity::Task { json }),
+            )
+            .await
+        }
+        TaskAction::Create {
+            project,
+            name,
+            active,
+            estimated_seconds,
+            user_id,
+        } => {
+            CreateTaskCommand::execute(
+                api_client,
+                project,
+                name,
+                active,
+                estimated_seconds,
+                user_id,
+            )
+            .await
+        }
+        TaskAction::Update {
             project,
             name,
             new_name,
@@ -238,121 +356,98 @@ async fn execute_edit_command(
             )
             .await
         }
-        EditEntity::Preferences { json } => {
-            UpdatePreferencesCommand::execute(api_client, json).await
+        TaskAction::Rename {
+            project,
+            old_name,
+            new_name,
+        } => {
+            UpdateTaskCommand::execute(
+                api_client,
+                project,
+                old_name,
+                Some(new_name),
+                None,
+                None,
+                None,
+            )
+            .await
+        }
+        TaskAction::Delete { project, name } => {
+            DeleteTaskCommand::execute(api_client, project, name).await
         }
     }
 }
 
-async fn execute_delete_command(
-    entity: Option<DeleteEntity>,
-    id: Option<i64>,
+async fn execute_workspace_command(
+    action: WorkspaceAction,
     api_client: impl ApiClient,
 ) -> ResultWithDefaultError<()> {
-    match entity {
-        Some(delete_entity) => match delete_entity {
-            DeleteEntity::Project { name } => DeleteProjectCommand::execute(api_client, name).await,
-            DeleteEntity::Tag { name } => DeleteTagCommand::execute(api_client, name).await,
-            DeleteEntity::Client { name } => DeleteClientCommand::execute(api_client, name).await,
-            DeleteEntity::Task { project, name } => {
-                DeleteTaskCommand::execute(api_client, project, name).await
-            }
-        },
-        None => match id {
-            Some(id) => DeleteCommand::execute(api_client, id).await,
-            None => print_help_message("delete"),
-        },
-    }
-}
-
-async fn execute_bulk_edit_command(
-    ids: Vec<i64>,
-    json: Option<String>,
-    api_client: impl ApiClient,
-) -> ResultWithDefaultError<()> {
-    match json {
-        Some(json) => BulkEditTimeEntriesCommand::execute(api_client, ids, json).await,
-        None => print_help_message("bulk-edit-time-entries"),
-    }
-}
-
-async fn execute_create_command(
-    entity: CreateEntity,
-    api_client: impl ApiClient,
-) -> ResultWithDefaultError<()> {
-    match entity {
-        CreateEntity::Project { name, color } => {
-            CreateProjectCommand::execute(api_client, name, color).await
+    match action {
+        WorkspaceAction::List { json } => {
+            ListCommand::execute(
+                api_client,
+                None,
+                json,
+                None,
+                None,
+                Some(arguments::Entity::Workspace { json }),
+            )
+            .await
         }
-        CreateEntity::Tag { name } => CreateTagCommand::execute(api_client, name).await,
-        CreateEntity::Client { name } => CreateClientCommand::execute(api_client, name).await,
-        CreateEntity::Workspace {
+        WorkspaceAction::Create {
             organization_id,
             name,
         } => CreateWorkspaceCommand::execute(api_client, organization_id, name).await,
-        CreateEntity::Task {
-            project,
-            name,
-            active,
-            estimated_seconds,
-            user_id,
-        } => {
-            CreateTaskCommand::execute(
+        WorkspaceAction::Rename { old_name, new_name } => {
+            RenameWorkspaceCommand::execute(api_client, old_name, new_name).await
+        }
+    }
+}
+
+async fn execute_organization_command(
+    action: OrganizationAction,
+    api_client: impl ApiClient,
+) -> ResultWithDefaultError<()> {
+    match action {
+        OrganizationAction::List { json } => {
+            OrganizationCommand::execute(
                 api_client,
-                project,
-                name,
-                active,
-                estimated_seconds,
-                user_id,
+                commands::organization::OrganizationAction::List { json },
+            )
+            .await
+        }
+        OrganizationAction::Show { id, json } => {
+            OrganizationCommand::execute(
+                api_client,
+                commands::organization::OrganizationAction::Show { id, json },
             )
             .await
         }
     }
 }
 
-async fn execute_rename_command(
-    entity: RenameEntity,
+async fn execute_preferences_command(
+    action: PreferencesAction,
     api_client: impl ApiClient,
 ) -> ResultWithDefaultError<()> {
-    match entity {
-        RenameEntity::Project { old_name, new_name } => {
-            RenameProjectCommand::execute(api_client, old_name, new_name).await
-        }
-        RenameEntity::Tag { old_name, new_name } => {
-            RenameTagCommand::execute(api_client, old_name, new_name).await
-        }
-        RenameEntity::Client { old_name, new_name } => {
-            RenameClientCommand::execute(api_client, old_name, new_name).await
-        }
-        RenameEntity::Workspace { old_name, new_name } => {
-            RenameWorkspaceCommand::execute(api_client, old_name, new_name).await
+    match action {
+        PreferencesAction::Read => PreferencesCommand::execute(api_client).await,
+        PreferencesAction::Update { json } => {
+            UpdatePreferencesCommand::execute(api_client, json).await
         }
     }
 }
 
-async fn execute_show_command(
-    id: Option<i64>,
-    json: bool,
-    api_client: impl ApiClient,
+async fn execute_config_command(
+    edit: bool,
+    delete: bool,
+    path: bool,
+    cmd: Option<ConfigAction>,
 ) -> ResultWithDefaultError<()> {
-    match id {
-        Some(id) => ShowCommand::execute(api_client, id, json).await,
-        None => print_help_message("show"),
-    }
-}
-
-async fn execute_organization_command(
-    entity: Option<OrganizationEntity>,
-    api_client: impl ApiClient,
-) -> ResultWithDefaultError<()> {
-    match entity {
-        Some(OrganizationEntity::List { json }) => {
-            OrganizationCommand::execute(api_client, OrganizationAction::List { json }).await
-        }
-        Some(OrganizationEntity::Show { id, json }) => {
-            OrganizationCommand::execute(api_client, OrganizationAction::Show { id, json }).await
-        }
-        None => print_help_message("organization"),
+    match cmd {
+        Some(ConfigAction::Init) => config::init::ConfigInitCommand::execute(edit).await,
+        Some(ConfigAction::Active) => config::active::ConfigActiveCommand::execute().await,
+        None => config::manage::ConfigManageCommand::execute(delete, edit, path).await,
     }
 }
 
@@ -375,7 +470,7 @@ async fn execute_auth_command(
             Some(url)
         }
         (Some(t), None) => {
-            eprintln!("Invalid --type '{}'. Use 'official' or 'opentoggl'.", t);
+            eprintln!("Invalid --api-type '{}'. Use 'official' or 'opentoggl'.", t);
             return Ok(());
         }
         (None, None) => {
@@ -431,41 +526,10 @@ async fn execute_logout_command() -> ResultWithDefaultError<()> {
     Ok(())
 }
 
-async fn execute_config_command(
-    cmd: Option<ConfigSubCommand>,
-    delete: bool,
-    edit: bool,
-    path: bool,
-) -> ResultWithDefaultError<()> {
-    match cmd {
-        Some(config_command) => match config_command {
-            ConfigSubCommand::Init => config::init::ConfigInitCommand::execute(edit).await,
-            ConfigSubCommand::Active => config::active::ConfigActiveCommand::execute().await,
-        },
-        None => config::manage::ConfigManageCommand::execute(delete, edit, path).await,
-    }
-}
-
 fn get_api_client(proxy: Option<String>) -> ResultWithDefaultError<impl ApiClient> {
     let credentials = CACHED_CREDENTIALS.get_or_try_init(|| {
         let storage = get_storage();
         storage.read()
     })?;
     V9ApiClient::from_credentials(credentials.clone(), proxy)
-}
-
-fn print_help_message(command: &str) -> ResultWithDefaultError<()> {
-    let args = ["toggl", command, "--help"];
-    match CommandLineArguments::from_iter_safe(args) {
-        Ok(_) => Ok(()),
-        Err(error) => {
-            error
-                .write_to(&mut io::stdout())
-                .map_err(|err| -> Box<dyn std::error::Error + Send> { Box::new(err) })?;
-            io::stdout()
-                .flush()
-                .map_err(|err| -> Box<dyn std::error::Error + Send> { Box::new(err) })?;
-            Ok(())
-        }
-    }
 }
