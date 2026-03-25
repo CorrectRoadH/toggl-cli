@@ -1,0 +1,15 @@
+{
+  "featureId": "runtime-dotenv-commit-and-regression-coverage-fix",
+  "reviewedAt": "2026-03-25T06:30:00Z",
+  "commitId": "e3636d5e5949fd268850104d8299c8520cefcad7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix addresses the prior scrutiny failure: commit e3636d5 contains the runtime dotenv startup change in product code and adds focused regression coverage proving direct startup prefers a repo-local `.env` over inherited environment values before any keychain-backed fallback could matter.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/auth-provider-ux/scrutiny/reviews/runtime-dotenv-autoload-fix.json",
+  "summary": "Pass: the previously missing product-code change is now committed in `src/main.rs`, and `tests/live_cli.rs` includes a concrete regression test that launches the binary from a temp directory with a synthetic `.env` and verifies `auth status` reflects the repo-local token/API URL rather than inherited environment state. Transcript, handoff, and diff all align with the prior failure being fixed."
+}

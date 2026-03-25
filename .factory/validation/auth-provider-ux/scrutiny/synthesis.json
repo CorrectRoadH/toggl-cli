@@ -1,6 +1,6 @@
 {
   "milestone": "auth-provider-ux",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -20,32 +20,46 @@
     }
   },
   "reviewsSummary": {
-    "total": 1,
-    "passed": 0,
-    "failed": 1,
+    "total": 5,
+    "passed": 3,
+    "failed": 2,
     "failedFeatures": [
-      "auth-provider-session-redesign"
+      "auth-provider-session-redesign",
+      "runtime-dotenv-autoload-fix"
     ]
   },
   "blockingIssues": [
     {
       "featureId": "auth-provider-session-redesign",
       "severity": "blocking",
-      "description": "Auth status treats any non-empty TOGGL_API_URL as a valid custom/OpenToggl provider and reports the session authenticated whenever TOGGL_API_TOKEN is non-empty, so malformed or invalid env-backed API URL state is surfaced as healthy instead of actionable."
+      "description": "`AuthStatusCommand::get_status()` reports an environment-backed custom session as authenticated whenever `TOGGL_API_TOKEN` is set and `TOGGL_API_URL` exists, but the reviewed commit never validates that URL. A malformed value like `TOGGL_API_URL=fake` is still surfaced as a healthy custom/OpenToggl session, which violates the requirement for actionable provider failures and explicit auth/provider status introspection."
     },
     {
-      "featureId": "auth-provider-session-redesign",
+      "featureId": "runtime-dotenv-autoload-fix",
       "severity": "blocking",
-      "description": "The reported credential precedence is hard-coded as `Environment > Keychain > None`, omitting CLI login flags and future profile-ready config required by the milestone contract, so the command exposes an incomplete and potentially misleading precedence model."
+      "description": "The reviewed feature handoff claimed runtime dotenv autoload was already implemented, but commit 58b4cc9 does not include the startup dotenv call now present here. Because the feature commit lacked the product-code change, the reviewed feature could not deliver the promised direct `cargo run` behavior at its own commit."
+    },
+    {
+      "featureId": "runtime-dotenv-autoload-fix",
+      "severity": "blocking",
+      "description": "Commit 58b4cc9 had no focused regression coverage proving startup-time repo-local `.env` loading. The direct-startup regression test exists only in a later fix commit, so the feature\u2019s cited auth-status coverage would not have caught a missing startup dotenv load."
     }
   ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [],
   "rejectedObservations": [
     {
-      "observation": "Document in shared library that auth status infers provider solely from TOGGL_API_URL presence and does not validate env-backed custom URLs.",
-      "reason": "The observation describes a current implementation gap that should be fixed in code rather than documented as project knowledge while the behavior is still incorrect."
+      "observation": "The cli-worker skill now explicitly tells workers to inspect actual diff/behavior before claiming a feature is already implemented, suggesting the earlier procedure was insufficient for this case.",
+      "reason": "ambiguous"
+    },
+    {
+      "observation": "Shared library docs were updated later to state that the binary itself must auto-load `./.env` at startup, which indicates this local-debug rule was important enough to record after the failed review gap.",
+      "reason": "already-documented"
+    },
+    {
+      "observation": "The `cli-worker` skill says `tests/live_cli.rs` should only be used when real credentials are available, but this feature legitimately needed changes there to make offline milestones safe under fake local-debug credentials.",
+      "reason": "ambiguous"
     }
   ],
-  "previousRound": null
+  "previousRound": ".factory/validation/auth-provider-ux/scrutiny/synthesis.json"
 }
