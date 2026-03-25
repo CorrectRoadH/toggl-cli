@@ -105,6 +105,8 @@ pub enum EntryAction {
     List {
         #[arg(short, long, help = "Maximum number of items to print")]
         number: Option<usize>,
+        #[arg(long, help = "Maximum number of items to print (alias for --number)")]
+        limit: Option<usize>,
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
         #[arg(
@@ -118,8 +120,6 @@ pub enum EntryAction {
         )]
         until: Option<String>,
     },
-    /// Show the currently running time entry.
-    Running,
     /// Stop the currently running time entry.
     Stop,
     /// Start a new time entry, call with no arguments to start in interactive mode.
@@ -159,7 +159,7 @@ pub enum EntryAction {
         end: Option<String>,
     },
     /// Continue a previous time entry.
-    Continue {
+    Resume {
         #[arg(short, long)]
         interactive: bool,
     },
@@ -213,6 +213,7 @@ pub enum EntryAction {
         current: bool,
     },
     /// Bulk edit multiple time entries with a JSON Patch payload.
+    #[clap(hide = true)]
     BulkEdit {
         #[arg(help = "IDs of the time entries to update")]
         ids: Vec<i64>,
@@ -498,6 +499,7 @@ mod tests {
                 action:
                     EntryAction::List {
                         number: None,
+                        limit: None,
                         json: false,
                         since: None,
                         until: None,
@@ -704,17 +706,6 @@ mod tests {
     }
 
     #[test]
-    fn entry_running_parses() {
-        let cmd = Cli::try_parse_from(["toggl", "entry", "running"]).expect("should parse");
-        match cmd.cmd {
-            Command::Entry {
-                action: EntryAction::Running,
-            } => {}
-            other => panic!("unexpected parse result: {other:?}"),
-        }
-    }
-
-    #[test]
     fn entry_stop_parses() {
         let cmd = Cli::try_parse_from(["toggl", "entry", "stop"]).expect("should parse");
         match cmd.cmd {
@@ -726,11 +717,11 @@ mod tests {
     }
 
     #[test]
-    fn entry_continue_parses() {
-        let cmd = Cli::try_parse_from(["toggl", "entry", "continue"]).expect("should parse");
+    fn entry_resume_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "entry", "resume"]).expect("should parse");
         match cmd.cmd {
             Command::Entry {
-                action: EntryAction::Continue { interactive: false },
+                action: EntryAction::Resume { interactive: false },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
         }

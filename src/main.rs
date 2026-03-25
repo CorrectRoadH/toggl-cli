@@ -198,15 +198,14 @@ async fn execute_entry_command(
     let api_client = get_api_client(proxy.clone())?;
 
     match action {
-        EntryAction::Current | EntryAction::Running => {
-            RunningTimeEntryCommand::execute(api_client).await
-        }
+        EntryAction::Current => RunningTimeEntryCommand::execute(api_client).await,
         EntryAction::List {
             number,
+            limit,
             json,
             since,
             until,
-        } => ListCommand::execute(api_client, number, json, since, until, None).await,
+        } => ListCommand::execute(api_client, number.or(limit), json, since, until, None).await,
         EntryAction::Stop => {
             StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await?;
             Ok(())
@@ -235,7 +234,7 @@ async fn execute_entry_command(
             )
             .await
         }
-        EntryAction::Continue { interactive } => {
+        EntryAction::Resume { interactive } => {
             let picker_option = if interactive { Some(picker) } else { None };
             ContinueCommand::execute(api_client, picker_option).await
         }
