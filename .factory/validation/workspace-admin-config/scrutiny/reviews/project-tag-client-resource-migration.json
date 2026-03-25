@@ -1,0 +1,33 @@
+{
+  "featureId": "project-tag-client-resource-migration",
+  "reviewedAt": "2026-03-25T09:56:01.568956+00:00",
+  "commitId": "562743223ad56ac317f24b3a80873234b8b3f306",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The reviewed handoff points at commit 5627432, but that commit only adjusts the entry surface and contains no project/tag/client migration work. The actual resource-first migration for these surfaces landed earlier in commit 8ef4182, so this feature has no dedicated implementation diff for scrutiny and overstates what was delivered in the reviewed commit.",
+    "issues": [
+      {
+        "file": "src/arguments.rs",
+        "line": 27,
+        "severity": "blocking",
+        "description": "The handoff claims commit 5627432 implements or verifies the project/tag/client migration, but this commit only changes entry commands (`entry resume`, hidden `running`/`bulk-edit`, `--limit`, range validation) and does not touch the project/tag/client command surfaces at all. The reviewed feature therefore lacks a committed diff that can be attributed to this feature, so the implementation evidence does not satisfy the feature contract as scoped."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The cli-worker skill says to inspect the actual diff before claiming a feature is already implemented, but the worker still handed off this feature against an unrelated entry-surface commit instead of pointing scrutiny at the real migration commit or creating a focused follow-up commit. The procedure may need stronger guidance for features that turn out to have already landed earlier.",
+      "evidence": "Handoff /Users/ctrdh/.factory/missions/91a0a774-9335-42f8-8c2b-383d037ae490/handoffs/2026-03-25T09-38-09-241Z__project-tag-client-resource-migration__d5fab4e0-f24c-4cc3-8147-506b470f47b8.json cites commit 5627432 while explicitly stating the feature was actually implemented earlier in commit 8ef4182."
+    },
+    {
+      "area": "conventions",
+      "observation": "The shared-state docs do not explain how mission features should be completed when the required code already exists in an earlier commit, which led to a feature handoff with mismatched commit evidence.",
+      "evidence": "Mission AGENTS.md and .factory/library/*.md describe command-surface conventions and validation rules, but none document whether a worker should reuse an earlier commit, create a no-op evidence commit, or reopen feature planning when no new code changes are necessary."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed because the submitted feature evidence points to commit 5627432, which does not implement the project/tag/client resource migration. The actual migration exists in earlier code, but this feature lacks a matching committed diff and therefore cannot be approved as reviewed-scoped delivery."
+}

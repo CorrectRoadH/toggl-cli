@@ -1,0 +1,76 @@
+{
+  "milestone": "workspace-admin-config",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo test --bin toggl",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo fmt --check && cargo clippy --bin toggl -- -D warnings",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 0,
+    "failed": 3,
+    "failedFeatures": [
+      "project-tag-client-resource-migration",
+      "task-admin-and-preferences-migration",
+      "config-surface-and-entry-defaults"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "project-tag-client-resource-migration",
+      "severity": "blocking",
+      "description": "The handoff points scrutiny at commit 5627432, but that commit only changes entry commands and provides no reviewable implementation diff for the project/tag/client migration."
+    },
+    {
+      "featureId": "task-admin-and-preferences-migration",
+      "severity": "blocking",
+      "description": "The recorded commitId 5627432 is entry-surface-only and does not contain task/workspace/org/preferences migration changes, leaving the feature without matching implementation evidence."
+    },
+    {
+      "featureId": "config-surface-and-entry-defaults",
+      "severity": "blocking",
+      "description": "src/commands/start.rs silently discards config-default resolution failures via unwrap_or_else(TimeEntry::default), so invalid local config stops affecting entry creation without any user-visible error."
+    },
+    {
+      "featureId": "config-surface-and-entry-defaults",
+      "severity": "blocking",
+      "description": "The handoff cites commit 5627432 even though that commit only changes entry-surface help/range behavior and does not implement config-surface or entry-default logic."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Strengthen cli-worker handoff rules for \u201calready implemented\u201d features: require citing the actual implementing commit/diff or creating a narrowly scoped follow-up commit with reviewable evidence before marking the feature complete.",
+      "evidence": "All three workspace-admin-config feature reviews found handoffs tied to commit 5627432, which only changes entry-surface behavior and does not match two migration features or the config-default feature.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add mission/shared-state guidance for cases where required behavior already exists in earlier commits, clarifying whether workers should reuse the original implementing commit, reopen the feature, or create a dedicated evidence commit.",
+      "evidence": "The project-tag-client-resource-migration review explicitly found no shared-state instruction for how to complete a feature when the code already landed earlier, which led to mismatched commit evidence.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Document config-derived defaults and override behavior in .factory/library/environment.md.",
+      "reason": "environment.md is reserved for environment and external dependency facts; config-default behavior belongs in a different library file and was not concrete enough to apply automatically from these reviews."
+    }
+  ],
+  "previousRound": null
+}

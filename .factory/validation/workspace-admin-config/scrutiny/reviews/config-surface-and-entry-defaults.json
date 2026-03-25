@@ -1,0 +1,34 @@
+{
+  "featureId": "config-surface-and-entry-defaults",
+  "reviewedAt": "2026-03-25T09:56:30.504851Z",
+  "commitId": "5627432",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The reviewed commit does not implement this feature. It only renames entry subcommands, hides entry-only actions, adds an entry list alias, and validates since/until order. The actual config/defaults behavior exists elsewhere and still has a blocking correctness gap: invalid config-derived defaults are silently discarded during entry creation instead of surfacing predictable, inspectable behavior.",
+    "issues": [
+      {
+        "file": "src/commands/start.rs",
+        "line": 154,
+        "severity": "blocking",
+        "description": "Config-derived entry defaults are swallowed on error: `track_config.get_default_entry(...).unwrap_or_else(|_| TimeEntry::default())` discards invalid config resolution (for example unknown workspace/project/task or parse failures) and starts with empty defaults instead of surfacing the problem. That breaks the feature requirement that config-derived defaults be predictable and inspectable, because a misconfigured local config silently stops affecting entry creation."
+      },
+      {
+        "file": "src/commands/start.rs",
+        "line": 342,
+        "severity": "non_blocking",
+        "description": "The start-command tests cover interactive project/task billable behavior but do not add focused coverage proving that config-derived scalar, collection, and bool defaults apply to entry creation and that explicit CLI flags override them. The handoff claims existing coverage, but the reviewed code does not show contract-level regression tests for this feature."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker marked the feature as already implemented without inspecting whether the assigned commit actually corresponded to the feature. The feature handoff references commit `5627432`, but that commit only changes entry help/range behavior and does not touch config/default logic.",
+      "evidence": "Handoff file `/Users/ctrdh/.factory/missions/91a0a774-9335-42f8-8c2b-383d037ae490/handoffs/2026-03-25T09-44-57-661Z__config-surface-and-entry-defaults__8ad2236a-52b5-4553-b6ce-cbff0a45e825.json` lists commitId `5627432`; `git show 5627432` changes only `src/arguments.rs`, `src/main.rs`, and `src/utilities.rs` for entry resume/help/range behavior. This matches neither the feature description nor the worker's own summary of config/default functionality."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the assigned handoff, transcript skeleton, cli-worker skill, shared-state files, and commit `5627432`. The review fails because the recorded commit does not implement `config-surface-and-entry-defaults`, and the current config-driven entry-default path still silently drops invalid config resolution during `entry start`, which violates the milestone's predictability/inspectability requirement."
+}
