@@ -1,7 +1,7 @@
 {
   "milestone": "core-cli-foundation",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -20,45 +20,21 @@
     }
   },
   "reviewsSummary": {
-    "total": 2,
-    "passed": 0,
-    "failed": 2,
-    "failedFeatures": [
-      "foundation-clap-command-tree",
-      "foundation-local-env-and-output-contract"
-    ]
+    "total": 4,
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "foundation-clap-command-tree",
-      "severity": "blocking",
-      "description": "The public resource tree exposes `organization` instead of the mission-defined canonical `org`, so the command surface does not match the shared-state contract."
-    },
-    {
-      "featureId": "foundation-clap-command-tree",
-      "severity": "blocking",
-      "description": "Parser coverage hard-codes `toggl organization ...` instead of validating the canonical `toggl org ...` command path."
-    },
-    {
-      "featureId": "foundation-local-env-and-output-contract",
-      "severity": "blocking",
-      "description": "Missing-argument failures for `entry show`, `entry delete`, and `entry bulk-edit` print to stderr but return success, violating the non-zero fatal error contract."
-    },
-    {
-      "featureId": "foundation-local-env-and-output-contract",
-      "severity": "blocking",
-      "description": "Parser-only missing-argument flows create the authenticated API client before failing, so they can touch credential storage instead of staying keychain-free."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skills",
       "suggestion": "Strengthen the cli-worker procedure so workers must explicitly compare the assigned feature against the actual commit/diff and verify any required shared-state reads before claiming a feature is already implemented.",
-      "evidence": "The foundation-local-env-and-output-contract worker reported no code changes were needed even though the reviewed commit only contained the clap/resource-tree migration. A separate review also noted the transcript did not show the expected pre-edit read of repo .factory/library guidance.",
+      "evidence": "The original foundation-local-env-and-output-contract review found a worker claiming no code changes were needed even though commit 8ef4182 only contained the clap/resource-tree migration. Two separate reviews also observed workers marking followedProcedure=true without the skill-required pre-edit reads of repo .factory/library guidance.",
       "isSystemic": true
     }
   ],
   "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": "/Users/ctrdh/Code/toggl-cli/.factory/validation/core-cli-foundation/scrutiny/synthesis.json"
 }
