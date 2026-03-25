@@ -174,6 +174,12 @@ async fn execute_entry_command(
                 "entry ID is required".to_string(),
             )));
         }
+        EntryAction::Update { id, current, .. } if id.is_none() && !current => {
+            eprintln!("error: 'update' requires an entry ID or --current flag");
+            return Err(Box::new(error::ArgumentError::ResourceNotFound(
+                "entry ID or --current is required".to_string(),
+            )));
+        }
         EntryAction::Delete { id, current } if id.is_none() && !current => {
             eprintln!("error: 'delete' requires an entry ID or --current flag");
             return Err(Box::new(error::ArgumentError::ResourceNotFound(

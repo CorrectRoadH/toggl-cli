@@ -775,6 +775,61 @@ mod tests {
     }
 
     #[test]
+    fn entry_update_without_id_or_current_parses() {
+        // update without id or --current is allowed at parse time
+        // (validation happens at execution time - must require one or the other)
+        let result = Cli::try_parse_from(["toggl", "entry", "update"]);
+        assert!(
+            result.is_ok()
+                && result
+                    .map(|c| matches!(
+                        c.cmd,
+                        Command::Entry {
+                            action: EntryAction::Update {
+                                id: None,
+                                current: false,
+                                ..
+                            }
+                        }
+                    ))
+                    .unwrap_or(false)
+        );
+    }
+
+    #[test]
+    fn entry_update_with_id_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "entry", "update", "42"]).expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: Some(42),
+                        current: false,
+                        ..
+                    },
+            } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_update_with_current_flag_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "entry", "update", "--current"]).expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: None,
+                        current: true,
+                        ..
+                    },
+            } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
     fn entry_bulk_edit_requires_ids() {
         let cmd = Cli::try_parse_from(["toggl", "entry", "bulk-edit", "1", "2", "3"])
             .expect("should parse");
