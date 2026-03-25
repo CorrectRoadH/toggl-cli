@@ -524,7 +524,15 @@ impl TrackConfig {
     }
     pub fn get_default_entry(&self, entities: Entities) -> ResultWithDefaultError<TimeEntry> {
         let config = self.get_active_config()?;
+        Self::build_default_entry_from_config(config, entities)
+    }
 
+    /// Build a default time entry from a branch config and entities.
+    /// This is the core logic extracted for testability.
+    pub fn build_default_entry_from_config(
+        config: &BranchConfig,
+        entities: Entities,
+    ) -> ResultWithDefaultError<TimeEntry> {
         let project = config.project.clone().and_then(|name| {
             entities
                 .projects
@@ -565,5 +573,187 @@ impl TrackConfig {
         };
 
         Ok(time_entry)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::ConfigError;
+    use crate::models::{Entities, Project, Workspace};
+    use chrono::Utc;
+    use std::collections::HashMap;
+
+    fn mock_entities_with_workspace(name: &str, id: i64) -> Entities {
+        Entities {
+            time_entries: Vec::new(),
+            projects: HashMap::new(),
+            tasks: HashMap::new(),
+            clients: HashMap::new(),
+            workspaces: vec![Workspace {
+                id,
+                name: name.to_string(),
+                admin: true,
+            }],
+            tags: Vec::new(),
+        }
+    }
+
+    fn mock_entities_with_project(name: &str, id: i64, workspace_id: i64) -> Entities {
+        let mut projects = HashMap::new();
+        projects.insert(
+            id,
+            Project {
+                id,
+                name: name.to_string(),
+                workspace_id,
+                client: None,
+                is_private: false,
+                active: true,
+                at: Utc::now(),
+                created_at: Utc::now(),
+                color: "#06aaf5".to_string(),
+                billable: None,
+            },
+        );
+        Entities {
+            time_entries: Vec::new(),
+            projects,
+            tasks: HashMap::new(),
+            clients: HashMap::new(),
+            workspaces: vec![Workspace {
+                id: workspace_id,
+                name: "Test Workspace".to_string(),
+                admin: true,
+            }],
+            tags: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn build_default_entry_returns_error_for_invalid_workspace() {
+        let config = BranchConfig {
+            workspace: Some("NonExistentWorkspace".to_string()),
+            description: None,
+            project: None,
+            task: None,
+            tags: None,
+            billable: false,
+        };
+        let entities = mock_entities_with_workspace("RealWorkspace", 1);
+
+        let result = TrackConfig::build_default_entry_from_config(&config, entities);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.downcast_ref::<ConfigError>()
+                .map(|e| matches!(e, ConfigError::WorkspaceNotFound(name) if name == "NonExistentWorkspace"))
+                .unwrap_or(false),
+            "Expected WorkspaceNotFound error, got: {:?}",
+            err
+        );
+    }
+
+    #[test]
+    fn build_default_entry_applies_scalar_defaults() {
+        // Test that description and workspace_id defaults are applied
+        let config = BranchConfig {
+            workspace: Some("MyWorkspace".to_string()),
+            description: Some("Test description".to_string()),
+            project: None,
+            task: None,
+            tags: None,
+            billable: false,
+        };
+        let entities = mock_entities_with_workspace("MyWorkspace", 42);
+
+        let result = TrackConfig::build_default_entry_from_config(&config, entities);
+
+        assert!(result.is_ok());
+        let entry = result.unwrap();
+        assert_eq!(entry.description, "Test description");
+        assert_eq!(entry.workspace_id, 42);
+    }
+
+    #[test]
+    fn build_default_entry_applies_collection_defaults() {
+        // Test that tags collection default is applied
+        let config = BranchConfig {
+            workspace: None,
+            description: None,
+            project: None,
+            task: None,
+            tags: Some(vec!["tag1".to_string(), "tag2".to_string()]),
+            billable: false,
+        };
+        let entities = mock_entities_with_workspace("MyWorkspace", 1);
+
+        let result = TrackConfig::build_default_entry_from_config(&config, entities);
+
+        assert!(result.is_ok());
+        let entry = result.unwrap();
+        assert_eq!(entry.tags, vec!["tag1", "tag2"]);
+    }
+
+    #[test]
+    fn build_default_entry_applies_bool_defaults() {
+        // Test that billable bool default is applied
+        let config = BranchConfig {
+            workspace: None,
+            description: None,
+            project: None,
+            task: None,
+            tags: None,
+            billable: true,
+        };
+        let entities = mock_entities_with_workspace("MyWorkspace", 1);
+
+        let result = TrackConfig::build_default_entry_from_config(&config, entities);
+
+        assert!(result.is_ok());
+        let entry = result.unwrap();
+        assert!(entry.billable);
+    }
+
+    #[test]
+    fn build_default_entry_uses_default_when_workspace_not_specified() {
+        // When workspace is not specified, workspace_id should be -1 (default)
+        let config = BranchConfig {
+            workspace: None,
+            description: None,
+            project: None,
+            task: None,
+            tags: None,
+            billable: false,
+        };
+        let entities = mock_entities_with_workspace("MyWorkspace", 42);
+
+        let result = TrackConfig::build_default_entry_from_config(&config, entities);
+
+        assert!(result.is_ok());
+        let entry = result.unwrap();
+        assert_eq!(entry.workspace_id, -1);
+    }
+
+    #[test]
+    fn build_default_entry_matches_project_by_name() {
+        // Test that project matching by name works
+        let config = BranchConfig {
+            workspace: None,
+            description: None,
+            project: Some("MyProject".to_string()),
+            task: None,
+            tags: None,
+            billable: false,
+        };
+        let entities = mock_entities_with_project("MyProject", 10, 1);
+
+        let result = TrackConfig::build_default_entry_from_config(&config, entities);
+
+        assert!(result.is_ok());
+        let entry = result.unwrap();
+        assert!(entry.project.is_some());
+        assert_eq!(entry.project.as_ref().unwrap().name, "MyProject");
     }
 }

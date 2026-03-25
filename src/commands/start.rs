@@ -152,9 +152,9 @@ impl StartCommand {
         };
 
         let default_time_entry = match (&track_config, &entities) {
-            (Some(track_config), Some(entities)) => track_config
-                .get_default_entry(entities.clone())
-                .unwrap_or_else(|_| TimeEntry::default()),
+            (Some(track_config), Some(entities)) => {
+                track_config.get_default_entry(entities.clone())?
+            }
             _ => TimeEntry::default(),
         };
 
