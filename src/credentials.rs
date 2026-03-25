@@ -37,9 +37,12 @@ impl CredentialsStorage for KeyringStorage {
         self.keyring
             .get_password()
             .map(|stored| Self::parse_stored_value(&stored))
-            .map_err(|keyring_err| match keyring_err {
-                keyring::Error::NoEntry => Box::new(StorageError::Read),
-                _ => Box::new(StorageError::Unknown) as Box<dyn std::error::Error + Send>,
+            .map_err(|_keyring_err| {
+                // When credentials cannot be read from keychain (whether due to
+                // no entry, keychain locked, or any other reason), the user
+                // needs to authenticate. Map all keyring errors to Read so
+                // the user gets clear guidance rather than an obscure error.
+                Box::new(StorageError::Read) as Box<dyn std::error::Error + Send>
             })
     }
 
