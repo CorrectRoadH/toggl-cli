@@ -571,6 +571,126 @@ mod tests {
     }
 
     #[test]
+    fn project_list_json_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "project", "list", "--json"]).expect("should parse");
+        match cmd.cmd {
+            Command::Project {
+                action: ProjectAction::List { json: true },
+            } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_rename_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "project", "rename", "OldName", "NewName"])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Project {
+                action: ProjectAction::Rename { old_name, new_name },
+            } => {
+                assert_eq!(old_name, "OldName");
+                assert_eq!(new_name, "NewName");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_delete_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "project", "delete", "MyProject"]).expect("should parse");
+        match cmd.cmd {
+            Command::Project {
+                action: ProjectAction::Delete { name },
+            } => {
+                assert_eq!(name, "MyProject");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tag_list_json_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "tag", "list", "--json"]).expect("should parse");
+        match cmd.cmd {
+            Command::Tag {
+                action: TagAction::List { json: true },
+            } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tag_rename_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "tag", "rename", "OldTag", "NewTag"])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Tag {
+                action: TagAction::Rename { old_name, new_name },
+            } => {
+                assert_eq!(old_name, "OldTag");
+                assert_eq!(new_name, "NewTag");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tag_delete_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "tag", "delete", "MyTag"]).expect("should parse");
+        match cmd.cmd {
+            Command::Tag {
+                action: TagAction::Delete { name },
+            } => {
+                assert_eq!(name, "MyTag");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn client_list_json_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "client", "list", "--json"]).expect("should parse");
+        match cmd.cmd {
+            Command::Client {
+                action: ClientAction::List { json: true },
+            } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn client_rename_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "client", "rename", "OldClient", "NewClient"])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Client {
+                action: ClientAction::Rename { old_name, new_name },
+            } => {
+                assert_eq!(old_name, "OldClient");
+                assert_eq!(new_name, "NewClient");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn client_delete_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "client", "delete", "MyClient"]).expect("should parse");
+        match cmd.cmd {
+            Command::Client {
+                action: ClientAction::Delete { name },
+            } => {
+                assert_eq!(name, "MyClient");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
     fn auth_command_allows_missing_token() {
         let cmd = Cli::try_parse_from(["toggl", "auth"])
             .expect("auth command should parse without a token");
