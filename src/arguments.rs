@@ -172,8 +172,10 @@ pub enum EntryAction {
     },
     /// Edit a time entry's description, billable state, project, task, or tags.
     Update {
-        #[arg(help = "ID of the time entry to edit (omit to edit the currently running entry)")]
+        #[arg(help = "ID of the time entry to edit")]
         id: Option<i64>,
+        #[arg(long, help = "Edit the currently running time entry")]
+        current: bool,
         #[arg(short, long, help = "New description")]
         description: Option<String>,
         #[arg(long, help = "New billable state (true/false)")]
@@ -207,6 +209,8 @@ pub enum EntryAction {
     Delete {
         #[arg(help = "ID of the time entry to delete")]
         id: Option<i64>,
+        #[arg(long, help = "Delete the currently running time entry")]
+        current: bool,
     },
     /// Bulk edit multiple time entries with a JSON Patch payload.
     BulkEdit {
@@ -733,20 +737,41 @@ mod tests {
     }
 
     #[test]
-    fn entry_delete_without_id_fails() {
+    fn entry_delete_without_id_or_current_parses() {
+        // delete without id or --current is now allowed at parse time
+        // (validation happens at execution time)
         let result = Cli::try_parse_from(["toggl", "entry", "delete"]);
-        // delete requires an id
+        // delete without args is now valid - requires either id or --current at runtime
         assert!(
-            result.is_err()
-                || result
+            result.is_ok()
+                && result
                     .map(|c| matches!(
                         c.cmd,
                         Command::Entry {
-                            action: EntryAction::Delete { id: None }
+                            action: EntryAction::Delete {
+                                id: None,
+                                current: false
+                            }
                         }
                     ))
                     .unwrap_or(false)
         );
+    }
+
+    #[test]
+    fn entry_delete_with_current_flag_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "entry", "delete", "--current"]).expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Delete {
+                        id: None,
+                        current: true,
+                    },
+            } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
     }
 
     #[test]

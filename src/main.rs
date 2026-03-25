@@ -174,10 +174,10 @@ async fn execute_entry_command(
                 "entry ID is required".to_string(),
             )));
         }
-        EntryAction::Delete { id } if id.is_none() => {
-            eprintln!("error: 'delete' requires an entry ID");
+        EntryAction::Delete { id, current } if id.is_none() && !current => {
+            eprintln!("error: 'delete' requires an entry ID or --current flag");
             return Err(Box::new(error::ArgumentError::ResourceNotFound(
-                "entry ID is required".to_string(),
+                "entry ID or --current is required".to_string(),
             )));
         }
         EntryAction::BulkEdit { json: None, .. } => {
@@ -239,6 +239,7 @@ async fn execute_entry_command(
         }
         EntryAction::Update {
             id,
+            current,
             description,
             billable,
             project,
@@ -247,22 +248,62 @@ async fn execute_entry_command(
             start,
             end,
         } => {
-            EditCommand::execute(
-                api_client,
-                id,
-                description,
-                billable,
-                project,
-                task,
-                tags,
-                start,
-                end,
-            )
-            .await
+            if current {
+                // Check if there's a running entry before attempting edit
+                match api_client.get_current_time_entry_minimal().await? {
+                    Some(_) => {
+                        // There's a running entry, let EditCommand handle it with id=None
+                        EditCommand::execute(
+                            api_client,
+                            None,
+                            description,
+                            billable,
+                            project,
+                            task,
+                            tags,
+                            start,
+                            end,
+                        )
+                        .await
+                    }
+                    None => {
+                        eprintln!("error: no time entry is currently running");
+                        Err(Box::new(error::ArgumentError::ResourceNotFound(
+                            "no running time entry".to_string(),
+                        )))
+                    }
+                }
+            } else {
+                EditCommand::execute(
+                    api_client,
+                    id,
+                    description,
+                    billable,
+                    project,
+                    task,
+                    tags,
+                    start,
+                    end,
+                )
+                .await
+            }
         }
-        EntryAction::Delete { id } => {
-            // id is guaranteed Some due to validation above
-            DeleteCommand::execute(api_client, id.unwrap()).await
+        EntryAction::Delete { id, current } => {
+            if current {
+                // Get the current running entry and delete it
+                match api_client.get_current_time_entry_minimal().await? {
+                    Some(entry) => DeleteCommand::execute(api_client, entry.id).await,
+                    None => {
+                        eprintln!("error: no time entry is currently running");
+                        Err(Box::new(error::ArgumentError::ResourceNotFound(
+                            "no running time entry".to_string(),
+                        )))
+                    }
+                }
+            } else {
+                // id is guaranteed Some due to validation above
+                DeleteCommand::execute(api_client, id.unwrap()).await
+            }
         }
         EntryAction::BulkEdit { ids, json } => {
             // json is guaranteed Some due to validation above
