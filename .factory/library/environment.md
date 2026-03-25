@@ -10,7 +10,8 @@ Environment variables, external dependencies, and setup notes.
 ## Local development credentials
 
 - Local Cargo-driven development must use repo-local environment values from `./.env`.
-- Workers and validators should always load `./.env` into the command environment before running Cargo commands.
+- The binary should auto-load `./.env` at startup for local development, so direct `cargo run -- ...` uses repo-local values without manual shell sourcing.
+- Workers and validators should still load `./.env` into the command environment for consistency when running Cargo commands.
 - The default `./.env` in this repo contains fake local-debug values so the CLI can fail normally without triggering macOS keychain prompts.
 - Do not rely on macOS keychain state during local parser/help/debug work.
 

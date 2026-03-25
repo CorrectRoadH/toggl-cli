@@ -20,23 +20,25 @@ None.
 1. Read `mission.md`, mission `AGENTS.md`, and the repo `.factory/library/*.md` files before changing code.
 2. Run `./.factory/init.sh` first if the session has not already done so.
 3. Load `./.env` into every Cargo command during local work. Do not rely on macOS keychain prompts for local development.
-4. For parser or command-surface changes, add or update failing tests first:
+4. Before making changes, compare the assigned feature against `mission.md`, mission `AGENTS.md`, and repo `.factory/library/*.md` so the implementation matches the shared-state truth exactly.
+5. For parser or command-surface changes, add or update failing tests first:
    - parser/help tests in `src/arguments.rs` or focused module tests
    - command behavior tests in `src/commands/*`
    - only use `tests/live_cli.rs` when the feature explicitly requires live behavior and real creds are available
-5. Implement the feature in the smallest coherent slice that satisfies the assigned `expectedBehavior`.
-6. Keep the new command surface resource-first. Do not preserve legacy verb-first aliases unless the feature explicitly says so.
-7. Verify manually with representative CLI invocations after tests pass:
+6. Implement the feature in the smallest coherent slice that satisfies the assigned `expectedBehavior`.
+7. Keep the new command surface resource-first. Do not preserve legacy verb-first aliases unless the feature explicitly says so.
+8. Before claiming a feature is already implemented, inspect the actual diff/behavior against the feature text and shared-state guidance; if there is any mismatch, fix it instead of hand-waving.
+9. Verify manually with representative CLI invocations after tests pass:
    - help output
    - one success-path command
    - one failure-path command
    - JSON mode if the feature touches structured output
-8. Run the validation commands from `.factory/services.yaml` before handing off:
+10. Run the validation commands from `.factory/services.yaml` before handing off:
    - `typecheck`
    - `test`
    - `lint`
    Run `build` only when the feature materially changes compile-time/parser wiring enough that a full build is useful.
-9. In the handoff, be explicit about:
+11. In the handoff, be explicit about:
    - exact files changed
    - tests added/updated
    - manual CLI invocations run

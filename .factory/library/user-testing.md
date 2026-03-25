@@ -29,6 +29,7 @@ Testing surface findings, validation tools, and runtime constraints.
 - The default local `.env` contains fake values specifically to avoid macOS keychain prompts.
 - Do not use production keychain state as part of local validation readiness.
 - Only milestone 5 should switch to real user-provided OpenToggl values for live validation.
+- If a direct `cargo run` command hangs instead of returning promptly, treat that as likely prompt-blocking behavior and therefore a failed local-debug validation.
 
 ## Validation Concurrency
 

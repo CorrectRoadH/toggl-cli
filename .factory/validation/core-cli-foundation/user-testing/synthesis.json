@@ -1,0 +1,24 @@
+{
+  "milestone": "core-cli-foundation",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 7,
+    "passed": 7,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-FOUNDATION-001",
+    "VAL-FOUNDATION-002",
+    "VAL-FOUNDATION-003",
+    "VAL-FOUNDATION-004",
+    "VAL-FOUNDATION-005",
+    "VAL-FOUNDATION-006",
+    "VAL-FOUNDATION-007"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

@@ -37,6 +37,6 @@ Resources for this mission:
 
 ## Auth and local debug rules
 
-- Local Cargo-driven debug should work with repo-local `.env`.
+- Local Cargo-driven debug should work with repo-local `.env`, including direct `cargo run` without manual shell sourcing.
 - Help/parser-only flows must not require credentials.
 - OpenToggl/custom API URL flows are first-class, not secondary add-ons.

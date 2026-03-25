@@ -1,0 +1,120 @@
+{
+  "surface": "cli",
+  "groupId": "foundation-cli-offline",
+  "milestone": "core-cli-foundation",
+  "assertions": [
+    {
+      "id": "VAL-FOUNDATION-001",
+      "status": "pass",
+      "evidence": [
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- --help",
+          "exitCode": 0,
+          "observed": "Top-level help showed the resource-first tree with auth, entry, project, tag, client, task, workspace, org, preferences, and config."
+        }
+      ]
+    },
+    {
+      "id": "VAL-FOUNDATION-002",
+      "status": "pass",
+      "evidence": [
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- org list --help",
+          "exitCode": 0,
+          "observed": "Resource-specific help for org list displayed contextual usage and the local --json flag."
+        },
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- entry show",
+          "exitCode": 1,
+          "observed": "Missing required entry ID produced an actionable error instead of unrelated top-level output."
+        }
+      ]
+    },
+    {
+      "id": "VAL-FOUNDATION-003",
+      "status": "pass",
+      "evidence": [
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- entry list --json",
+          "exitCode": 0,
+          "observed": "Stdout contained only [] with no extra prose, confirming pure JSON output."
+        },
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- entry show",
+          "exitCode": 1,
+          "observed": "Fatal validation error was emitted with non-zero exit and no JSON on stdout."
+        }
+      ]
+    },
+    {
+      "id": "VAL-FOUNDATION-004",
+      "status": "pass",
+      "evidence": [
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- entry list --json",
+          "exitCode": 0,
+          "observed": "With repo-local .env loaded, the CLI executed using the local debug environment and returned a normal empty JSON list without any macOS keychain prompt."
+        }
+      ]
+    },
+    {
+      "id": "VAL-FOUNDATION-005",
+      "status": "pass",
+      "evidence": [
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- --help",
+          "exitCode": 0,
+          "observed": "Top-level help completed immediately as a parser-only flow."
+        },
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- entry --help",
+          "exitCode": 0,
+          "observed": "Subcommand help completed without touching authenticated API setup or prompting for credentials."
+        },
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- auth --help",
+          "exitCode": 0,
+          "observed": "Auth help remained a credential-free parser flow."
+        }
+      ]
+    },
+    {
+      "id": "VAL-FOUNDATION-006",
+      "status": "pass",
+      "evidence": [
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- --help",
+          "exitCode": 0,
+          "observed": "Primary help advertised the new resource-first interface and did not list legacy verb-first commands as top-level entry points."
+        },
+        {
+          "command": "set -a; [ -f ./.env ] && . .env; set +a; cargo run -- organization list",
+          "exitCode": 2,
+          "observed": "Legacy organization command was rejected with clap guidance and a tip toward 'org'."
+        }
+      ]
+    },
+    {
+      "id": "VAL-FOUNDATION-007",
+      "status": "pass",
+      "evidence": [
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- organization list",
+          "exitCode": 2,
+          "observed": "Clap-generated validation output included unrecognized subcommand messaging, a similarity tip for org, and top-level usage."
+        },
+        {
+          "command": "set -a; [ -f ./.env ] && . ./.env; set +a; cargo run -- entry start --end 2026-03-25T10:00:00Z",
+          "exitCode": 1,
+          "observed": "Invalid time-range validation reported that --end requires --start at the CLI boundary."
+        }
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "cargo run",
+    "cargo test"
+  ],
+  "frictions": [],
+  "blockers": []
+}

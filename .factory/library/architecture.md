@@ -26,7 +26,7 @@ Architectural decisions, parser/routing structure, and migration constraints.
 ## Local-debug rule
 
 - Help-only and parser-only flows must not initialize authenticated API clients or touch keychain-backed storage.
-- Resource commands running under Cargo in local development should load `./.env` first.
+- The binary should auto-load `./.env` during local startup so direct `cargo run` uses repo-local debug values before keychain-backed storage is considered.
 
 ## Target command families
 

@@ -58,6 +58,10 @@ static CACHED_CREDENTIALS: OnceCell<Credentials> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> ResultWithDefaultError<()> {
+    // Auto-load repo-local .env for local development without manual shell sourcing.
+    // This ensures `cargo run` uses fake/test credentials instead of falling through
+    // to macOS keychain-backed storage.
+    let _ = dotenvy::from_filename_override(".env");
     let parsed_args = Cli::parse();
     match execute_subcommand(parsed_args).await {
         Ok(()) => Ok(()),

@@ -12,20 +12,22 @@ Unofficial CLI for [Toggl Track](https://toggl.com/track/) and [OpenToggl](https
 
 ```shell
 npm install -g @correctroadh/toggl-cli
+
+// to verify
+toggl --help
 ```
 
-Then verify:
+## Agent one-click install (skill)
+
+### Claude Code/OpenClaw
 
 ```shell
-toggl --help
+npx skills add CorrectRoadH/toggl-cli
 ```
 
 ## Quick Start
 
-Choose one path:
-
-- Use official Toggl Track if you just want the hosted service
-- Use [OpenToggl](https://opentoggl.com) if Toggl rate limits are getting in the way or you need self-hosting. OpenToggl is a 1:1 compatible alternative you can deploy yourself.
+> Use [OpenToggl](https://opentoggl.com) if Toggl rate limits are getting in the way or you need self-hosting. OpenToggl is a fully-compatible alternative you can deploy yourself.
 
 ### Use with Toggl Track
 
@@ -33,7 +35,7 @@ Choose one path:
 toggl auth <YOUR_API_TOKEN>
 ```
 
-### Use with OpenToggl
+### Use with [OpenToggl](https://opentoggl.com)
 
 ```shell
 toggl auth <YOUR_API_TOKEN> --type opentoggl --api-url https://your-instance.com/api/v9
