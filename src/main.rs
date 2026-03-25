@@ -139,6 +139,30 @@ async fn execute_entry_command(
     proxy: Option<String>,
     picker: Box<dyn picker::ItemPicker>,
 ) -> ResultWithDefaultError<()> {
+    // Validate required arguments BEFORE creating the API client to avoid
+    // unnecessary keychain/storage access for validation failures.
+    match &action {
+        EntryAction::Show { id, .. } if id.is_none() => {
+            eprintln!("error: 'show' requires an entry ID");
+            return Err(Box::new(error::ArgumentError::ResourceNotFound(
+                "entry ID is required".to_string(),
+            )));
+        }
+        EntryAction::Delete { id } if id.is_none() => {
+            eprintln!("error: 'delete' requires an entry ID");
+            return Err(Box::new(error::ArgumentError::ResourceNotFound(
+                "entry ID is required".to_string(),
+            )));
+        }
+        EntryAction::BulkEdit { json: None, .. } => {
+            eprintln!("error: 'bulk-edit' requires --json flag with JSON payload");
+            return Err(Box::new(error::ArgumentError::ResourceNotFound(
+                "--json flag is required".to_string(),
+            )));
+        }
+        _ => {}
+    }
+
     let api_client = get_api_client(proxy.clone())?;
 
     match action {
@@ -183,13 +207,10 @@ async fn execute_entry_command(
             let picker_option = if interactive { Some(picker) } else { None };
             ContinueCommand::execute(api_client, picker_option).await
         }
-        EntryAction::Show { id, json } => match id {
-            Some(id) => ShowCommand::execute(api_client, id, json).await,
-            None => {
-                eprintln!("error: 'show' requires an entry ID");
-                Ok(())
-            }
-        },
+        EntryAction::Show { id, json } => {
+            // id is guaranteed Some due to validation above
+            ShowCommand::execute(api_client, id.unwrap(), json).await
+        }
         EntryAction::Update {
             id,
             description,
@@ -213,20 +234,15 @@ async fn execute_entry_command(
             )
             .await
         }
-        EntryAction::Delete { id } => match id {
-            Some(id) => DeleteCommand::execute(api_client, id).await,
-            None => {
-                eprintln!("error: 'delete' requires an entry ID");
-                Ok(())
-            }
-        },
-        EntryAction::BulkEdit { ids, json } => match json {
-            Some(json) => BulkEditTimeEntriesCommand::execute(api_client, ids, json).await,
-            None => {
-                eprintln!("error: 'bulk-edit' requires --json flag with JSON payload");
-                Ok(())
-            }
-        },
+        EntryAction::Delete { id } => {
+            // id is guaranteed Some due to validation above
+            DeleteCommand::execute(api_client, id.unwrap()).await
+        }
+        EntryAction::BulkEdit { ids, json } => {
+            // json is guaranteed Some due to validation above
+            BulkEditTimeEntriesCommand::execute(api_client, ids.clone(), json.clone().unwrap())
+                .await
+        }
     }
 }
 
