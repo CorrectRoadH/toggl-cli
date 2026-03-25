@@ -815,6 +815,210 @@ mod tests {
     }
 
     #[test]
+    fn task_create_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "task", "create", "--project", "Platform", "Review"])
+                .expect("should parse");
+        match cmd.cmd {
+            Command::Task {
+                action:
+                    TaskAction::Create {
+                        project,
+                        name,
+                        active: None,
+                        estimated_seconds: None,
+                        user_id: None,
+                    },
+            } => {
+                assert_eq!(project, "Platform");
+                assert_eq!(name, "Review");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn task_update_parses() {
+        let cmd = Cli::try_parse_from([
+            "toggl",
+            "task",
+            "update",
+            "--project",
+            "Platform",
+            "--new-name",
+            "Review v2",
+            "Review",
+        ])
+        .expect("should parse");
+        match cmd.cmd {
+            Command::Task {
+                action:
+                    TaskAction::Update {
+                        project,
+                        name,
+                        new_name,
+                        active: None,
+                        estimated_seconds: None,
+                        user_id: None,
+                    },
+            } => {
+                assert_eq!(project, "Platform");
+                assert_eq!(name, "Review");
+                assert_eq!(new_name, Some("Review v2".to_string()));
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn task_rename_parses() {
+        let cmd = Cli::try_parse_from([
+            "toggl",
+            "task",
+            "rename",
+            "--project",
+            "Platform",
+            "OldName",
+            "NewName",
+        ])
+        .expect("should parse");
+        match cmd.cmd {
+            Command::Task {
+                action:
+                    TaskAction::Rename {
+                        project,
+                        old_name,
+                        new_name,
+                    },
+            } => {
+                assert_eq!(project, "Platform");
+                assert_eq!(old_name, "OldName");
+                assert_eq!(new_name, "NewName");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn task_delete_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "task", "delete", "--project", "Platform", "Review"])
+                .expect("should parse");
+        match cmd.cmd {
+            Command::Task {
+                action: TaskAction::Delete { project, name },
+            } => {
+                assert_eq!(project, "Platform");
+                assert_eq!(name, "Review");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn workspace_list_json_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "workspace", "list", "--json"]).expect("should parse");
+        match cmd.cmd {
+            Command::Workspace {
+                action: WorkspaceAction::List { json: true },
+            } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn workspace_create_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "workspace", "create", "42", "Platform"])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Workspace {
+                action:
+                    WorkspaceAction::Create {
+                        organization_id,
+                        name,
+                    },
+            } => {
+                assert_eq!(organization_id, 42);
+                assert_eq!(name, "Platform");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn workspace_rename_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "workspace", "rename", "OldName", "NewName"])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Workspace {
+                action: WorkspaceAction::Rename { old_name, new_name },
+            } => {
+                assert_eq!(old_name, "OldName");
+                assert_eq!(new_name, "NewName");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn org_list_json_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "org", "list", "--json"]).expect("should parse");
+        match cmd.cmd {
+            Command::Org {
+                action: OrganizationAction::List { json: true },
+            } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn org_show_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "org", "show", "42"]).expect("should parse");
+        match cmd.cmd {
+            Command::Org {
+                action: OrganizationAction::Show { id, json: false },
+            } => {
+                assert_eq!(id, 42);
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn org_show_json_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "org", "show", "42", "--json"]).expect("should parse");
+        match cmd.cmd {
+            Command::Org {
+                action: OrganizationAction::Show { id, json: true },
+            } => {
+                assert_eq!(id, 42);
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn preferences_update_parses() {
+        let cmd = Cli::try_parse_from([
+            "toggl",
+            "preferences",
+            "update",
+            "{\"time_format\":\"H:mm\"}",
+        ])
+        .expect("should parse");
+        match cmd.cmd {
+            Command::Preferences {
+                action: PreferencesAction::Update { json },
+            } => {
+                assert_eq!(json, "{\"time_format\":\"H:mm\"}");
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
     fn entry_current_parses() {
         let cmd = Cli::try_parse_from(["toggl", "entry", "current"]).expect("should parse");
         match cmd.cmd {
