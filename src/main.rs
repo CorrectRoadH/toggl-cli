@@ -15,11 +15,12 @@ use api::client::ApiClient;
 use api::client::V9ApiClient;
 use arguments::Cli;
 use arguments::{
-    ClientAction, Command, ConfigAction, EntryAction, OrganizationAction, PreferencesAction,
-    ProjectAction, TagAction, TaskAction, WorkspaceAction,
+    AuthAction, ClientAction, Command, ConfigAction, EntryAction, OrganizationAction,
+    PreferencesAction, ProjectAction, TagAction, TaskAction, WorkspaceAction,
 };
 use clap::Parser;
 use commands::auth::AuthenticationCommand;
+use commands::auth_status::AuthStatusCommand;
 use commands::bulk_edit_time_entries::BulkEditTimeEntriesCommand;
 use commands::cont::ContinueCommand;
 use commands::create_client::CreateClientCommand;
@@ -74,10 +75,31 @@ async fn execute_subcommand(args: Cli) -> ResultWithDefaultError<()> {
 
     match args.cmd {
         Command::Auth {
+            action,
             api_token,
             api_type,
             api_url,
-        } => execute_auth_command(api_token, api_type, api_url, args.proxy).await,
+        } => match action {
+            Some(AuthAction::Status) => {
+                let status = AuthStatusCommand::get_status();
+                AuthStatusCommand::execute(io::stdout(), status)
+            }
+            Some(AuthAction::Login {
+                api_token: login_token,
+                api_type: login_type,
+                api_url: login_url,
+            }) => {
+                // Use login subcommand args if provided, otherwise fall back to positional args
+                let token = login_token.or(api_token);
+                let api_type = login_type.or(api_type);
+                let api_url = login_url.or(api_url);
+                execute_auth_command(token, api_type, api_url, args.proxy).await
+            }
+            None => {
+                // Backward compatibility: `toggl auth <token>` without subcommand
+                execute_auth_command(api_token, api_type, api_url, args.proxy).await
+            }
+        },
         Command::Logout => execute_logout_command().await,
         Command::Me => {
             let api_client = get_api_client(args.proxy.clone())?;

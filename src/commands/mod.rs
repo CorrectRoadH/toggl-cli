@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod auth_status;
 pub mod bulk_edit_time_entries;
 pub mod common;
 pub mod cont;

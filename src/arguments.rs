@@ -25,8 +25,11 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Authenticate with Toggl API.
+    /// Authenticate with Toggl API or check auth status.
     Auth {
+        #[command(subcommand)]
+        action: Option<AuthAction>,
+        #[arg(help = "API token for authentication")]
         api_token: Option<String>,
         #[arg(long, help = "Toggl service type: 'official' or 'opentoggl'")]
         api_type: Option<String>,
@@ -414,6 +417,21 @@ pub enum ConfigAction {
     Active,
 }
 
+#[derive(Subcommand, Debug)]
+pub enum AuthAction {
+    /// Login with your Toggl API token.
+    Login {
+        #[arg(help = "API token for authentication")]
+        api_token: Option<String>,
+        #[arg(long, help = "Toggl service type: 'official' or 'opentoggl'")]
+        api_type: Option<String>,
+        #[arg(long, help = "API URL for self-hosted Toggl (required for opentoggl)")]
+        api_url: Option<String>,
+    },
+    /// Show current authentication status, provider, and credential source.
+    Status,
+}
+
 /// Entity types for list command (used internally by list.rs)
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -552,6 +570,44 @@ mod tests {
             .expect("auth command should parse without a token");
         match cmd.cmd {
             Command::Auth {
+                action: None,
+                api_token: None,
+                api_type: None,
+                api_url: None,
+            } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auth_login_subcommand_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "auth", "login", "my-token"])
+            .expect("auth login should parse");
+        match cmd.cmd {
+            Command::Auth {
+                action:
+                    Some(AuthAction::Login {
+                        api_token,
+                        api_type: None,
+                        api_url: None,
+                    }),
+                api_token: None,
+                api_type: None,
+                api_url: None,
+            } => {
+                assert_eq!(api_token, Some("my-token".to_string()));
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auth_status_subcommand_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "auth", "status"]).expect("auth status should parse");
+        match cmd.cmd {
+            Command::Auth {
+                action: Some(AuthAction::Status),
                 api_token: None,
                 api_type: None,
                 api_url: None,
