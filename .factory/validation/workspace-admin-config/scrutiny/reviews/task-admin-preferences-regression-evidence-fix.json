@@ -1,0 +1,15 @@
+{
+  "featureId": "task-admin-preferences-regression-evidence-fix",
+  "reviewedAt": "2026-03-25T10:47:09Z",
+  "commitId": "fc20323f60f08e77a90e0a5e7c8e3e1d5b7a8f6c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix directly addresses the prior failure by replacing the unrelated entry-surface commit evidence with a feature-scoped regression diff in `src/arguments.rs`. The new parser tests exercise the migrated task/workspace/org/preferences command shapes, and the current tree still routes those surfaces to the expected task, organization, workspace, and preferences command implementations.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/Users/ctrdh/Code/toggl-cli/.factory/validation/workspace-admin-config/scrutiny/reviews/task-admin-and-preferences-migration.json",
+  "summary": "Pass: reviewed the original failed feature and the fix commit together. The original handoff cited unrelated entry-surface commit `5627432`, while the fix commit `fc20323` adds focused, scrutiny-reviewable parser regression coverage for task/workspace/org/preferences surfaces and adequately remedies the missing evidence gap without broadening scope."
+}

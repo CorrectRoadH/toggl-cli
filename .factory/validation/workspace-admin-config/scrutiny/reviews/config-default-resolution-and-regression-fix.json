@@ -1,0 +1,15 @@
+{
+  "featureId": "config-default-resolution-and-regression-fix",
+  "reviewedAt": "2026-03-25T10:47:11Z",
+  "commitId": "036bb46",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix commit directly addresses the original blocking flaw by propagating config-default resolution errors from `entry start` instead of silently discarding them, and it adds focused regression coverage for invalid-workspace failure plus scalar, collection, and bool config defaults. The original failed feature remains unsupported by its cited commit, but this remediation commit provides the missing reviewable evidence and satisfies the failure it was created to address.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/Users/ctrdh/Code/toggl-cli/.factory/validation/workspace-admin-config/scrutiny/reviews/config-surface-and-entry-defaults.json",
+  "summary": "Reviewed the prior failed feature report, the original incorrect commit `5627432`, the fix handoff/transcript skeleton for session `ec2b1bbb-9315-4921-b228-3bc5194af337`, and the remediation commit `036bb46`. The fix adequately resolves the prior scrutiny failure: invalid config-derived defaults now surface explicit errors via `src/commands/start.rs`, and `src/config/model.rs` now contains focused regression tests covering invalid-workspace failure plus scalar, collection, and bool defaults while preserving CLI-overrides-config precedence in the unchanged merge logic."
+}

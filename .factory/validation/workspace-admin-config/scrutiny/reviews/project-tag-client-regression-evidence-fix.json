@@ -1,0 +1,15 @@
+{
+  "featureId": "project-tag-client-regression-evidence-fix",
+  "reviewedAt": "2026-03-25T10:47:32.525967+00:00",
+  "commitId": "56ba00de77d57cefa468c7bf735fe1ecf7527256",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix directly addresses the prior failure by adding a dedicated, reviewable commit with focused parser regression coverage for the already-landed project/tag/client resource surfaces. Combined with the pre-existing command tests and list command unit tests, the reviewed evidence now covers the promised resource-first list/create/rename/delete and representative --json behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/Users/ctrdh/Code/toggl-cli/.factory/validation/workspace-admin-config/scrutiny/reviews/project-tag-client-resource-migration.json",
+  "summary": "Pass. I reviewed the failed original feature and the fix together: the original handoff still points at unrelated entry-surface commit 5627432, but the fix commit 56ba00d adds the missing scrutiny-reviewable evidence via nine focused parser regression tests in src/arguments.rs. Those new tests cover project/tag/client list --json, rename, and delete parsing, while existing tests in src/commands/create_*.rs, rename_*.rs, delete_*.rs, and list.rs already cover create flows and representative JSON list behavior, so the fix adequately closes the original evidence gap without widening scope."
+}
