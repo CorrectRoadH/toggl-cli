@@ -667,21 +667,33 @@ impl V9ApiClient {
         result
     }
 
-    async fn post_raw<Body: Serialize>(
+    /// Parse a JSON response body as either a single `T` or the first element of `Vec<T>`.
+    /// OpenToggl sometimes wraps responses in an array where official Toggl returns an object.
+    fn parse_single_or_array<T: de::DeserializeOwned>(body: &str) -> ResultWithDefaultError<T> {
+        serde_json::from_str::<T>(body)
+            .or_else(|_| {
+                serde_json::from_str::<Vec<T>>(body).and_then(|items| {
+                    items.into_iter().next().ok_or_else(|| {
+                        <serde_json::Error as serde::de::Error>::custom("API returned empty array")
+                    })
+                })
+            })
+            .map_err(|error| {
+                Box::new(ApiError::NetworkWithMessage(format!(
+                    "{error}; response body: {body}"
+                ))) as Box<dyn std::error::Error + Send>
+            })
+    }
+
+    async fn send_raw(
         &self,
+        request: reqwest::RequestBuilder,
         url: &str,
-        body: &Body,
     ) -> ResultWithDefaultError<String> {
-        let response = self
-            .http_client
-            .post(url)
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| {
-                Box::new(ApiError::NetworkWithMessage(e.to_string()))
-                    as Box<dyn std::error::Error + Send>
-            })?;
+        let response = request.send().await.map_err(|e| {
+            Box::new(ApiError::NetworkWithMessage(e.to_string()))
+                as Box<dyn std::error::Error + Send>
+        })?;
         let status = response.status();
         let text = response.text().await.map_err(|e| {
             Box::new(ApiError::NetworkWithMessage(e.to_string()))
@@ -694,6 +706,7 @@ impl V9ApiClient {
                 self.is_official_service,
             )));
         }
+        self.invalidate_caches_for_mutation(url);
         Ok(text)
     }
 
@@ -1442,22 +1455,10 @@ impl ApiClient for V9ApiClient {
     async fn create_tag(&self, workspace_id: i64, name: String) -> ResultWithDefaultError<Tag> {
         let url = format!("{}/workspaces/{}/tags", self.base_url, workspace_id);
         let body = NetworkCreateTag { name, workspace_id };
-        // Official Toggl returns a single object; OpenToggl returns an array.
-        let response_body = self.post_raw(&url, &body).await?;
-        let network_tag: NetworkTag = serde_json::from_str::<NetworkTag>(&response_body)
-            .or_else(|_| {
-                serde_json::from_str::<Vec<NetworkTag>>(&response_body).and_then(|tags| {
-                    tags.into_iter()
-                        .next()
-                        .ok_or_else(|| serde_json::from_str::<NetworkTag>("").unwrap_err())
-                })
-            })
-            .map_err(|error| {
-                Box::new(ApiError::NetworkWithMessage(format!(
-                    "{error}; response body: {response_body}"
-                ))) as Box<dyn std::error::Error + Send>
-            })?;
-        self.invalidate_caches_for_mutation(&url);
+        let response_body = self
+            .send_raw(self.http_client.post(&url).json(&body), &url)
+            .await?;
+        let network_tag: NetworkTag = Self::parse_single_or_array(&response_body)?;
         Ok(Tag {
             id: network_tag.id,
             name: network_tag.name,
@@ -1479,7 +1480,10 @@ impl ApiClient for V9ApiClient {
             name: new_name,
             workspace_id,
         };
-        let network_tag = self.put::<NetworkTag, NetworkRenameTag>(url, &body).await?;
+        let response_body = self
+            .send_raw(self.http_client.put(&url).json(&body), &url)
+            .await?;
+        let network_tag: NetworkTag = Self::parse_single_or_array(&response_body)?;
         Ok(Tag {
             id: network_tag.id,
             name: network_tag.name,
