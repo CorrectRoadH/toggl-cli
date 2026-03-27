@@ -185,14 +185,14 @@ fn print_detailed_report(data: &Value, since: &str, until: &str) {
     let mut total_seconds: i64 = 0;
     let mut entry_count: usize = 0;
 
-    // The response might have entries directly or nested
-    let entries: Vec<&Value> = if let Some(arr) = data.as_array() {
-        arr.iter().collect()
-    } else if let Some(arr) = data.get("time_entries").and_then(|v| v.as_array()) {
-        arr.iter().collect()
-    } else {
-        Vec::new()
-    };
+    // The response might be wrapped in "report" or be a direct array
+    let entries: Vec<&Value> = data
+        .get("report")
+        .and_then(|r| r.as_array())
+        .or_else(|| data.get("time_entries").and_then(|v| v.as_array()))
+        .or_else(|| data.as_array())
+        .map(|arr| arr.iter().collect())
+        .unwrap_or_default();
 
     for entry in &entries {
         let description = entry
