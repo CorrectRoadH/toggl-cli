@@ -1264,10 +1264,9 @@ fn live_cli_mutation_json_flags_work() {
         "expected stop --json to return entry with id, got:\n{}",
         stop_json
     );
-    assert_eq!(
-        stop_json["running"].as_bool(),
-        Some(false),
-        "expected running: false in stop --json output"
+    assert!(
+        stop_json["running"].is_null(),
+        "expected running field absent (null) in stop --json output for stopped entry"
     );
 
     // entry current --json when nothing running should return {"running": false}
