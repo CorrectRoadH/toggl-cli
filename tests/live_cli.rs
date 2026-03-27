@@ -1011,3 +1011,278 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
         .iter()
         .any(|workspace| workspace.name == workspace_name));
 }
+
+#[test]
+fn live_cli_report_commands_succeed() {
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
+    if should_skip_live_tests() {
+        return;
+    }
+
+    ensure_test_workspace_scope();
+
+    // Create a time entry so reports have data
+    let description = unique_description("report");
+    let mut cleanup = CleanupState::default();
+    let end = chrono::Utc::now();
+    let start = end - chrono::Duration::minutes(10);
+    let start_string = start.to_rfc3339();
+    let end_string = end.to_rfc3339();
+
+    run_checked(&[
+        "entry",
+        "start",
+        "-d",
+        &description,
+        "--start",
+        &start_string,
+        "--end",
+        &end_string,
+    ]);
+
+    let today = current_utc_day();
+    let Some(entry) =
+        wait_for_entry_on_day("report test entry missing from today's list", &today, |e| {
+            e.description == description
+        })
+    else {
+        return;
+    };
+    cleanup.time_entry_id = Some(entry.id);
+
+    // report summary with defaults (no args)
+    let summary_output = run_checked(&["report", "summary"]);
+    assert!(
+        summary_output.contains("Summary Report:"),
+        "expected summary report header, got:\n{}",
+        summary_output
+    );
+    assert!(
+        summary_output.contains("Total"),
+        "expected Total line in summary report, got:\n{}",
+        summary_output
+    );
+
+    // report summary --json
+    let summary_json: Value = parse_json_output(&["report", "summary", "--json"]);
+    assert!(
+        summary_json.is_object(),
+        "expected summary JSON to be an object, got:\n{summary_json}"
+    );
+
+    // report summary with natural language dates
+    let summary_today = run_checked(&["report", "summary", "--since", "today", "--until", "today"]);
+    assert!(
+        summary_today.contains("Summary Report:"),
+        "expected summary report with natural language dates, got:\n{}",
+        summary_today
+    );
+
+    // report summary with this_week / last_week
+    let summary_week = run_checked(&[
+        "report",
+        "summary",
+        "--since",
+        "this_week",
+        "--until",
+        "today",
+    ]);
+    assert!(
+        summary_week.contains("Summary Report:"),
+        "expected summary report with this_week, got:\n{}",
+        summary_week
+    );
+
+    // report weekly
+    let weekly_output = run_checked(&[
+        "report",
+        "weekly",
+        "--since",
+        "this_week",
+        "--until",
+        "today",
+    ]);
+    assert!(
+        weekly_output.contains("Weekly Report:"),
+        "expected weekly report header, got:\n{}",
+        weekly_output
+    );
+
+    // report weekly --json
+    let weekly_json: Value = parse_json_output(&[
+        "report",
+        "weekly",
+        "--since",
+        "this_week",
+        "--until",
+        "today",
+        "--json",
+    ]);
+    assert!(
+        weekly_json.is_object() || weekly_json.is_array(),
+        "expected weekly JSON to be an object or array, got:\n{weekly_json}"
+    );
+
+    // report summary --since baddate should fail
+    let bad_date_output = try_run_toggl(&[
+        "report", "summary", "--since", "baddate", "--until", "today",
+    ])
+    .expect("failed to execute toggl");
+    assert!(
+        !bad_date_output.status.success(),
+        "expected report with bad date to fail, but it succeeded"
+    );
+    let stderr = String::from_utf8_lossy(&bad_date_output.stderr);
+    assert!(
+        stderr.contains("Invalid date value"),
+        "expected 'Invalid date value' error, got:\n{}",
+        stderr
+    );
+
+    // report summary --since after --until should fail
+    let inverted_output = try_run_toggl(&[
+        "report",
+        "summary",
+        "--since",
+        "2026-03-20",
+        "--until",
+        "2026-03-10",
+    ])
+    .expect("failed to execute toggl");
+    assert!(
+        !inverted_output.status.success(),
+        "expected report with inverted date range to fail"
+    );
+}
+
+#[test]
+fn live_cli_natural_language_dates_work_for_entry_list() {
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
+    if should_skip_live_tests() {
+        return;
+    }
+
+    ensure_test_workspace_scope();
+
+    // entry list --since today should succeed
+    let today_output =
+        try_run_toggl(&["entry", "list", "--since", "today"]).expect("failed to execute toggl");
+    assert!(
+        today_output.status.success(),
+        "expected entry list --since today to succeed\nstderr:\n{}",
+        String::from_utf8_lossy(&today_output.stderr)
+    );
+
+    // entry list --since yesterday should succeed
+    let yesterday_output =
+        try_run_toggl(&["entry", "list", "--since", "yesterday"]).expect("failed to execute toggl");
+    assert!(
+        yesterday_output.status.success(),
+        "expected entry list --since yesterday to succeed\nstderr:\n{}",
+        String::from_utf8_lossy(&yesterday_output.stderr)
+    );
+
+    // entry list --since this_week should succeed
+    let week_output =
+        try_run_toggl(&["entry", "list", "--since", "this_week"]).expect("failed to execute toggl");
+    assert!(
+        week_output.status.success(),
+        "expected entry list --since this_week to succeed\nstderr:\n{}",
+        String::from_utf8_lossy(&week_output.stderr)
+    );
+
+    // entry list --since last_week should succeed
+    let last_week_output =
+        try_run_toggl(&["entry", "list", "--since", "last_week"]).expect("failed to execute toggl");
+    assert!(
+        last_week_output.status.success(),
+        "expected entry list --since last_week to succeed\nstderr:\n{}",
+        String::from_utf8_lossy(&last_week_output.stderr)
+    );
+
+    // entry list --since baddate should fail with helpful error
+    let bad_output =
+        try_run_toggl(&["entry", "list", "--since", "baddate"]).expect("failed to execute toggl");
+    assert!(
+        !bad_output.status.success(),
+        "expected entry list --since baddate to fail"
+    );
+    let stderr = String::from_utf8_lossy(&bad_output.stderr);
+    assert!(
+        stderr.contains("Invalid date/time value"),
+        "expected 'Invalid date/time value' error, got:\n{}",
+        stderr
+    );
+}
+
+#[test]
+fn live_cli_mutation_json_flags_work() {
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
+    if should_skip_live_tests() {
+        return;
+    }
+
+    ensure_test_workspace_scope();
+    let mut cleanup = CleanupState::default();
+    let description = unique_description("json-mutation");
+
+    // entry start --json should return real ID
+    let start_json: Value = parse_json_output(&["entry", "start", "-d", &description, "--json"]);
+    assert!(
+        start_json["id"].is_number(),
+        "expected start --json to return numeric id, got:\n{}",
+        start_json
+    );
+    let entry_id = start_json["id"].as_i64().unwrap();
+    assert!(
+        entry_id > 0,
+        "expected real positive entry ID, got {}",
+        entry_id
+    );
+    assert_eq!(
+        start_json["running"].as_bool(),
+        Some(true),
+        "expected running: true in start --json output"
+    );
+    cleanup.time_entry_id = Some(entry_id);
+
+    // entry current --json should show the running entry
+    let current_json: Value = parse_json_output(&["entry", "current", "--json"]);
+    assert_eq!(
+        current_json["running"].as_bool(),
+        Some(true),
+        "expected running: true in current --json output"
+    );
+
+    // entry stop --json should return the stopped entry
+    let stop_json: Value = parse_json_output(&["entry", "stop", "--json"]);
+    assert!(
+        stop_json["id"].is_number(),
+        "expected stop --json to return entry with id, got:\n{}",
+        stop_json
+    );
+    assert_eq!(
+        stop_json["running"].as_bool(),
+        Some(false),
+        "expected running: false in stop --json output"
+    );
+
+    // entry current --json when nothing running should return {"running": false}
+    let idle_json: Value = parse_json_output(&["entry", "current", "--json"]);
+    assert_eq!(
+        idle_json["running"].as_bool(),
+        Some(false),
+        "expected running: false when no entry is running"
+    );
+
+    // entry stop --json when nothing running should return {"running": false}
+    let stop_idle_json: Value = parse_json_output(&["entry", "stop", "--json"]);
+    assert_eq!(
+        stop_idle_json["running"].as_bool(),
+        Some(false),
+        "expected running: false from stop when nothing running"
+    );
+}

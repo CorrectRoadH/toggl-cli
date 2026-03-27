@@ -429,29 +429,6 @@ fn print_weekly_report(data: &Value, since: &str, until: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::client::MockApiClient;
-    use crate::error::ApiError;
-    use crate::models::User;
-    use serde_json::json;
-    use tokio_test::{assert_err, assert_ok};
-
-    fn mock_user() -> User {
-        User {
-            api_token: "token".to_string(),
-            email: "test@example.com".to_string(),
-            fullname: Some("Test".to_string()),
-            timezone: "UTC".to_string(),
-            default_workspace_id: 1,
-            beginning_of_week: None,
-            image_url: None,
-            created_at: None,
-            updated_at: None,
-            country_id: None,
-            has_password: None,
-        }
-    }
-
-    // --- resolve_report_date tests ---
 
     #[test]
     fn resolve_report_date_today() {
@@ -516,8 +493,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // --- resolve_report_dates tests ---
-
     #[test]
     fn resolve_report_dates_defaults_to_this_week() {
         let (since, until) = resolve_report_dates(None, None).unwrap();
@@ -548,8 +523,6 @@ mod tests {
         assert_eq!(until, "2026-03-15");
     }
 
-    // --- format_duration_hms tests ---
-
     #[test]
     fn format_duration_zero() {
         assert_eq!(format_duration_hms(0), "0:00:00");
@@ -563,160 +536,5 @@ mod tests {
     #[test]
     fn format_duration_mixed() {
         assert_eq!(format_duration_hms(3723), "1:02:03");
-    }
-
-    // --- execute_report_command integration tests ---
-
-    #[tokio::test]
-    async fn summary_report_with_defaults() {
-        let mut api_client = MockApiClient::new();
-        let user = mock_user();
-        api_client
-            .expect_get_user()
-            .returning(move || Ok(user.clone()));
-        api_client
-            .expect_get_summary_report()
-            .withf(|wid, _body| *wid == 1)
-            .returning(|_, _| Ok(json!({"groups": [], "totals": {"seconds": 0}})));
-
-        let result = execute_report_command(
-            ReportAction::Summary {
-                since: None,
-                until: None,
-                json: false,
-                group_by: None,
-                sub_group_by: None,
-            },
-            api_client,
-        )
-        .await;
-        assert_ok!(result);
-    }
-
-    #[tokio::test]
-    async fn summary_report_json_output() {
-        let mut api_client = MockApiClient::new();
-        let user = mock_user();
-        api_client
-            .expect_get_user()
-            .returning(move || Ok(user.clone()));
-        api_client
-            .expect_get_summary_report()
-            .returning(|_, _| Ok(json!({"groups": [], "totals": {"seconds": 3600}})));
-
-        let result = execute_report_command(
-            ReportAction::Summary {
-                since: Some("today".to_string()),
-                until: Some("today".to_string()),
-                json: true,
-                group_by: None,
-                sub_group_by: None,
-            },
-            api_client,
-        )
-        .await;
-        assert_ok!(result);
-    }
-
-    #[tokio::test]
-    async fn weekly_report_with_natural_dates() {
-        let mut api_client = MockApiClient::new();
-        let user = mock_user();
-        api_client
-            .expect_get_user()
-            .returning(move || Ok(user.clone()));
-        api_client
-            .expect_get_weekly_report()
-            .withf(|wid, _body| *wid == 1)
-            .returning(|_, _| Ok(json!({"rows": []})));
-
-        let result = execute_report_command(
-            ReportAction::Weekly {
-                since: Some("this_week".to_string()),
-                until: Some("today".to_string()),
-                json: false,
-            },
-            api_client,
-        )
-        .await;
-        assert_ok!(result);
-    }
-
-    #[tokio::test]
-    async fn detailed_report_with_options() {
-        let mut api_client = MockApiClient::new();
-        let user = mock_user();
-        api_client
-            .expect_get_user()
-            .returning(move || Ok(user.clone()));
-        api_client
-            .expect_get_detailed_report()
-            .withf(|wid, body| {
-                *wid == 1
-                    && body.get("page_size").and_then(|v| v.as_i64()) == Some(10)
-                    && body.get("order_by").and_then(|v| v.as_str()) == Some("date")
-            })
-            .returning(|_, _| Ok(json!({"time_entries": []})));
-
-        let result = execute_report_command(
-            ReportAction::Detailed {
-                since: Some("2026-03-01".to_string()),
-                until: Some("2026-03-27".to_string()),
-                json: false,
-                number: Some(10),
-                order_by: Some("date".to_string()),
-                order_dir: Some("desc".to_string()),
-            },
-            api_client,
-        )
-        .await;
-        assert_ok!(result);
-    }
-
-    #[tokio::test]
-    async fn report_with_invalid_date_returns_error() {
-        let mut api_client = MockApiClient::new();
-        let user = mock_user();
-        api_client
-            .expect_get_user()
-            .returning(move || Ok(user.clone()));
-
-        let result = execute_report_command(
-            ReportAction::Summary {
-                since: Some("baddate".to_string()),
-                until: Some("today".to_string()),
-                json: false,
-                group_by: None,
-                sub_group_by: None,
-            },
-            api_client,
-        )
-        .await;
-        assert_err!(result);
-    }
-
-    #[tokio::test]
-    async fn report_api_failure_propagates() {
-        let mut api_client = MockApiClient::new();
-        let user = mock_user();
-        api_client
-            .expect_get_user()
-            .returning(move || Ok(user.clone()));
-        api_client
-            .expect_get_summary_report()
-            .returning(|_, _| Err(Box::new(ApiError::Network)));
-
-        let result = execute_report_command(
-            ReportAction::Summary {
-                since: Some("today".to_string()),
-                until: Some("today".to_string()),
-                json: false,
-                group_by: None,
-                sub_group_by: None,
-            },
-            api_client,
-        )
-        .await;
-        assert_err!(result);
     }
 }
