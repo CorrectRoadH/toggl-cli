@@ -56,6 +56,9 @@ fn validate_api_url(url: &str) -> bool {
 impl AuthStatusCommand {
     /// Get the current auth status by checking environment and keychain
     pub fn get_status() -> AuthStatus {
+        #[cfg(test)]
+        crate::credentials::ensure_test_dotenv();
+
         // Check environment first (highest precedence)
         if let Ok(api_token) = std::env::var("TOGGL_API_TOKEN") {
             let api_url = std::env::var("TOGGL_API_URL").ok();
@@ -349,11 +352,8 @@ mod tests {
 
     #[test]
     fn auth_status_shows_environment_source_when_token_in_env() {
-        // This test relies on the .env file being loaded
         let status = AuthStatusCommand::get_status();
-        // The status should reflect environment if TOGGL_API_TOKEN is set
-        // Note: In test environment, TOGGL_API_TOKEN may or may not be set
-        // so we just verify the structure is correct
+        // With .env loaded, TOGGL_API_TOKEN should be present
         assert!(
             status.source == CredentialSource::Environment
                 || status.source == CredentialSource::Keychain

@@ -125,7 +125,21 @@ impl CredentialsStorage for EnvironmentStorage {
     }
 }
 
+/// In test builds, ensure `.env` is loaded so unit tests see `TOGGL_API_TOKEN`
+/// instead of falling through to macOS keychain.
+#[cfg(test)]
+pub fn ensure_test_dotenv() {
+    use std::sync::Once;
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        let _ = dotenvy::from_filename_override(".env");
+    });
+}
+
 pub fn get_storage() -> Box<dyn CredentialsStorage> {
+    #[cfg(test)]
+    ensure_test_dotenv();
+
     if let Ok(api_token) = std::env::var("TOGGL_API_TOKEN") {
         return Box::new(EnvironmentStorage::new(api_token));
     }
