@@ -15,12 +15,12 @@ description: >
 ## Command Shapes
 
 Time entries:
-- `toggl entry start [-d DESCRIPTION] [-p PROJECT] [--task TASK] [-t TAG...] [-b] [--start DATETIME] [--end DATETIME]`
-- `toggl entry stop`
-- `toggl entry resume [-i]`
-- `toggl entry current`
+- `toggl entry start [-d DESCRIPTION] [-p PROJECT] [--task TASK] [-t TAG...] [-b] [--start DATETIME] [--end DATETIME] [-j]`
+- `toggl entry stop [-j]`
+- `toggl entry resume [-i] [-j]`
+- `toggl entry current [-j]`
 - `toggl entry show <ID> [-j]`
-- `toggl entry update [ID] [--current] [-d DESCRIPTION] [--billable true|false] [-p PROJECT] [--task TASK] [-t TAG...] [--start DATETIME] [--end DATETIME|""]`
+- `toggl entry update [ID] [--current] [-d DESCRIPTION] [--billable true|false] [-p PROJECT] [--task TASK] [-t TAG...] [--start DATETIME] [--end DATETIME|""] [-j]`
 - `toggl entry delete <ID> [--current]`
 - `toggl entry list [--since DATETIME] [--until DATETIME] [-n NUMBER] [-j]`
 
@@ -47,18 +47,24 @@ Resources:
 - `toggl workspace rename <old_name> <new_name>`
 - `toggl org list [-j]`
 - `toggl org show <id> [-j]`
-- `toggl me`
+- `toggl me [-j]`
 - `toggl preferences read`
 - `toggl preferences update '<json>'`
 - `toggl config init|active|-e|-p|-d`
 
-Reports:
-- `toggl report summary --since YYYY-MM-DD --until YYYY-MM-DD [-j] [--group-by projects|clients|users] [--sub-group-by time_entries|tasks|projects|users]`
-- `toggl report detailed --since YYYY-MM-DD --until YYYY-MM-DD [-j] [-n NUMBER] [--order-by date|user|duration|description] [--order-dir ASC|DESC]`
-- `toggl report weekly --since YYYY-MM-DD --until YYYY-MM-DD [-j]`
+Reports (--since/--until are optional, default to this_week/today):
+- `toggl report summary [--since DATE] [--until DATE] [-j] [--group-by projects|clients|users] [--sub-group-by time_entries|tasks|projects|users]`
+- `toggl report detailed [--since DATE] [--until DATE] [-j] [-n NUMBER] [--order-by date|user|duration|description] [--order-dir ASC|DESC]`
+- `toggl report weekly [--since DATE] [--until DATE] [-j]`
 
 ## Know-How
 
+- **Natural language dates**: `--since` and `--until` accept `today`, `yesterday`, `now`, `this_week`, `last_week` in addition to YYYY-MM-DD and full datetime formats. Works in both `entry list` and all `report` commands.
+- **JSON on all mutations**: `entry start`, `entry stop`, `entry update`, `entry resume` all support `-j/--json` and return the full entry with real ID, hydrated project, and `"running"` boolean.
+- **`entry current --json`** returns `{"running": false}` when nothing is running (not null). Same for `entry stop --json` when idle.
+- **Report defaults**: `toggl report summary` with no args defaults to current week (this_week to today). No date flags required.
+- **Project by name**: `-p "ProjectName"` resolves by name first, then by numeric ID. Non-existent names show available projects. Project is validated before stopping any running timer.
+- **Entry list output**: Human mode shows `ID DATE TIME [duration] – description @project`. Use IDs directly for `entry show`, `entry update`, `entry delete`.
 - Multiple tags: pass multiple values to `-t`, for example `-t dev review`, not one quoted string like `-t "dev review"` if you want two separate tags.
 - Clear tags on update: use `toggl entry update [ID] -t ""`.
 - Remove project or task on update: use `-p ""` or `--task ""`.
@@ -66,51 +72,50 @@ Reports:
 - If `entry start` omits `--end`, it stops any currently running entry first.
 - `--end` requires `--start`, and end time must be later than start time.
 - `entry update --current` edits the currently running entry without needing its ID.
-- If you change a time entry's project during update and do not explicitly provide `--task`, the existing task is cleared.
-- If you provide a task name and it resolves successfully, that task's project becomes the time entry's project.
+- `entry update` with no field flags (-d, -p, -t, etc.) exits 1 with a helpful message listing valid flags.
 - `entry start` uses config defaults when flags are omitted, including default project, task, tags, and billable state.
-- `entry list` and `entry show` support `-j` for JSON output.
-- `entry list --since/--until` accepts RFC3339, local datetime, date-only, or time-only (HH:MM) values.
 - For `entry list`, a date-only `--since YYYY-MM-DD` means local `00:00:00` at the start of that day.
 - For `entry list`, a date-only `--until YYYY-MM-DD` includes the whole local day by using the next day's `00:00:00` as the exclusive upper bound.
-- To fetch exactly one local day, use the same date for both flags, for example `toggl entry list --since 2026-03-06 --until 2026-03-06`.
+- Empty results: human mode prints "No entries found." to stderr; JSON mode returns `[]`.
 - **Performance**: Read-only API responses are cached for 30 seconds by default. Cache can be disabled with `TOGGL_HTTP_CACHE_DISABLED=1` or TTL customized with `TOGGL_HTTP_CACHE_TTL_SECONDS`.
-- **Organizations**: Use `toggl org list` to see available organizations, and `toggl org show <id>` for detailed info.
 
 ## Minimal Examples
 
 ```bash
+# Time entries
 toggl entry start -d "Feature work" -p "App" -t dev review -b
 toggl entry start -d "Backfill" --start "2026-03-05 09:00" --end "2026-03-05 10:30"
 toggl entry start -d "Quick meeting" --start 09:00 --end 10:00
-toggl entry update --current -d "Updated" --billable false -p "" -t ""
-toggl entry update 123 -d "Renamed" -p "NewProject"
-toggl entry list --since "2026-03-06 09:00" --until "2026-03-06 18:30"
-toggl entry list --since 2026-03-06 --until 2026-03-06
-toggl entry list --json | jq '.[].description'
-toggl project list -j
-toggl org list -j
-toggl org show 12345
-toggl project create "App" --color "#06aaf5"
-toggl task delete -p "App" "Code Review"
-toggl task update -p "App" "Code Review" --new-name "CR"
-toggl preferences update '{"time_format":"H:mm"}'
+toggl entry start -d "Task" -p "App" --json   # returns real ID in JSON
+toggl entry stop --json                        # returns stopped entry as JSON
+toggl entry current --json                     # check if running, get entry data
+toggl entry update --current -d "Updated" -p "" -t ""
+toggl entry list --since today
+toggl entry list --since yesterday --until today
+toggl entry list --since this_week --json | jq '.[].description'
+toggl entry list --since last_week --until yesterday
 
-# Reports
-toggl report summary --since 2026-03-01 --until 2026-03-31
-toggl report summary --since 2026-03-01 --until 2026-03-31 --json
-toggl report detailed --since 2026-03-25 --until 2026-03-27 -n 50
-toggl report weekly --since 2026-03-17 --until 2026-03-23
+# Reports (no args = current week)
+toggl report summary
+toggl report summary --since today --until today
+toggl report summary --since last_week --until yesterday --json
+toggl report weekly --since this_week --until today
+toggl report detailed --since 2026-03-01 --until 2026-03-27 -n 50
+
+# Resources
+toggl project list -j
+toggl project create "App" --color "#06aaf5"
+toggl me --json
 ```
 
 ## Output And Time
 
-- Time-entry display format: `[$] [HH:MM:SS]* - description @Project #[tag1, tag2]`
+- Time-entry list format: `ID DATE TIME [$] [HH:MM:SS]* – description @Project #[tag1, tag2]`
 - `$` means billable; `*` means currently running.
+- JSON single-entry output includes `"running": true/false` and hydrated `"project"` object.
 - Accepted datetime input for `--start`, `--end`, `--since`, `--until`:
-- RFC3339: `2026-03-05T09:00:00+08:00`
-- Local datetime: `2026-03-05 09:00` or `2026-03-05T09:00:00`
-- Date only: `2026-03-05` meaning local `00:00:00`
-- Time only: `09:00` or `14:30:00` meaning that time today in local timezone
-- Date only for `entry list --since`: local `00:00:00` at the start of that day
-- Date only for `entry list --until`: includes the full local day
+  - Natural language: `today`, `yesterday`, `now`, `this_week`, `last_week`
+  - RFC3339: `2026-03-05T09:00:00+08:00`
+  - Local datetime: `2026-03-05 09:00` or `2026-03-05T09:00:00`
+  - Date only: `2026-03-05` meaning local `00:00:00`
+  - Time only: `09:00` or `14:30:00` meaning that time today in local timezone
