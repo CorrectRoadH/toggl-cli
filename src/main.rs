@@ -76,10 +76,21 @@ async fn main() -> ResultWithDefaultError<()> {
             err.exit();
         }
     };
+    let json_mode = parsed_args.cmd.has_json_flag();
     match execute_subcommand(parsed_args).await {
         Ok(()) => Ok(()),
         Err(error) => {
-            eprint!("{error}");
+            if json_mode {
+                let msg = format!("{error}");
+                let msg = msg.trim_end_matches('\n');
+                let escaped = msg
+                    .replace('\\', "\\\\")
+                    .replace('"', "\\\"")
+                    .replace('\n', "\\n");
+                eprint!("{{\"error\":\"{escaped}\"}}");
+            } else {
+                eprint!("{error}");
+            }
             std::process::exit(1);
         }
     }
@@ -88,7 +99,7 @@ async fn main() -> ResultWithDefaultError<()> {
 async fn execute_subcommand(args: Cli) -> ResultWithDefaultError<()> {
     setup_working_directory(args.directory)?;
 
-    let picker = picker::get_picker(args.fzf);
+    let picker = picker::get_picker(false);
 
     match args.cmd {
         Command::Auth {
@@ -97,9 +108,13 @@ async fn execute_subcommand(args: Cli) -> ResultWithDefaultError<()> {
             api_type,
             api_url,
         } => match action {
-            Some(AuthAction::Status) => {
+            Some(AuthAction::Status { json }) => {
                 let status = AuthStatusCommand::get_status();
-                AuthStatusCommand::execute(io::stdout(), status)
+                if json {
+                    AuthStatusCommand::execute_json(io::stdout(), status)
+                } else {
+                    AuthStatusCommand::execute(io::stdout(), status)
+                }
             }
             Some(AuthAction::Login {
                 api_token: login_token,
@@ -185,14 +200,14 @@ async fn execute_entry_command(
     // Validate required arguments BEFORE creating the API client to avoid
     // unnecessary keychain/storage access for validation failures.
     match &action {
-        EntryAction::Show { id, .. } if id.is_none() => {
+        EntryAction::Show { id, current, .. } if id.is_none() && !current => {
             return Err(Box::new(error::ArgumentError::MissingArgument(
-                "'show' requires an entry ID. Run `toggl entry list` or `toggl entry current` to find one.".to_string(),
+                "'show' requires an entry ID or --current flag. Run `toggl entry list` or `toggl entry running` to find one.".to_string(),
             )));
         }
         EntryAction::Update { id, current, .. } if id.is_none() && !current => {
             return Err(Box::new(error::ArgumentError::MissingArgument(
-                "'update' requires an entry ID or --current flag. Example: toggl entry update --current -d \"New description\"".to_string(),
+                "'edit' requires an entry ID or --current flag. Example: toggl entry edit --current -d \"New description\"".to_string(),
             )));
         }
         EntryAction::Update {
@@ -216,7 +231,7 @@ async fn execute_entry_command(
                 "No fields specified to update. Use -d, -p, -t, --billable, --tags, --start, or --end to specify what to change.".to_string(),
             )));
         }
-        EntryAction::Delete { id, current } if id.is_none() && !current => {
+        EntryAction::Delete { id, current, .. } if id.is_none() && !current => {
             return Err(Box::new(error::ArgumentError::MissingArgument(
                 "'delete' requires an entry ID or --current flag. Run `toggl entry list` to find entry IDs.".to_string(),
             )));
@@ -235,17 +250,15 @@ async fn execute_entry_command(
         EntryAction::Current { json } => RunningTimeEntryCommand::execute(api_client, json).await,
         EntryAction::List {
             number,
-            limit,
             json,
             since,
             until,
-        } => ListCommand::execute(api_client, number.or(limit), json, since, until, None).await,
+        } => ListCommand::execute(api_client, number, json, since, until, None).await,
         EntryAction::Stop { json } => {
             StopCommand::execute(&api_client, StopCommandOrigin::CommandLine, json).await?;
             Ok(())
         }
         EntryAction::Start {
-            interactive,
             billable,
             description,
             project,
@@ -263,20 +276,29 @@ async fn execute_entry_command(
                 task,
                 tags,
                 billable,
-                interactive,
+                false,
                 start,
                 end,
                 json,
             )
             .await
         }
-        EntryAction::Resume { interactive, json } => {
-            let picker_option = if interactive { Some(picker) } else { None };
-            ContinueCommand::execute(api_client, picker_option, json).await
+        EntryAction::Resume { id, json } => {
+            ContinueCommand::execute(api_client, None, id, json).await
         }
-        EntryAction::Show { id, json } => {
-            // id is guaranteed Some due to validation above
-            ShowCommand::execute(api_client, id.unwrap(), json).await
+        EntryAction::Show { id, current, json } => {
+            if current {
+                // Get the current running entry and show it
+                match api_client.get_current_time_entry_minimal().await? {
+                    Some(entry) => ShowCommand::execute(api_client, entry.id, json).await,
+                    None => Err(Box::new(error::ArgumentError::ResourceNotFound(
+                        "no time entry is currently running".to_string(),
+                    ))),
+                }
+            } else {
+                // id is guaranteed Some due to validation above
+                ShowCommand::execute(api_client, id.unwrap(), json).await
+            }
         }
         EntryAction::Update {
             id,
@@ -329,18 +351,18 @@ async fn execute_entry_command(
                 .await
             }
         }
-        EntryAction::Delete { id, current } => {
+        EntryAction::Delete { id, current, json } => {
             if current {
                 // Get the current running entry and delete it
                 match api_client.get_current_time_entry_minimal().await? {
-                    Some(entry) => DeleteCommand::execute(api_client, entry.id).await,
+                    Some(entry) => DeleteCommand::execute(api_client, entry.id, json).await,
                     None => Err(Box::new(error::ArgumentError::ResourceNotFound(
                         "no time entry is currently running".to_string(),
                     ))),
                 }
             } else {
                 // id is guaranteed Some due to validation above
-                DeleteCommand::execute(api_client, id.unwrap()).await
+                DeleteCommand::execute(api_client, id.unwrap(), json).await
             }
         }
         EntryAction::BulkEdit { ids, json } => {

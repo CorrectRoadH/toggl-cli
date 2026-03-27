@@ -114,8 +114,7 @@ pub async fn execute_report_command(
             if json {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&result)
-                        .expect("failed to serialize report to JSON")
+                    serde_json::to_string(&result).expect("failed to serialize report to JSON")
                 );
             } else {
                 print_summary_report(&result, &since, &until);
@@ -149,8 +148,7 @@ pub async fn execute_report_command(
             if json {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&result)
-                        .expect("failed to serialize report to JSON")
+                    serde_json::to_string(&result).expect("failed to serialize report to JSON")
                 );
             } else {
                 print_detailed_report(&result, &since, &until);
@@ -168,8 +166,7 @@ pub async fn execute_report_command(
             if json {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&result)
-                        .expect("failed to serialize report to JSON")
+                    serde_json::to_string(&result).expect("failed to serialize report to JSON")
                 );
             } else {
                 print_weekly_report(&result, &since, &until);

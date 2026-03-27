@@ -22,7 +22,7 @@ impl OrganizationCommand {
             OrganizationAction::List { json } => {
                 let organizations = api_client.get_organizations().await?;
                 if json {
-                    let json_string = serde_json::to_string_pretty(&organizations)
+                    let json_string = serde_json::to_string(&organizations)
                         .expect("failed to serialize organizations to JSON");
                     writeln!(handle, "{json_string}").expect("failed to print");
                 } else if organizations.is_empty() {
@@ -37,7 +37,7 @@ impl OrganizationCommand {
             OrganizationAction::Show { id, json } => {
                 let organization = api_client.get_organization(id).await?;
                 if json {
-                    let json_string = serde_json::to_string_pretty(&organization)
+                    let json_string = serde_json::to_string(&organization)
                         .expect("failed to serialize organization to JSON");
                     writeln!(handle, "{json_string}").expect("failed to print");
                 } else {

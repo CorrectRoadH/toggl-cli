@@ -72,24 +72,36 @@ pub struct TimeEntry {
     pub stop: Option<DateTime<Utc>>,
     pub duration: i64,
     pub billable: bool,
+    #[serde(skip_serializing)]
     pub workspace_id: i64,
     pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<Project>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub task: Option<Task>,
+    #[serde(skip_serializing)]
     pub created_with: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Project {
     pub id: i64,
     pub name: String,
     pub workspace_id: i64,
+    #[serde(skip_serializing)]
     pub client: Option<Client>,
+    #[serde(skip_serializing)]
     pub is_private: bool,
+    #[serde(skip_serializing)]
     pub active: bool,
+    #[serde(skip_serializing)]
     pub at: DateTime<Utc>,
+    #[serde(skip_serializing)]
     pub created_at: DateTime<Utc>,
+    #[serde(skip_serializing)]
     pub color: String,
+    #[serde(skip_serializing)]
     pub billable: Option<bool>,
 }
 

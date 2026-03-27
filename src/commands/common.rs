@@ -48,14 +48,12 @@ impl CommandUtils {
     pub fn print_time_entry_json(entry: &TimeEntry) {
         let mut value =
             serde_json::to_value(entry).expect("failed to serialize time entry to JSON");
-        if let Some(obj) = value.as_object_mut() {
-            obj.insert(
-                "running".to_string(),
-                serde_json::Value::Bool(entry.is_running()),
-            );
+        if entry.is_running() {
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("running".to_string(), serde_json::Value::Bool(true));
+            }
         }
-        let json_string =
-            serde_json::to_string_pretty(&value).expect("failed to serialize to JSON");
+        let json_string = serde_json::to_string(&value).expect("failed to serialize to JSON");
         let stdout = std::io::stdout();
         let mut handle = BufWriter::new(stdout);
         writeln!(handle, "{json_string}").expect("failed to print");

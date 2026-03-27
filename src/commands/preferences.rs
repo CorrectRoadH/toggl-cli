@@ -6,7 +6,7 @@ pub struct PreferencesCommand;
 impl PreferencesCommand {
     pub async fn execute(api_client: impl ApiClient) -> ResultWithDefaultError<()> {
         let preferences = api_client.get_preferences().await?;
-        let json = serde_json::to_string_pretty(&preferences)
+        let json = serde_json::to_string(&preferences)
             .map_err(|error| -> Box<dyn std::error::Error + Send> { Box::new(error) })?;
         println!("{json}");
         Ok(())

@@ -16,7 +16,7 @@ impl UpdatePreferencesCommand {
         println!("{}", "Preferences updated successfully".green());
         println!(
             "{}",
-            serde_json::to_string_pretty(&updated_preferences)
+            serde_json::to_string(&updated_preferences)
                 .map_err(|error| -> Box<dyn std::error::Error + Send> { Box::new(error) })?
         );
         Ok(())

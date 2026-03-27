@@ -128,6 +128,57 @@ impl AuthStatusCommand {
         }
     }
 
+    /// Execute the auth status command in JSON format
+    pub fn execute_json<W: std::io::Write>(
+        mut writer: W,
+        status: AuthStatus,
+    ) -> ResultWithDefaultError<()> {
+        let source_str = match &status.source {
+            CredentialSource::Environment => "TOGGL_API_TOKEN",
+            CredentialSource::Keychain => "keyring",
+            CredentialSource::None => "none",
+        };
+
+        let mut obj = serde_json::Map::new();
+        obj.insert(
+            "authenticated".to_string(),
+            serde_json::Value::Bool(status.is_authenticated),
+        );
+
+        if status.is_authenticated {
+            obj.insert(
+                "provider".to_string(),
+                serde_json::Value::String(status.provider.clone()),
+            );
+            obj.insert(
+                "source".to_string(),
+                serde_json::Value::String(source_str.to_string()),
+            );
+            if let Some(ref url) = status.api_url {
+                obj.insert(
+                    "api_url".to_string(),
+                    serde_json::Value::String(url.clone()),
+                );
+            }
+            if let Some(ref token) = status.masked_token {
+                obj.insert(
+                    "masked_token".to_string(),
+                    serde_json::Value::String(token.clone()),
+                );
+            }
+            if status.api_url.is_some() && !status.api_url_valid {
+                obj.insert("api_url_valid".to_string(), serde_json::Value::Bool(false));
+            }
+        }
+
+        let json = serde_json::Value::Object(obj);
+        writeln!(writer, "{}", serde_json::to_string(&json).unwrap()).map_err(|_| {
+            Box::new(error::StorageError::Unknown) as Box<dyn std::error::Error + Send>
+        })?;
+
+        Ok(())
+    }
+
     /// Execute the auth status command and write output to the provided writer
     pub fn execute<W: std::io::Write>(
         mut writer: W,

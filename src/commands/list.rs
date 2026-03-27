@@ -16,16 +16,15 @@ fn time_entries_to_json(entries: &[&TimeEntry]) -> String {
         .iter()
         .map(|entry| {
             let mut value = serde_json::to_value(entry).expect("failed to serialize time entry");
-            if let Some(obj) = value.as_object_mut() {
-                obj.insert(
-                    "running".to_string(),
-                    serde_json::Value::Bool(entry.is_running()),
-                );
+            if entry.is_running() {
+                if let Some(obj) = value.as_object_mut() {
+                    obj.insert("running".to_string(), serde_json::Value::Bool(true));
+                }
             }
             value
         })
         .collect();
-    serde_json::to_string_pretty(&values).expect("failed to serialize time entries to JSON")
+    serde_json::to_string(&values).expect("failed to serialize time entries to JSON")
 }
 
 fn write_entries_grouped_by_date(handle: &mut impl Write, entries: &[&TimeEntry]) {
@@ -108,8 +107,8 @@ impl ListCommand {
                         .take(count.unwrap_or(usize::MAX))
                         .collect::<Vec<_>>();
                     if json {
-                        let json_string = serde_json::to_string_pretty(&tags)
-                            .expect("failed to serialize tags to JSON");
+                        let json_string =
+                            serde_json::to_string(&tags).expect("failed to serialize tags to JSON");
                         writeln!(handle, "{json_string}").expect("failed to print");
                     } else {
                         tags.iter()
@@ -135,7 +134,7 @@ impl ListCommand {
                         .take(count.unwrap_or(usize::MAX))
                         .collect::<Vec<_>>();
                     if json {
-                        let json_string = serde_json::to_string_pretty(&clients)
+                        let json_string = serde_json::to_string(&clients)
                             .expect("failed to serialize clients to JSON");
                         writeln!(handle, "{json_string}").expect("failed to print");
                     } else {
@@ -158,7 +157,7 @@ impl ListCommand {
                 .take(count.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
             if json {
-                let json_string = serde_json::to_string_pretty(&organizations)
+                let json_string = serde_json::to_string(&organizations)
                     .expect("failed to serialize organizations to JSON");
                 writeln!(handle, "{json_string}").expect("failed to print");
             } else {
@@ -179,8 +178,8 @@ impl ListCommand {
                 .take(count.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
             if json {
-                let json_string = serde_json::to_string_pretty(&projects)
-                    .expect("failed to serialize projects to JSON");
+                let json_string =
+                    serde_json::to_string(&projects).expect("failed to serialize projects to JSON");
                 writeln!(handle, "{json_string}").expect("failed to print");
             } else {
                 projects
@@ -200,7 +199,7 @@ impl ListCommand {
                 .take(count.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
             if json {
-                let json_string = serde_json::to_string_pretty(&workspaces)
+                let json_string = serde_json::to_string(&workspaces)
                     .expect("failed to serialize workspaces to JSON");
                 writeln!(handle, "{json_string}").expect("failed to print");
             } else {
@@ -221,8 +220,8 @@ impl ListCommand {
                 .take(count.unwrap_or(usize::MAX))
                 .collect::<Vec<_>>();
             if json {
-                let json_string = serde_json::to_string_pretty(&tasks)
-                    .expect("failed to serialize tasks to JSON");
+                let json_string =
+                    serde_json::to_string(&tasks).expect("failed to serialize tasks to JSON");
                 writeln!(handle, "{json_string}").expect("failed to print");
             } else {
                 tasks
@@ -271,7 +270,7 @@ impl ListCommand {
                             .collect::<Vec<_>>();
 
                         if json {
-                            let json_string = serde_json::to_string_pretty(&projects)
+                            let json_string = serde_json::to_string(&projects)
                                 .expect("failed to serialize projects to JSON");
                             writeln!(handle, "{json_string}").expect("failed to print");
                         } else {
@@ -290,7 +289,7 @@ impl ListCommand {
                             .collect::<Vec<_>>();
 
                         if json {
-                            let json_string = serde_json::to_string_pretty(&workspaces)
+                            let json_string = serde_json::to_string(&workspaces)
                                 .expect("failed to serialize workspaces to JSON");
                             writeln!(handle, "{json_string}").expect("failed to print");
                         } else {
@@ -309,7 +308,7 @@ impl ListCommand {
                             .collect::<Vec<_>>();
 
                         if json {
-                            let json_string = serde_json::to_string_pretty(&tasks)
+                            let json_string = serde_json::to_string(&tasks)
                                 .expect("failed to serialize tasks to JSON");
                             writeln!(handle, "{json_string}").expect("failed to print");
                         } else {

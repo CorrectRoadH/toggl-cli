@@ -11,7 +11,7 @@ use clap::{Parser, Subcommand};
 Examples:
   toggl entry start -d \"Working on feature\"
   toggl entry stop
-  toggl entry current
+  toggl entry running
   toggl entry list")]
 pub struct Cli {
     #[command(subcommand)]
@@ -22,12 +22,6 @@ pub struct Cli {
 
     #[arg(long, help = "Use custom proxy")]
     pub proxy: Option<String>,
-
-    #[arg(
-        long,
-        help = "Use fzf for interactive selections instead of the default picker"
-    )]
-    pub fzf: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -58,7 +52,7 @@ Examples:
     #[command(after_long_help = "\
 Examples:
   toggl entry start -d \"Working on feature\"
-  toggl entry current
+  toggl entry running
   toggl entry stop
   toggl entry list --since yesterday")]
     Entry {
@@ -131,10 +125,15 @@ Examples:
 
 #[derive(Subcommand, Debug)]
 pub enum EntryAction {
-    /// Show the current time entry.
+    /// Show the currently running time entry.
     #[command(
-        alias = "running",
+        name = "running",
+        alias = "current",
         after_long_help = "\
+Examples:
+  toggl entry running             Show the running entry
+  toggl entry running --json      Show the running entry as JSON
+
 Note: JSON output includes a \"running\": true field for active entries."
     )]
     Current {
@@ -152,39 +151,35 @@ Examples:
     List {
         #[arg(short, long, help = "Maximum number of items to print")]
         number: Option<usize>,
-        #[arg(long, help = "Maximum number of items to print (alias for --number)")]
-        limit: Option<usize>,
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
         #[arg(
             long,
-            help = "Filter time entries starting on or after this date/time (today, yesterday, this_week, last_week, YYYY-MM-DD, or full datetime)"
+            help = "Filter time entries starting on or after this date/time (now, today, yesterday, this_week, last_week, YYYY-MM-DD, or full datetime)"
         )]
         since: Option<String>,
         #[arg(
             long,
-            help = "Filter time entries before this date/time (today, yesterday, this_week, last_week, YYYY-MM-DD, or full datetime)"
+            help = "Filter time entries before this date/time (now, today, yesterday, this_week, last_week, YYYY-MM-DD, or full datetime)"
         )]
         until: Option<String>,
     },
     /// Stop the currently running time entry.
+    #[command(after_long_help = "\
+Examples:
+  toggl entry stop                Stop the running entry
+  toggl entry stop --json         Stop and output as JSON")]
     Stop {
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
     },
-    /// Start a new time entry, call with no arguments to start in interactive mode.
+    /// Start a new time entry (runs immediately with no prompt when called without arguments).
     #[command(after_long_help = "\
 Examples:
   toggl entry start -d \"Writing docs\" -p MyProject
-  toggl entry start -i
-  toggl entry start -d \"Meeting\" --start 09:00 --end 10:00")]
+  toggl entry start -d \"Meeting\" --start 09:00 --end 10:00
+  toggl entry start --json")]
     Start {
-        #[arg(
-            short,
-            long,
-            help = "Launch interactive mode to select project, description, and tags"
-        )]
-        interactive: bool,
         #[arg(short, long, help = "Description of the time entry")]
         description: Option<String>,
         #[arg(
@@ -198,11 +193,7 @@ Examples:
             help = "Exact name of the task you want the time entry to be associated with"
         )]
         task: Option<String>,
-        #[arg(
-            short,
-            long,
-            help = "Space separated list of tags to associate with the time entry, e.g. 'tag1 tag2 tag3'"
-        )]
+        #[arg(short, long, help = "Tag name (repeatable), e.g. -t tag1 -t tag2")]
         tags: Option<Vec<String>>,
         #[arg(short, long, help = "Mark the time entry as billable")]
         billable: bool,
@@ -221,43 +212,50 @@ Examples:
     },
     /// Continue a previous time entry.
     #[command(
-        alias = "continue",
+        name = "continue",
+        alias = "resume",
         after_long_help = "\
 Examples:
-  toggl entry resume              Resume most recent entry
-  toggl entry resume -i           Choose which entry to resume
-  toggl entry resume --json       Resume and output as JSON"
+  toggl entry continue              Continue most recent entry
+  toggl entry continue --id 12345   Continue a specific entry by ID
+  toggl entry continue --json       Continue and output as JSON"
     )]
     Resume {
-        #[arg(
-            short,
-            long,
-            help = "Launch interactive mode to select which entry to resume"
-        )]
-        interactive: bool,
+        #[arg(short, long, help = "Continue a specific time entry by its ID")]
+        id: Option<i64>,
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
     },
-    /// Show details of a single time entry by ID.
+    /// Show details of a single time entry by ID or the currently running entry.
     #[command(after_long_help = "\
 Examples:
   toggl entry show 12345
-  toggl entry current        (alternative for running entry)")]
+  toggl entry show 12345 --json
+  toggl entry show --current
+  toggl entry running        (alternative for running entry)")]
     Show {
         #[arg(help = "ID of the time entry to show")]
         id: Option<i64>,
+        #[arg(short, long, help = "Show the currently running time entry")]
+        current: bool,
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
     },
     /// Edit a time entry's description, billable state, project, task, or tags.
-    #[command(after_long_help = "\
+    #[command(
+        name = "edit",
+        alias = "update",
+        after_long_help = "\
 Examples:
-  toggl entry update --current -d \"New description\"
-  toggl entry update 12345 -p NewProject")]
+  toggl entry edit --current -d \"New description\"
+  toggl entry edit 12345 -p NewProject
+  toggl entry edit 12345 --end \"\"     # Re-open a stopped entry
+  toggl entry edit 12345 -p \"\"        # Remove project from entry"
+    )]
     Update {
         #[arg(help = "ID of the time entry to edit")]
         id: Option<i64>,
-        #[arg(long, help = "Edit the currently running time entry")]
+        #[arg(short, long, help = "Edit the currently running time entry")]
         current: bool,
         #[arg(short, long, help = "New description")]
         description: Option<String>,
@@ -274,7 +272,7 @@ Examples:
         #[arg(
             short,
             long,
-            help = "New space-separated list of tags (use empty string \"\" to clear tags)"
+            help = "Tag name (repeatable, use empty string \"\" to clear tags), e.g. -t tag1 -t tag2"
         )]
         tags: Option<Vec<String>>,
         #[arg(
@@ -291,11 +289,18 @@ Examples:
         json: bool,
     },
     /// Delete a time entry by ID.
+    #[command(after_long_help = "\
+Examples:
+  toggl entry delete 12345
+  toggl entry delete --current
+  toggl entry delete 12345 --json")]
     Delete {
         #[arg(help = "ID of the time entry to delete")]
         id: Option<i64>,
-        #[arg(long, help = "Delete the currently running time entry")]
+        #[arg(short, long, help = "Delete the currently running time entry")]
         current: bool,
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
     },
     /// Bulk edit multiple time entries with a JSON Patch payload.
     #[clap(hide = true)]
@@ -531,7 +536,14 @@ pub enum AuthAction {
         api_url: Option<String>,
     },
     /// Show current authentication status, provider, and credential source.
-    Status,
+    #[command(after_long_help = "\
+Examples:
+  toggl auth status               Show auth status
+  toggl auth status --json        Output auth status as JSON")]
+    Status {
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -612,6 +624,60 @@ Examples:
     },
 }
 
+impl Command {
+    /// Returns true if the parsed command includes a `--json` output flag.
+    /// Used by the top-level error handler to format errors as JSON when appropriate.
+    pub fn has_json_flag(&self) -> bool {
+        match self {
+            Command::Me { json } => *json,
+            Command::Entry { action } => match action {
+                EntryAction::Current { json }
+                | EntryAction::List { json, .. }
+                | EntryAction::Stop { json }
+                | EntryAction::Start { json, .. }
+                | EntryAction::Resume { json, .. }
+                | EntryAction::Show { json, .. }
+                | EntryAction::Update { json, .. }
+                | EntryAction::Delete { json, .. } => *json,
+                EntryAction::BulkEdit { .. } => false,
+            },
+            Command::Project { action } => match action {
+                ProjectAction::List { json } => *json,
+                _ => false,
+            },
+            Command::Tag { action } => match action {
+                TagAction::List { json } => *json,
+                _ => false,
+            },
+            Command::Client { action } => match action {
+                ClientAction::List { json } => *json,
+                _ => false,
+            },
+            Command::Task { action } => match action {
+                TaskAction::List { json } => *json,
+                _ => false,
+            },
+            Command::Workspace { action } => match action {
+                WorkspaceAction::List { json } => *json,
+                _ => false,
+            },
+            Command::Org { action } => match action {
+                OrganizationAction::List { json } | OrganizationAction::Show { json, .. } => *json,
+            },
+            Command::Auth { action, .. } => match action {
+                Some(AuthAction::Status { json }) => *json,
+                _ => false,
+            },
+            Command::Report { action } => match action {
+                ReportAction::Summary { json, .. }
+                | ReportAction::Detailed { json, .. }
+                | ReportAction::Weekly { json, .. } => *json,
+            },
+            Command::Logout | Command::Preferences { .. } | Command::Config { .. } => false,
+        }
+    }
+}
+
 /// Entity types for list command (used internally by list.rs)
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -644,6 +710,7 @@ mod tests {
                 action:
                     EntryAction::Show {
                         id: None,
+                        current: false,
                         json: false,
                     },
             } => {}
@@ -659,6 +726,7 @@ mod tests {
                 action:
                     EntryAction::Show {
                         id: Some(42),
+                        current: false,
                         json: false,
                     },
             } => {}
@@ -674,7 +742,6 @@ mod tests {
                 action:
                     EntryAction::List {
                         number: None,
-                        limit: None,
                         json: false,
                         since: None,
                         until: None,
@@ -908,7 +975,7 @@ mod tests {
             Cli::try_parse_from(["toggl", "auth", "status"]).expect("auth status should parse");
         match cmd.cmd {
             Command::Auth {
-                action: Some(AuthAction::Status),
+                action: Some(AuthAction::Status { json: false }),
                 api_token: None,
                 api_type: None,
                 api_url: None,
@@ -1222,7 +1289,7 @@ mod tests {
             Command::Entry {
                 action:
                     EntryAction::Resume {
-                        interactive: false,
+                        id: None,
                         json: false,
                     },
             } => {}
@@ -1244,7 +1311,8 @@ mod tests {
                         Command::Entry {
                             action: EntryAction::Delete {
                                 id: None,
-                                current: false
+                                current: false,
+                                json: false,
                             }
                         }
                     ))
@@ -1262,6 +1330,7 @@ mod tests {
                     EntryAction::Delete {
                         id: None,
                         current: true,
+                        json: false,
                     },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
@@ -1319,6 +1388,187 @@ mod tests {
                         ..
                     },
             } => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_edit_alias_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "entry", "edit", "42", "-d", "Updated"])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: Some(42),
+                        current: false,
+                        description: Some(d),
+                        ..
+                    },
+            } if d == "Updated" => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_edit_with_description_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "entry", "edit", "99", "-d", "New desc"])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: Some(99),
+                        description: Some(d),
+                        project: None,
+                        tags: None,
+                        ..
+                    },
+            } if d == "New desc" => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_edit_with_project_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "entry", "edit", "99", "-p", "MyProject"])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: Some(99),
+                        project: Some(p),
+                        ..
+                    },
+            } if p == "MyProject" => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_edit_with_tags_parses() {
+        let cmd = Cli::try_parse_from([
+            "toggl", "entry", "edit", "99", "--tags", "tag1", "--tags", "tag2", "--tags", "tag3",
+        ])
+        .expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: Some(99),
+                        tags: Some(t),
+                        ..
+                    },
+            } if t == vec!["tag1", "tag2", "tag3"] => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_edit_clear_end_parses() {
+        // Passing --end "" should clear the end time (re-open a stopped entry)
+        let cmd = Cli::try_parse_from(["toggl", "entry", "edit", "99", "--end", ""])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: Some(99),
+                        end: Some(e),
+                        ..
+                    },
+            } if e.is_empty() => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_edit_clear_project_parses() {
+        // Passing -p "" should remove project from entry
+        let cmd =
+            Cli::try_parse_from(["toggl", "entry", "edit", "99", "-p", ""]).expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: Some(99),
+                        project: Some(p),
+                        ..
+                    },
+            } if p.is_empty() => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_edit_with_current_and_description_parses() {
+        let cmd =
+            Cli::try_parse_from(["toggl", "entry", "edit", "--current", "-d", "Working on it"])
+                .expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: None,
+                        current: true,
+                        description: Some(d),
+                        ..
+                    },
+            } if d == "Working on it" => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_edit_multiple_fields_parses() {
+        let cmd = Cli::try_parse_from([
+            "toggl",
+            "entry",
+            "edit",
+            "42",
+            "-d",
+            "New desc",
+            "-p",
+            "MyProject",
+            "--tags",
+            "tag1",
+            "--tags",
+            "tag2",
+            "--billable",
+            "true",
+        ])
+        .expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: Some(42),
+                        description: Some(d),
+                        project: Some(p),
+                        tags: Some(t),
+                        billable: Some(true),
+                        ..
+                    },
+            } if d == "New desc" && p == "MyProject" && t == vec!["tag1", "tag2"] => {}
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_edit_json_output_parses() {
+        let cmd = Cli::try_parse_from(["toggl", "entry", "edit", "42", "-d", "Test", "--json"])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action:
+                    EntryAction::Update {
+                        id: Some(42),
+                        json: true,
+                        description: Some(d),
+                        ..
+                    },
+            } if d == "Test" => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
     }

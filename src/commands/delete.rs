@@ -5,7 +5,11 @@ use colored::Colorize;
 pub struct DeleteCommand;
 
 impl DeleteCommand {
-    pub async fn execute(api_client: impl ApiClient, id: i64) -> ResultWithDefaultError<()> {
+    pub async fn execute(
+        api_client: impl ApiClient,
+        id: i64,
+        json: bool,
+    ) -> ResultWithDefaultError<()> {
         match api_client.get_time_entry(id).await {
             Err(_) => {
                 eprintln!("{}", format!("No time entry found with id {id}").yellow());
@@ -16,7 +20,13 @@ impl DeleteCommand {
                     eprintln!("{}\n{}", "Couldn't delete time entry".red(), error);
                     return Err(error);
                 }
-                Ok(()) => println!("{}\n{}", "Time entry deleted successfully".green(), entry),
+                Ok(()) => {
+                    if json {
+                        println!("{{\"deleted\":true,\"id\":{}}}", id);
+                    } else {
+                        println!("{}\n{}", "Time entry deleted successfully".green(), entry);
+                    }
+                }
             },
         }
 

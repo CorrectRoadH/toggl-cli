@@ -10,7 +10,7 @@ impl MeCommand {
 
         if json {
             let json_string =
-                serde_json::to_string_pretty(&user).expect("failed to serialize user to JSON");
+                serde_json::to_string(&user).expect("failed to serialize user to JSON");
             println!("{json_string}");
             return Ok(());
         }

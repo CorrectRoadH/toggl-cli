@@ -15,32 +15,37 @@ impl ContinueCommand {
     pub async fn execute(
         api_client: impl ApiClient,
         picker: Option<Box<dyn ItemPicker>>,
+        id: Option<i64>,
         json: bool,
     ) -> ResultWithDefaultError<()> {
         let running_time_entry =
             StopCommand::execute(&api_client, StopCommandOrigin::ContinueCommand, false).await?;
 
-        let entities = api_client.get_entities().await?;
-        if entities.time_entries.is_empty() {
-            println!("{}", "No time entries in last 90 days".red());
-            return Ok(());
-        }
+        let time_entry_to_continue = if let Some(entry_id) = id {
+            Some(api_client.get_time_entry(entry_id).await?)
+        } else {
+            let entities = api_client.get_entities().await?;
+            if entities.time_entries.is_empty() {
+                println!("{}", "No time entries in last 90 days".red());
+                return Ok(());
+            }
 
-        let time_entry_to_continue = match picker {
-            None => get_first_stopped_time_entry(entities.time_entries, running_time_entry),
-            Some(time_entry_picker) => {
-                let pickable_items = entities
-                    .time_entries
-                    .iter()
-                    .map(|te| PickableItem::from_time_entry(te.clone()))
-                    .collect();
-                let picked_key = time_entry_picker.pick(pickable_items)?;
-                let picked_time_entry = entities
-                    .time_entries
-                    .iter()
-                    .find(|te| te.id == picked_key.id)
-                    .unwrap();
-                Some(picked_time_entry.clone())
+            match picker {
+                None => get_first_stopped_time_entry(entities.time_entries, running_time_entry),
+                Some(time_entry_picker) => {
+                    let pickable_items = entities
+                        .time_entries
+                        .iter()
+                        .map(|te| PickableItem::from_time_entry(te.clone()))
+                        .collect();
+                    let picked_key = time_entry_picker.pick(pickable_items)?;
+                    let picked_time_entry = entities
+                        .time_entries
+                        .iter()
+                        .find(|te| te.id == picked_key.id)
+                        .unwrap();
+                    Some(picked_time_entry.clone())
+                }
             }
         };
 
@@ -119,7 +124,7 @@ mod tests {
             .expect_get_current_time_entry_minimal()
             .returning(|| Err(Box::new(ApiError::Network)));
 
-        let result = ContinueCommand::execute(api_client, None, false).await;
+        let result = ContinueCommand::execute(api_client, None, None, false).await;
         assert_err!(result);
     }
 

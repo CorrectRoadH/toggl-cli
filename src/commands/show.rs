@@ -14,7 +14,6 @@ impl ShowCommand {
     ) -> ResultWithDefaultError<()> {
         match api_client.get_time_entry(id).await {
             Err(_) => {
-                eprintln!("{}", format!("Time entry not found (ID: {id})").yellow());
                 return Err(Box::new(ApiError::HttpErrorWithMessage(format!(
                     "Time entry not found (ID: {id})"
                 ))));
