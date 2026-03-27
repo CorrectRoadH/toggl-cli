@@ -348,6 +348,120 @@ mod tests {
         assert_ok!(result);
     }
 
+    #[tokio::test]
+    async fn edit_entry_clears_project_with_empty_string() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_entities()
+            .returning(|| Ok(mock_entities()));
+        api_client
+            .expect_update_time_entry()
+            .withf(|entry| entry.project.is_none() && entry.task.is_none())
+            .returning(|entry| Ok(entry.id));
+
+        let result = EditCommand::execute(
+            api_client,
+            Some(42),
+            None,
+            None,
+            Some("".to_string()),
+            None,
+            None,
+            None,
+            None,
+            false,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn edit_entry_clears_end_to_reopen() {
+        let mut api_client = MockApiClient::new();
+        let entry = mock_entry();
+        api_client
+            .expect_get_time_entry()
+            .withf(|id| *id == 42)
+            .returning(move |_| Ok(entry.clone()));
+        api_client
+            .expect_update_time_entry()
+            .withf(|entry| entry.stop.is_none() && entry.duration < 0)
+            .returning(|entry| Ok(entry.id));
+
+        let result = EditCommand::execute(
+            api_client,
+            Some(42),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("".to_string()),
+            false,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn edit_entry_updates_billable_flag() {
+        let mut api_client = MockApiClient::new();
+        let entry = mock_entry();
+        assert!(!entry.billable);
+        api_client
+            .expect_get_time_entry()
+            .withf(|id| *id == 42)
+            .returning(move |_| Ok(entry.clone()));
+        api_client
+            .expect_update_time_entry()
+            .withf(|entry| entry.billable)
+            .returning(|entry| Ok(entry.id));
+
+        let result = EditCommand::execute(
+            api_client,
+            Some(42),
+            None,
+            Some(true),
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn edit_entry_not_found_prints_message() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_entities()
+            .returning(|| Ok(mock_entities()));
+        api_client
+            .expect_get_current_time_entry()
+            .returning(|| Ok(None));
+
+        // id=None triggers current entry lookup; returns None
+        let result = EditCommand::execute(
+            api_client,
+            None,
+            Some("test".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        )
+        .await;
+        // Should succeed (prints message but doesn't error)
+        assert_ok!(result);
+    }
+
     #[test]
     fn compute_stop_and_duration_returns_running_duration_without_stop() {
         let start = fixed_time(1_700_000_000);
