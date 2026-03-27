@@ -3,6 +3,7 @@ use crate::arguments::Entity;
 use crate::models;
 use crate::utilities;
 use api::client::ApiClient;
+use chrono::{DateTime, Local};
 use models::{ResultWithDefaultError, TimeEntry};
 use std::io::{self, BufWriter, Write};
 
@@ -25,6 +26,22 @@ fn time_entries_to_json(entries: &[&TimeEntry]) -> String {
         })
         .collect();
     serde_json::to_string_pretty(&values).expect("failed to serialize time entries to JSON")
+}
+
+fn write_entries_grouped_by_date(handle: &mut impl Write, entries: &[&TimeEntry]) {
+    let mut current_date: Option<chrono::NaiveDate> = None;
+    for entry in entries {
+        let local_start: DateTime<Local> = entry.start.with_timezone(&Local);
+        let date = local_start.date_naive();
+        if current_date != Some(date) {
+            if current_date.is_some() {
+                writeln!(handle).expect("failed to print");
+            }
+            writeln!(handle, "── {} ──", date.format("%Y-%m-%d %A")).expect("failed to print");
+            current_date = Some(date);
+        }
+        writeln!(handle, "{entry}").expect("failed to print");
+    }
 }
 
 impl ListCommand {
@@ -69,9 +86,7 @@ impl ListCommand {
                     } else if entries.is_empty() {
                         eprintln!("No entries found.");
                     } else {
-                        entries
-                            .iter()
-                            .for_each(|te| writeln!(handle, "{te}").expect("failed to print"));
+                        write_entries_grouped_by_date(&mut handle, &entries);
                     }
                 }
             }
@@ -243,9 +258,7 @@ impl ListCommand {
                         } else if entries.is_empty() {
                             eprintln!("No entries found.");
                         } else {
-                            entries.iter().for_each(|time_entry| {
-                                writeln!(handle, "{time_entry}").expect("failed to print")
-                            });
+                            write_entries_grouped_by_date(&mut handle, &entries);
                         }
                     }
 
