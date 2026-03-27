@@ -113,6 +113,7 @@ Examples:
 #[derive(Subcommand, Debug)]
 pub enum EntryAction {
     /// Show the current time entry.
+    #[command(alias = "running")]
     Current,
     /// List time entries.
     #[command(after_long_help = "\
@@ -186,6 +187,7 @@ Examples:
         end: Option<String>,
     },
     /// Continue a previous time entry.
+    #[command(alias = "continue")]
     Resume {
         #[arg(
             short,

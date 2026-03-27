@@ -667,6 +667,36 @@ impl V9ApiClient {
         result
     }
 
+    async fn post_raw<Body: Serialize>(
+        &self,
+        url: &str,
+        body: &Body,
+    ) -> ResultWithDefaultError<String> {
+        let response = self
+            .http_client
+            .post(url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| {
+                Box::new(ApiError::NetworkWithMessage(e.to_string()))
+                    as Box<dyn std::error::Error + Send>
+            })?;
+        let status = response.status();
+        let text = response.text().await.map_err(|e| {
+            Box::new(ApiError::NetworkWithMessage(e.to_string()))
+                as Box<dyn std::error::Error + Send>
+        })?;
+        if !status.is_success() {
+            return Err(Box::new(api_error_for_http_status(
+                status,
+                &text,
+                self.is_official_service,
+            )));
+        }
+        Ok(text)
+    }
+
     async fn patch<T: de::DeserializeOwned, Body: Serialize>(
         &self,
         url: String,
@@ -1412,9 +1442,22 @@ impl ApiClient for V9ApiClient {
     async fn create_tag(&self, workspace_id: i64, name: String) -> ResultWithDefaultError<Tag> {
         let url = format!("{}/workspaces/{}/tags", self.base_url, workspace_id);
         let body = NetworkCreateTag { name, workspace_id };
-        let network_tag = self
-            .post::<NetworkTag, NetworkCreateTag>(url, &body)
-            .await?;
+        // Official Toggl returns a single object; OpenToggl returns an array.
+        let response_body = self.post_raw(&url, &body).await?;
+        let network_tag: NetworkTag = serde_json::from_str::<NetworkTag>(&response_body)
+            .or_else(|_| {
+                serde_json::from_str::<Vec<NetworkTag>>(&response_body).and_then(|tags| {
+                    tags.into_iter()
+                        .next()
+                        .ok_or_else(|| serde_json::from_str::<NetworkTag>("").unwrap_err())
+                })
+            })
+            .map_err(|error| {
+                Box::new(ApiError::NetworkWithMessage(format!(
+                    "{error}; response body: {response_body}"
+                ))) as Box<dyn std::error::Error + Send>
+            })?;
+        self.invalidate_caches_for_mutation(&url);
         Ok(Tag {
             id: network_tag.id,
             name: network_tag.name,

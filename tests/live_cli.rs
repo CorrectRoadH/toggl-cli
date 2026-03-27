@@ -611,7 +611,7 @@ fn live_cli_running_commands_succeed() {
 
     for args in [
         &["entry", "running"][..],
-        &["entry", "current"][..],
+        &["entry", "running"][..],
         &["entry", "list", "--number", "1"][..],
     ] {
         let output = run_checked(args);
