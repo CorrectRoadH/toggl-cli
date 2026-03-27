@@ -59,6 +59,7 @@ Reports (--since/--until are optional, default to this_week/today):
 
 ## Know-How
 
+- **IMPORTANT: Always scope `entry list`** with `--since` or `-n` to avoid dumping 90 days of entries. Use `--since today`, `--since this_week`, or `-n 10`. Never run bare `toggl entry list` — the output can be hundreds of entries and waste tokens.
 - **Natural language dates**: `--since` and `--until` accept `today`, `yesterday`, `now`, `this_week`, `last_week` in addition to YYYY-MM-DD and full datetime formats. Works in both `entry list` and all `report` commands.
 - **JSON on all mutations**: `entry start`, `entry stop`, `entry update`, `entry resume` all support `-j/--json` and return the full entry with real ID, hydrated project, and `"running"` boolean.
 - **`entry current --json`** returns `{"running": false}` when nothing is running (not null). Same for `entry stop --json` when idle.
