@@ -188,6 +188,23 @@ pub fn normalize_time_entry_list_filters(
         .map(|value| normalize_time_entry_list_filter(value, true))
         .transpose()?;
 
+    // Official Toggl API requires both start_date and end_date.
+    // Auto-fill missing --until to now, or missing --since to epoch.
+    let since = since.or_else(|| {
+        if until.is_some() {
+            Some("1970-01-01T00:00:00Z".to_string())
+        } else {
+            None
+        }
+    });
+    let until = until.or_else(|| {
+        if since.is_some() {
+            Some(Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string())
+        } else {
+            None
+        }
+    });
+
     // Validate that --since is not after --until
     if let (Some(since_val), Some(until_val)) = (&since, &until) {
         if since_val > until_val {
