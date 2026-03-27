@@ -1,8 +1,79 @@
 use crate::api::client::ApiClient;
 use crate::arguments::ReportAction;
+use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
+use chrono::{Datelike, Local, NaiveDate};
 use colored::Colorize;
 use serde_json::{json, Value};
+
+/// Resolve a natural language date string to YYYY-MM-DD format.
+/// Supports: today, yesterday, now, this_week (Monday of current week),
+/// last_week (Monday of last week), or a literal YYYY-MM-DD date.
+fn resolve_report_date(input: &str) -> ResultWithDefaultError<String> {
+    let value = input.trim().to_lowercase();
+    let today = Local::now().date_naive();
+
+    let date = match value.as_str() {
+        "today" | "now" => today,
+        "yesterday" => today.pred_opt().unwrap(),
+        "this_week" => {
+            // Monday of the current week
+            let days_since_monday = today.weekday().num_days_from_monday();
+            today - chrono::Duration::days(days_since_monday as i64)
+        }
+        "last_week" => {
+            let days_since_monday = today.weekday().num_days_from_monday();
+            today - chrono::Duration::days((days_since_monday + 7) as i64)
+        }
+        _ => {
+            // Try parsing as YYYY-MM-DD
+            match NaiveDate::parse_from_str(&value, "%Y-%m-%d") {
+                Ok(d) => d,
+                Err(_) => {
+                    return Err(Box::new(ArgumentError::InvalidReportDate(
+                        input.trim().to_string(),
+                    )));
+                }
+            }
+        }
+    };
+
+    Ok(date.format("%Y-%m-%d").to_string())
+}
+
+/// Resolve --since and --until for report commands, applying defaults
+/// (since → Monday of current week, until → today) when not provided.
+fn resolve_report_dates(
+    since: Option<String>,
+    until: Option<String>,
+) -> ResultWithDefaultError<(String, String)> {
+    let today = Local::now().date_naive();
+
+    let since_resolved = match since {
+        Some(s) => resolve_report_date(&s)?,
+        None => {
+            // Default: Monday of current week
+            let days_since_monday = today.weekday().num_days_from_monday();
+            let monday = today - chrono::Duration::days(days_since_monday as i64);
+            monday.format("%Y-%m-%d").to_string()
+        }
+    };
+
+    let until_resolved = match until {
+        Some(u) => resolve_report_date(&u)?,
+        None => today.format("%Y-%m-%d").to_string(),
+    };
+
+    // Validate that since <= until
+    if since_resolved > until_resolved {
+        return Err(Box::new(ArgumentError::InvalidTimeRange(format!(
+            "--since ({}) is after --until ({}). Swap the values or use a valid range.",
+            since_resolved, until_resolved
+        ))));
+    }
+
+    Ok((since_resolved, until_resolved))
+}
 
 fn format_duration_hms(total_seconds: i64) -> String {
     let hours = total_seconds / 3600;
@@ -26,6 +97,7 @@ pub async fn execute_report_command(
             group_by,
             sub_group_by,
         } => {
+            let (since, until) = resolve_report_dates(since, until)?;
             let mut body = json!({
                 "start_date": since,
                 "end_date": until,
@@ -57,6 +129,7 @@ pub async fn execute_report_command(
             order_by,
             order_dir,
         } => {
+            let (since, until) = resolve_report_dates(since, until)?;
             let mut body = json!({
                 "start_date": since,
                 "end_date": until,
@@ -84,6 +157,7 @@ pub async fn execute_report_command(
             }
         }
         ReportAction::Weekly { since, until, json } => {
+            let (since, until) = resolve_report_dates(since, until)?;
             let body = json!({
                 "start_date": since,
                 "end_date": until,

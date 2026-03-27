@@ -3,7 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use chrono::{DateTime, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use chrono::{
+    DateTime, Datelike, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc,
+};
 use colored::Colorize;
 use directories::BaseDirs;
 
@@ -82,6 +84,48 @@ pub fn parse_datetime_input(input: &str) -> ResultWithDefaultError<DateTime<Utc>
     let value = input.trim();
     if value.is_empty() {
         return Err(Box::new(ArgumentError::InvalidDateTime(input.to_string())));
+    }
+
+    // Natural language date/time keywords
+    match value.to_lowercase().as_str() {
+        "now" => return Ok(Utc::now()),
+        "today" => {
+            let today = Local::now().date_naive();
+            let naive = today.and_hms_opt(0, 0, 0).unwrap();
+            return match Local.from_local_datetime(&naive) {
+                LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc)),
+                _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+            };
+        }
+        "yesterday" => {
+            let yesterday = Local::now().date_naive().pred_opt().unwrap();
+            let naive = yesterday.and_hms_opt(0, 0, 0).unwrap();
+            return match Local.from_local_datetime(&naive) {
+                LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc)),
+                _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+            };
+        }
+        "this_week" => {
+            let today = Local::now().date_naive();
+            let days_since_monday = today.weekday().num_days_from_monday();
+            let monday = today - chrono::Duration::days(days_since_monday as i64);
+            let naive = monday.and_hms_opt(0, 0, 0).unwrap();
+            return match Local.from_local_datetime(&naive) {
+                LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc)),
+                _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+            };
+        }
+        "last_week" => {
+            let today = Local::now().date_naive();
+            let days_since_monday = today.weekday().num_days_from_monday();
+            let last_monday = today - chrono::Duration::days((days_since_monday + 7) as i64);
+            let naive = last_monday.and_hms_opt(0, 0, 0).unwrap();
+            return match Local.from_local_datetime(&naive) {
+                LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc)),
+                _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+            };
+        }
+        _ => {}
     }
 
     if let Ok(parsed) = DateTime::parse_from_rfc3339(value) {
@@ -193,7 +237,9 @@ fn normalize_time_entry_list_filter(input: &str, is_until: bool) -> ResultWithDe
         };
     }
 
-    Ok(parse_datetime_input(value)?.to_rfc3339())
+    Ok(parse_datetime_input(value)?
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string())
 }
 
 #[cfg(unix)]

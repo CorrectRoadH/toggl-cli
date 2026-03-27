@@ -7,6 +7,7 @@ use colored::Colorize;
 use commands::stop::{StopCommand, StopCommandOrigin};
 use models::{ResultWithDefaultError, TimeEntry};
 use picker::{ItemPicker, PickableItem};
+use std::io::{self, BufWriter, Write};
 
 pub struct ContinueCommand;
 
@@ -14,9 +15,10 @@ impl ContinueCommand {
     pub async fn execute(
         api_client: impl ApiClient,
         picker: Option<Box<dyn ItemPicker>>,
+        json: bool,
     ) -> ResultWithDefaultError<()> {
         let running_time_entry =
-            StopCommand::execute(&api_client, StopCommandOrigin::ContinueCommand).await?;
+            StopCommand::execute(&api_client, StopCommandOrigin::ContinueCommand, false).await?;
 
         let entities = api_client.get_entities().await?;
         if entities.time_entries.is_empty() {
@@ -43,22 +45,29 @@ impl ContinueCommand {
         };
 
         match time_entry_to_continue {
-            None => println!("{}", "No time entry to continue".red()),
+            None => {
+                if json {
+                    let stdout = io::stdout();
+                    let mut handle = BufWriter::new(stdout);
+                    writeln!(handle, "null").expect("failed to print");
+                } else {
+                    println!("{}", "No time entry to continue".red());
+                }
+            }
             Some(time_entry) => {
                 let start_time = Utc::now();
                 let time_entry_to_create = time_entry.as_running_time_entry(start_time);
                 let continued_entry_id = api_client.create_time_entry(time_entry_to_create).await?;
-                let entities = api_client.get_entities().await?;
-                let continued_entry = entities
-                    .time_entries
-                    .iter()
-                    .find(|te| te.id == continued_entry_id)
-                    .unwrap();
-                println!(
-                    "{}\n{}",
-                    "Time entry continued successfully".green(),
-                    continued_entry
-                )
+                let continued_entry = api_client.get_time_entry(continued_entry_id).await?;
+                if json {
+                    commands::common::CommandUtils::print_time_entry_json(&continued_entry);
+                } else {
+                    println!(
+                        "{}\n{}",
+                        "Time entry continued successfully".green(),
+                        continued_entry
+                    );
+                }
             }
         }
 
@@ -110,7 +119,7 @@ mod tests {
             .expect_get_current_time_entry_minimal()
             .returning(|| Err(Box::new(ApiError::Network)));
 
-        let result = ContinueCommand::execute(api_client, None).await;
+        let result = ContinueCommand::execute(api_client, None, false).await;
         assert_err!(result);
     }
 

@@ -5,8 +5,15 @@ use colored::Colorize;
 pub struct MeCommand;
 
 impl MeCommand {
-    pub async fn execute(api_client: impl ApiClient) -> ResultWithDefaultError<()> {
+    pub async fn execute(api_client: impl ApiClient, json: bool) -> ResultWithDefaultError<()> {
         let user = api_client.get_user().await?;
+
+        if json {
+            let json_string =
+                serde_json::to_string_pretty(&user).expect("failed to serialize user to JSON");
+            println!("{json_string}");
+            return Ok(());
+        }
 
         println!("{}", "User Profile".bold().underline());
         println!(
@@ -77,7 +84,7 @@ mod tests {
             .expect_get_user()
             .returning(move || Ok(user.clone()));
 
-        let result = MeCommand::execute(api_client).await;
+        let result = MeCommand::execute(api_client, false).await;
         assert_ok!(result);
     }
 
@@ -88,7 +95,7 @@ mod tests {
             .expect_get_user()
             .returning(|| Err(Box::new(ApiError::Network)));
 
-        let result = MeCommand::execute(api_client).await;
+        let result = MeCommand::execute(api_client, false).await;
         assert_err!(result);
     }
 
@@ -101,7 +108,7 @@ mod tests {
             .expect_get_user()
             .returning(move || Ok(user.clone()));
 
-        let result = MeCommand::execute(api_client).await;
+        let result = MeCommand::execute(api_client, false).await;
         assert_ok!(result);
     }
 }

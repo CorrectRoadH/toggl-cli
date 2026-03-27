@@ -12,14 +12,15 @@ impl ShowCommand {
         json: bool,
     ) -> ResultWithDefaultError<()> {
         match api_client.get_time_entry(id).await {
-            Err(error) => return Err(error),
+            Err(_) => {
+                eprintln!("{}", format!("Time entry not found (ID: {id})").yellow());
+                std::process::exit(1);
+            }
             Ok(entry) => {
                 let stdout = io::stdout();
                 let mut handle = BufWriter::new(stdout);
                 if json {
-                    let json_string = serde_json::to_string_pretty(&entry)
-                        .expect("failed to serialize time entry to JSON");
-                    writeln!(handle, "{json_string}").expect("failed to print");
+                    crate::commands::common::CommandUtils::print_time_entry_json(&entry);
                 } else {
                     writeln!(handle, "{}", "Time Entry Details".bold().underline())
                         .expect("failed to print");

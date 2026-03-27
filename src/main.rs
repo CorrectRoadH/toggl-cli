@@ -118,9 +118,9 @@ async fn execute_subcommand(args: Cli) -> ResultWithDefaultError<()> {
             }
         },
         Command::Logout => execute_logout_command().await,
-        Command::Me => {
+        Command::Me { json } => {
             let api_client = get_api_client(args.proxy.clone())?;
-            MeCommand::execute(api_client).await
+            MeCommand::execute(api_client, json).await
         }
         Command::Entry { action } => execute_entry_command(action, args.proxy, picker).await,
         Command::Project { action } => {
@@ -195,6 +195,27 @@ async fn execute_entry_command(
                 "'update' requires an entry ID or --current flag. Example: toggl entry update --current -d \"New description\"".to_string(),
             )));
         }
+        EntryAction::Update {
+            description,
+            billable,
+            project,
+            task,
+            tags,
+            start,
+            end,
+            ..
+        } if description.is_none()
+            && billable.is_none()
+            && project.is_none()
+            && task.is_none()
+            && tags.is_none()
+            && start.is_none()
+            && end.is_none() =>
+        {
+            return Err(Box::new(error::ArgumentError::MissingUpdateFields(
+                "No fields specified to update. Use -d, -p, -t, --billable, --tags, --start, or --end to specify what to change.".to_string(),
+            )));
+        }
         EntryAction::Delete { id, current } if id.is_none() && !current => {
             return Err(Box::new(error::ArgumentError::MissingArgument(
                 "'delete' requires an entry ID or --current flag. Run `toggl entry list` to find entry IDs.".to_string(),
@@ -211,7 +232,7 @@ async fn execute_entry_command(
     let api_client = get_api_client(proxy.clone())?;
 
     match action {
-        EntryAction::Current => RunningTimeEntryCommand::execute(api_client).await,
+        EntryAction::Current { json } => RunningTimeEntryCommand::execute(api_client, json).await,
         EntryAction::List {
             number,
             limit,
@@ -219,8 +240,8 @@ async fn execute_entry_command(
             since,
             until,
         } => ListCommand::execute(api_client, number.or(limit), json, since, until, None).await,
-        EntryAction::Stop => {
-            StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await?;
+        EntryAction::Stop { json } => {
+            StopCommand::execute(&api_client, StopCommandOrigin::CommandLine, json).await?;
             Ok(())
         }
         EntryAction::Start {
@@ -232,6 +253,7 @@ async fn execute_entry_command(
             tags,
             start,
             end,
+            json,
         } => {
             StartCommand::execute(
                 api_client,
@@ -244,12 +266,13 @@ async fn execute_entry_command(
                 interactive,
                 start,
                 end,
+                json,
             )
             .await
         }
-        EntryAction::Resume { interactive } => {
+        EntryAction::Resume { interactive, json } => {
             let picker_option = if interactive { Some(picker) } else { None };
-            ContinueCommand::execute(api_client, picker_option).await
+            ContinueCommand::execute(api_client, picker_option, json).await
         }
         EntryAction::Show { id, json } => {
             // id is guaranteed Some due to validation above
@@ -265,6 +288,7 @@ async fn execute_entry_command(
             tags,
             start,
             end,
+            json,
         } => {
             if current {
                 // Check if there's a running entry before attempting edit
@@ -281,6 +305,7 @@ async fn execute_entry_command(
                             tags,
                             start,
                             end,
+                            json,
                         )
                         .await
                     }
@@ -299,6 +324,7 @@ async fn execute_entry_command(
                     tags,
                     start,
                     end,
+                    json,
                 )
                 .await
             }

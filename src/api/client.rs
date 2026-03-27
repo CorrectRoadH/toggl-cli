@@ -399,6 +399,47 @@ impl V9ApiClient {
         }
     }
 
+    /// Hydrates a single NetworkTimeEntry by fetching projects/tasks/clients
+    /// only when the entry references a project_id or task_id.
+    async fn hydrate_single_network_entry(&self, network_entry: NetworkTimeEntry) -> TimeEntry {
+        let has_project = network_entry.project_id.is_some();
+        let has_task = network_entry.task_id.is_some();
+
+        if !has_project && !has_task {
+            return TimeEntry {
+                id: network_entry.id,
+                description: network_entry.description,
+                start: network_entry.start,
+                stop: network_entry.stop,
+                duration: network_entry.duration,
+                billable: network_entry.billable,
+                workspace_id: network_entry.workspace_id,
+                tags: network_entry.tags.unwrap_or_default(),
+                project: None,
+                task: None,
+                ..Default::default()
+            };
+        }
+
+        let (network_projects, network_tasks, network_clients) = tokio::join!(
+            self.get_projects(),
+            async {
+                if has_task {
+                    self.get_tasks().await
+                } else {
+                    Ok(Vec::new())
+                }
+            },
+            self.get_clients(),
+        );
+
+        let clients = Self::map_clients(network_clients.unwrap_or_default());
+        let projects = Self::map_projects(network_projects.unwrap_or_default(), &clients);
+        let tasks = Self::map_tasks(network_tasks.unwrap_or_default(), &projects);
+
+        Self::map_network_time_entry(network_entry, &projects, &tasks)
+    }
+
     async fn get_project_by_id(&self, project_id: i64) -> ResultWithDefaultError<Project> {
         let network_project = self
             .get_projects()
@@ -1075,8 +1116,22 @@ fn summarize_response_body(body: &str) -> String {
     }
 }
 
+/// Try to extract a human-readable message from a JSON error response body.
+/// Looks for a top-level "message" field (e.g. `{"message":"tracking time entry not found"}`).
+fn extract_json_message(body: &str) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(body.trim()).ok()?;
+    parsed
+        .get("message")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 fn format_http_status_details(status: reqwest::StatusCode, body: &str) -> String {
-    format!("HTTP {} {}", status.as_u16(), summarize_response_body(body))
+    if let Some(msg) = extract_json_message(body) {
+        format!("{} (HTTP {})", msg, status.as_u16())
+    } else {
+        format!("HTTP {} {}", status.as_u16(), summarize_response_body(body))
+    }
 }
 
 fn is_official_toggl_usage_limit_error(
@@ -1108,7 +1163,7 @@ fn api_error_for_http_status(
     } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
         ApiError::RateLimitedWithMessage(details)
     } else {
-        ApiError::NetworkWithMessage(details)
+        ApiError::HttpErrorWithMessage(details)
     }
 }
 
@@ -1244,19 +1299,7 @@ impl ApiClient for V9ApiClient {
             self.base_url, workspace_id, time_entry_id
         );
         let network_entry = self.patch_without_body::<NetworkTimeEntry>(url).await?;
-        Ok(TimeEntry {
-            id: network_entry.id,
-            description: network_entry.description,
-            start: network_entry.start,
-            stop: network_entry.stop,
-            duration: network_entry.duration,
-            billable: network_entry.billable,
-            workspace_id: network_entry.workspace_id,
-            tags: network_entry.tags.unwrap_or_default(),
-            project: None,
-            task: None,
-            ..Default::default()
-        })
+        Ok(self.hydrate_single_network_entry(network_entry).await)
     }
 
     async fn bulk_update_time_entries(
@@ -1344,8 +1387,7 @@ impl ApiClient for V9ApiClient {
             })
             .collect();
 
-        let entries = network_entries
-            .unwrap_or_default()
+        let entries = network_entries?
             .into_iter()
             .map(|te| TimeEntry {
                 id: te.id,
@@ -1589,19 +1631,7 @@ impl ApiClient for V9ApiClient {
     async fn get_time_entry(&self, time_entry_id: i64) -> ResultWithDefaultError<TimeEntry> {
         let url = format!("{}/me/time_entries/{}", self.base_url, time_entry_id);
         let network_entry = self.get::<NetworkTimeEntry>(url).await?;
-        Ok(TimeEntry {
-            id: network_entry.id,
-            description: network_entry.description,
-            start: network_entry.start,
-            stop: network_entry.stop,
-            duration: network_entry.duration,
-            billable: network_entry.billable,
-            workspace_id: network_entry.workspace_id,
-            tags: network_entry.tags.unwrap_or_default(),
-            project: None,
-            task: None,
-            ..Default::default()
-        })
+        Ok(self.hydrate_single_network_entry(network_entry).await)
     }
 
     async fn get_organizations(&self) -> ResultWithDefaultError<Vec<Organization>> {
@@ -1977,13 +2007,13 @@ mod tests {
     }
 
     #[test]
-    fn keeps_non_limit_402_as_network_error() {
+    fn keeps_non_limit_402_as_http_error() {
         let error =
             api_error_for_http_status(StatusCode::PAYMENT_REQUIRED, "payment required", true);
 
         assert_eq!(
             error,
-            ApiError::NetworkWithMessage("HTTP 402 payment required".to_string())
+            ApiError::HttpErrorWithMessage("HTTP 402 payment required".to_string())
         );
     }
 }

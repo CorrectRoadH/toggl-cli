@@ -111,6 +111,7 @@ impl StartCommand {
         interactive: bool,
         start: Option<String>,
         end: Option<String>,
+        json: bool,
     ) -> ResultWithDefaultError<()> {
         let parsed_start = match start {
             Some(value) => Some(utilities::parse_datetime_input(&value)?),
@@ -134,10 +135,6 @@ impl StartCommand {
                     "end must be later than start".to_string(),
                 )));
             }
-        }
-
-        if parsed_end.is_none() {
-            StopCommand::execute(&api_client, StopCommandOrigin::StartCommand).await?;
         }
 
         let workspace_id = (api_client.get_user().await?).default_workspace_id;
@@ -165,15 +162,59 @@ impl StartCommand {
             workspace_id
         };
 
-        let project = project_name
-            .and_then(|name| {
-                entities
+        // Resolve the project BEFORE stopping any running timer so that
+        // validation failures don't leave the user without a running entry.
+        let project = match project_name {
+            Some(name) => {
+                let entities_ref = entities
                     .as_ref()
-                    .into_iter()
-                    .flat_map(|entities| entities.projects.clone().into_values())
-                    .find(|p| p.name == name)
-            })
-            .or(default_time_entry.project.clone());
+                    .expect("entities must be loaded when --project is provided");
+
+                // Always try name match first, then fall back to ID lookup
+                // only if no name matches and the value is numeric.
+                match entities_ref.projects.values().find(|p| p.name == name) {
+                    Some(p) => Some(p.clone()),
+                    None => {
+                        // No name match — try numeric ID lookup as fallback
+                        if let Ok(id) = name.parse::<i64>() {
+                            match entities_ref.projects.get(&id) {
+                                Some(p) => Some(p.clone()),
+                                None => {
+                                    let available: Vec<String> = entities_ref
+                                        .projects
+                                        .values()
+                                        .map(|p| format!("  - {} (id: {})", p.name, p.id))
+                                        .collect();
+                                    return Err(Box::new(ArgumentError::ResourceNotFound(format!(
+                                        "No project found with name or ID '{}'. Available projects:\n{}",
+                                        name,
+                                        available.join("\n")
+                                    ))));
+                                }
+                            }
+                        } else {
+                            let available: Vec<String> = entities_ref
+                                .projects
+                                .values()
+                                .map(|p| format!("  - {} (id: {})", p.name, p.id))
+                                .collect();
+                            return Err(Box::new(ArgumentError::ResourceNotFound(format!(
+                                "No project found with name '{}'. Available projects:\n{}",
+                                name,
+                                available.join("\n")
+                            ))));
+                        }
+                    }
+                }
+            }
+            None => default_time_entry.project.clone(),
+        };
+
+        // Stop the running timer only AFTER project validation succeeds,
+        // so a bad project name never destroys a running entry.
+        if parsed_end.is_none() {
+            StopCommand::execute(&api_client, StopCommandOrigin::StartCommand, false).await?;
+        }
 
         let task = task_name
             .as_deref()
@@ -185,6 +226,13 @@ impl StartCommand {
             .or(default_time_entry.task.clone());
 
         let project = task.as_ref().map(|task| task.project.clone()).or(project);
+
+        // Use the project's workspace_id if a project was resolved, so the
+        // time entry is created in the same workspace as the project.
+        let workspace_id = project
+            .as_ref()
+            .map(|p| p.workspace_id)
+            .unwrap_or(workspace_id);
 
         let tags = tags.unwrap_or(default_time_entry.tags.clone());
 
@@ -220,12 +268,23 @@ impl StartCommand {
         let started_entry_id = api_client
             .create_time_entry(time_entry_to_create.clone())
             .await;
-        if started_entry_id.is_err() {
-            println!("{}", "Failed to start time entry".red());
-            return Err(started_entry_id.err().unwrap());
-        }
+        let started_entry_id = match started_entry_id {
+            Ok(id) => id,
+            Err(err) => {
+                println!("{}", "Failed to start time entry".red());
+                return Err(err);
+            }
+        };
 
-        println!("{}\n{}", "Time entry started".green(), time_entry_to_create);
+        if json {
+            // Fetch the real entry from the API to get the actual ID and server state
+            let real_entry = api_client.get_time_entry(started_entry_id).await?;
+            commands::common::CommandUtils::print_time_entry_json(&real_entry);
+        } else {
+            // Update the local copy with the real ID for human-readable output
+            time_entry_to_create.id = started_entry_id;
+            println!("{}\n{}", "Time entry started".green(), time_entry_to_create);
+        }
 
         Ok(())
     }
@@ -408,6 +467,7 @@ mod tests {
             false,
             None,
             Some("2026-01-01T10:00:00Z".to_string()),
+            false,
         )
         .await;
 
@@ -435,6 +495,7 @@ mod tests {
             false,
             Some("2026-01-01T10:00:00Z".to_string()),
             Some("2026-01-01T09:00:00Z".to_string()),
+            false,
         )
         .await;
 

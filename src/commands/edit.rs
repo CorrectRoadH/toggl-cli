@@ -19,6 +19,7 @@ impl EditCommand {
         tags: Option<Vec<String>>,
         start: Option<String>,
         end: Option<String>,
+        json: bool,
     ) -> ResultWithDefaultError<()> {
         let needs_entities = project_name.is_some() || task_name.is_some() || id.is_none();
         let entities = if needs_entities {
@@ -112,7 +113,13 @@ impl EditCommand {
 
                 match api_client.update_time_entry(updated.clone()).await {
                     Err(error) => println!("{}\n{}", "Couldn't update time entry".red(), error),
-                    Ok(_) => println!("{}\n{}", "Time entry updated successfully".green(), updated),
+                    Ok(_) => {
+                        if json {
+                            crate::commands::common::CommandUtils::print_time_entry_json(&updated);
+                        } else {
+                            println!("{}\n{}", "Time entry updated successfully".green(), updated);
+                        }
+                    }
                 }
             }
         }
@@ -246,6 +253,7 @@ mod tests {
             None,
             None,
             None,
+            false,
         )
         .await;
         assert_ok!(result);
@@ -276,6 +284,7 @@ mod tests {
             Some(vec!["ops".to_string()]),
             None,
             None,
+            false,
         )
         .await;
         assert_ok!(result);
@@ -304,6 +313,7 @@ mod tests {
             Some(vec!["".to_string()]),
             None,
             None,
+            false,
         )
         .await;
         assert_ok!(result);
@@ -332,6 +342,7 @@ mod tests {
             None,
             None,
             None,
+            false,
         )
         .await;
         assert_ok!(result);

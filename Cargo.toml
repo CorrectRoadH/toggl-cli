@@ -40,7 +40,7 @@ toml = "0.7.3"
 # API
 dotenvy = "0.15"
 serde = { version = "1.0.159", features = ["derive"] }
-serde_json = "1.0.95"
+serde_json = { version = "1.0.95", features = ["preserve_order"] }
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1.27.0", features = ["full"] }
 base64 = "0.21.0"

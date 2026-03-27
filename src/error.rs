@@ -9,6 +9,8 @@ pub enum ApiError {
     #[allow(dead_code)]
     Network,
     NetworkWithMessage(String),
+    /// HTTP client/server error (4xx/5xx) that is NOT a connection problem.
+    HttpErrorWithMessage(String),
     RateLimitedWithMessage(String),
     OfficialApiUsageLimitWithMessage(String),
     Deserialization,
@@ -25,6 +27,9 @@ impl Display for ApiError {
                 "Details".yellow().bold(),
                 message
             ),
+            ApiError::HttpErrorWithMessage(message) => {
+                format!("{}: {}", "Request failed".red(), message)
+            }
             ApiError::RateLimitedWithMessage(message) => format!(
                 "{}\n{}: {}",
                 constants::RATE_LIMITED_ERROR_MESSAGE.red(),
@@ -211,6 +216,7 @@ pub enum ArgumentError {
     DirectoryNotFound(PathBuf),
     NotADirectory(PathBuf),
     InvalidDateTime(String),
+    InvalidReportDate(String),
     InvalidTimeRange(String),
     MissingUpdateFields(String),
     MultipleWorkspaces(String),
@@ -237,8 +243,15 @@ impl Display for ArgumentError {
             }
             ArgumentError::InvalidDateTime(value) => {
                 format!(
-                    "{}: {}\nAccepted formats: RFC3339 (e.g. 2026-03-05T09:00:00+08:00), YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD",
+                    "{}: {}\nAccepted formats: today, yesterday, now, this_week, last_week, RFC3339 (e.g. 2026-03-05T09:00:00+08:00), YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD",
                     "Invalid date/time value".red(),
+                    value
+                )
+            }
+            ArgumentError::InvalidReportDate(value) => {
+                format!(
+                    "{}: {}\nAccepted formats: YYYY-MM-DD (e.g. 2026-03-27), today, yesterday, now, this_week, last_week",
+                    "Invalid date value".red(),
                     value
                 )
             }

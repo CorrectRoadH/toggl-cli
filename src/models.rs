@@ -3,7 +3,7 @@ use std::{cmp, env};
 use crate::constants;
 use std::collections::HashMap;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, Local, Utc};
 use colored::{ColoredString, Colorize};
 use colors_transform::{Color, Rgb};
 use lazy_static::lazy_static;
@@ -323,9 +323,13 @@ impl Default for TimeEntry {
 
 impl std::fmt::Display for TimeEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let local_start: DateTime<Local> = self.start.with_timezone(&Local);
+        let start_str = local_start.format("%Y-%m-%d %H:%M");
         let summary = format!(
-            //{$/space} [{duration}]{running indicator/space} - {description/No Description}{@project/empty string} {#tags/empty string}
-            "{} [{}]{} –  {}{} {}",
+            //{id} {start} {$/space} [{duration}]{running indicator/space} - {description/No Description}{@project/empty string} {#tags/empty string}
+            "{} {} {} [{}]{} –  {}{} {}",
+            self.id,
+            start_str,
             if self.billable {
                 "$".green().bold().to_string()
             } else {

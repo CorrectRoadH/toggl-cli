@@ -46,7 +46,14 @@ pub enum Command {
     /// Clear stored credentials.
     Logout,
     /// Show current user profile information.
-    Me,
+    #[command(after_long_help = "\
+Examples:
+  toggl me                        Show your profile info
+  toggl me --json                 Show your profile as JSON")]
+    Me {
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
     /// Manage time entries.
     #[command(after_long_help = "\
 Examples:
@@ -94,6 +101,13 @@ Examples:
         action: PreferencesAction,
     },
     /// Generate reports (summary, detailed, weekly)
+    #[command(after_long_help = "\
+Examples:
+  toggl report summary
+  toggl report summary --since today --until today
+  toggl report detailed --since yesterday --until today
+  toggl report weekly --since 2026-03-17 --until 2026-03-23
+  toggl report detailed --json -n 100")]
     Report {
         #[command(subcommand)]
         action: ReportAction,
@@ -118,12 +132,21 @@ Examples:
 #[derive(Subcommand, Debug)]
 pub enum EntryAction {
     /// Show the current time entry.
-    #[command(alias = "running")]
-    Current,
+    #[command(
+        alias = "running",
+        after_long_help = "\
+Note: JSON output includes a \"running\": true field for active entries."
+    )]
+    Current {
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
     /// List time entries.
     #[command(after_long_help = "\
 Examples:
   toggl entry list
+  toggl entry list --since today
+  toggl entry list --since yesterday --until today
   toggl entry list --since 2024-01-01 --number 5
   toggl entry list --json | jq '.[].description'")]
     List {
@@ -135,17 +158,20 @@ Examples:
         json: bool,
         #[arg(
             long,
-            help = "Filter time entries starting on or after this date/time; date-only values use local 00:00:00"
+            help = "Filter time entries starting on or after this date/time (today, yesterday, this_week, last_week, YYYY-MM-DD, or full datetime)"
         )]
         since: Option<String>,
         #[arg(
             long,
-            help = "Filter time entries before this date/time; date-only values include the entire local day"
+            help = "Filter time entries before this date/time (today, yesterday, this_week, last_week, YYYY-MM-DD, or full datetime)"
         )]
         until: Option<String>,
     },
     /// Stop the currently running time entry.
-    Stop,
+    Stop {
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
     /// Start a new time entry, call with no arguments to start in interactive mode.
     #[command(after_long_help = "\
 Examples:
@@ -190,9 +216,18 @@ Examples:
             help = "End date/time. Requires --start. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD, HH:MM[:SS]"
         )]
         end: Option<String>,
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
     },
     /// Continue a previous time entry.
-    #[command(alias = "continue")]
+    #[command(
+        alias = "continue",
+        after_long_help = "\
+Examples:
+  toggl entry resume              Resume most recent entry
+  toggl entry resume -i           Choose which entry to resume
+  toggl entry resume --json       Resume and output as JSON"
+    )]
     Resume {
         #[arg(
             short,
@@ -200,6 +235,8 @@ Examples:
             help = "Launch interactive mode to select which entry to resume"
         )]
         interactive: bool,
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
     },
     /// Show details of a single time entry by ID.
     #[command(after_long_help = "\
@@ -250,6 +287,8 @@ Examples:
             help = "New end date/time (use empty string \"\" to clear end time). Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD, HH:MM[:SS]"
         )]
         end: Option<String>,
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
     },
     /// Delete a time entry by ID.
     Delete {
@@ -500,13 +539,21 @@ pub enum ReportAction {
     /// Summary report grouped by project
     #[command(after_long_help = "\
 Examples:
-  toggl report summary --since 2026-03-01 --until 2026-03-27
+  toggl report summary
+  toggl report summary --since today --until today
+  toggl report summary --since yesterday --until today
   toggl report summary --since 2026-03-01 --until 2026-03-27 --json")]
     Summary {
-        #[arg(long, help = "Start date (YYYY-MM-DD)")]
-        since: String,
-        #[arg(long, help = "End date (YYYY-MM-DD)")]
-        until: String,
+        #[arg(
+            long,
+            help = "Start date (YYYY-MM-DD, or: today, yesterday, now, this_week, last_week). Default: this_week"
+        )]
+        since: Option<String>,
+        #[arg(
+            long,
+            help = "End date (YYYY-MM-DD, or: today, yesterday, now, this_week, last_week). Default: today"
+        )]
+        until: Option<String>,
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
         #[arg(long, help = "Group by: projects, clients, users (default: projects)")]
@@ -517,13 +564,20 @@ Examples:
     /// Detailed report listing individual time entries
     #[command(after_long_help = "\
 Examples:
-  toggl report detailed --since 2026-03-01 --until 2026-03-27
+  toggl report detailed
+  toggl report detailed --since today --until today
   toggl report detailed --since 2026-03-01 --until 2026-03-27 --json -n 100")]
     Detailed {
-        #[arg(long, help = "Start date (YYYY-MM-DD)")]
-        since: String,
-        #[arg(long, help = "End date (YYYY-MM-DD)")]
-        until: String,
+        #[arg(
+            long,
+            help = "Start date (YYYY-MM-DD, or: today, yesterday, now, this_week, last_week). Default: this_week"
+        )]
+        since: Option<String>,
+        #[arg(
+            long,
+            help = "End date (YYYY-MM-DD, or: today, yesterday, now, this_week, last_week). Default: today"
+        )]
+        until: Option<String>,
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
         #[arg(short, long, help = "Maximum number of entries per page")]
@@ -539,13 +593,20 @@ Examples:
     /// Weekly report with daily breakdown
     #[command(after_long_help = "\
 Examples:
-  toggl report weekly --since 2026-03-17 --until 2026-03-23
+  toggl report weekly
+  toggl report weekly --since today --until today
   toggl report weekly --since 2026-03-17 --until 2026-03-23 --json")]
     Weekly {
-        #[arg(long, help = "Start date (YYYY-MM-DD)")]
-        since: String,
-        #[arg(long, help = "End date (YYYY-MM-DD)")]
-        until: String,
+        #[arg(
+            long,
+            help = "Start date (YYYY-MM-DD, or: today, yesterday, now, this_week, last_week). Default: this_week"
+        )]
+        since: Option<String>,
+        #[arg(
+            long,
+            help = "End date (YYYY-MM-DD, or: today, yesterday, now, this_week, last_week). Default: today"
+        )]
+        until: Option<String>,
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
     },
@@ -1137,7 +1198,7 @@ mod tests {
         let cmd = Cli::try_parse_from(["toggl", "entry", "current"]).expect("should parse");
         match cmd.cmd {
             Command::Entry {
-                action: EntryAction::Current,
+                action: EntryAction::Current { json: false },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
@@ -1148,7 +1209,7 @@ mod tests {
         let cmd = Cli::try_parse_from(["toggl", "entry", "stop"]).expect("should parse");
         match cmd.cmd {
             Command::Entry {
-                action: EntryAction::Stop,
+                action: EntryAction::Stop { json: false },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
@@ -1159,7 +1220,11 @@ mod tests {
         let cmd = Cli::try_parse_from(["toggl", "entry", "resume"]).expect("should parse");
         match cmd.cmd {
             Command::Entry {
-                action: EntryAction::Resume { interactive: false },
+                action:
+                    EntryAction::Resume {
+                        interactive: false,
+                        json: false,
+                    },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
         }

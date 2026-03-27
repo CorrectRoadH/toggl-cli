@@ -3,10 +3,29 @@ use crate::arguments::Entity;
 use crate::models;
 use crate::utilities;
 use api::client::ApiClient;
-use models::ResultWithDefaultError;
+use models::{ResultWithDefaultError, TimeEntry};
 use std::io::{self, BufWriter, Write};
 
 pub struct ListCommand;
+
+/// Serialize a slice of TimeEntry references as a JSON array,
+/// injecting a `"running"` boolean into each entry.
+fn time_entries_to_json(entries: &[&TimeEntry]) -> String {
+    let values: Vec<serde_json::Value> = entries
+        .iter()
+        .map(|entry| {
+            let mut value = serde_json::to_value(entry).expect("failed to serialize time entry");
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert(
+                    "running".to_string(),
+                    serde_json::Value::Bool(entry.is_running()),
+                );
+            }
+            value
+        })
+        .collect();
+    serde_json::to_string_pretty(&values).expect("failed to serialize time entries to JSON")
+}
 
 impl ListCommand {
     pub async fn execute(
@@ -45,9 +64,10 @@ impl ListCommand {
                         .take(count.unwrap_or(usize::MAX))
                         .collect::<Vec<_>>();
                     if json {
-                        let json_string = serde_json::to_string_pretty(&entries)
-                            .expect("failed to serialize time entries to JSON");
+                        let json_string = time_entries_to_json(&entries);
                         writeln!(handle, "{json_string}").expect("failed to print");
+                    } else if entries.is_empty() {
+                        eprintln!("No entries found.");
                     } else {
                         entries
                             .iter()
@@ -218,9 +238,10 @@ impl ListCommand {
                             .collect::<Vec<_>>();
 
                         if json {
-                            let json_string = serde_json::to_string_pretty(&entries)
-                                .expect("failed to serialize time entries to JSON");
+                            let json_string = time_entries_to_json(&entries);
                             writeln!(handle, "{json_string}").expect("failed to print");
+                        } else if entries.is_empty() {
+                            eprintln!("No entries found.");
                         } else {
                             entries.iter().for_each(|time_entry| {
                                 writeln!(handle, "{time_entry}").expect("failed to print")

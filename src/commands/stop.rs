@@ -3,6 +3,7 @@ use crate::models;
 use api::client::ApiClient;
 use colored::Colorize;
 use models::{ResultWithDefaultError, TimeEntry};
+use std::io::{self, BufWriter, Write};
 
 pub struct StopCommand;
 
@@ -16,12 +17,19 @@ impl StopCommand {
     pub async fn execute(
         api_client: &impl ApiClient,
         origin: StopCommandOrigin,
+        json: bool,
     ) -> ResultWithDefaultError<Option<TimeEntry>> {
         match api_client.get_current_time_entry_minimal().await? {
             None => {
                 match origin {
                     StopCommandOrigin::CommandLine => {
-                        println!("{}", "No time entry is running at the moment".yellow())
+                        if json {
+                            let stdout = io::stdout();
+                            let mut handle = BufWriter::new(stdout);
+                            writeln!(handle, r#"{{"running": false}}"#).expect("failed to print");
+                        } else {
+                            println!("{}", "No time entry is running at the moment".yellow());
+                        }
                     }
                     StopCommandOrigin::StartCommand => (),
                     StopCommandOrigin::ContinueCommand => (),
@@ -34,13 +42,19 @@ impl StopCommand {
                     .stop_time_entry(running_time_entry.workspace_id, running_time_entry.id)
                     .await?;
 
-                let message = match origin {
-                    StopCommandOrigin::CommandLine => "Time entry stopped successfully".green(),
-                    StopCommandOrigin::StartCommand => "Running time entry stopped".yellow(),
-                    StopCommandOrigin::ContinueCommand => "Running time entry stopped".yellow(),
-                };
+                if json && matches!(origin, StopCommandOrigin::CommandLine) {
+                    crate::commands::common::CommandUtils::print_time_entry_json(
+                        &stopped_time_entry,
+                    );
+                } else {
+                    let message = match origin {
+                        StopCommandOrigin::CommandLine => "Time entry stopped successfully".green(),
+                        StopCommandOrigin::StartCommand => "Running time entry stopped".yellow(),
+                        StopCommandOrigin::ContinueCommand => "Running time entry stopped".yellow(),
+                    };
 
-                println!("{}\n{}", message, stopped_time_entry.clone());
+                    println!("{}\n{}", message, stopped_time_entry.clone());
+                }
 
                 Ok(Some(stopped_time_entry))
             }
@@ -62,7 +76,7 @@ mod tests {
             .expect_get_current_time_entry_minimal()
             .returning(|| Ok(None));
 
-        let result = StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await;
+        let result = StopCommand::execute(&api_client, StopCommandOrigin::CommandLine, false).await;
         assert_ok!(result);
     }
 
@@ -73,7 +87,7 @@ mod tests {
             .expect_get_current_time_entry_minimal()
             .returning(|| Err(Box::new(ApiError::Network)));
 
-        let result = StopCommand::execute(&api_client, StopCommandOrigin::CommandLine).await;
+        let result = StopCommand::execute(&api_client, StopCommandOrigin::CommandLine, false).await;
         assert_err!(result);
     }
 }
