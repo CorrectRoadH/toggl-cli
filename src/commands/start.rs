@@ -123,7 +123,8 @@ impl StartCommand {
 
         if parsed_end.is_some() && parsed_start.is_none() {
             return Err(Box::new(ArgumentError::InvalidTimeRange(
-                "--end requires --start".to_string(),
+                "--end requires --start. Example: toggl entry start --start 09:00 --end 10:00"
+                    .to_string(),
             )));
         }
 

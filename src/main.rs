@@ -18,6 +18,7 @@ use arguments::{
     AuthAction, ClientAction, Command, ConfigAction, EntryAction, OrganizationAction,
     PreferencesAction, ProjectAction, TagAction, TaskAction, WorkspaceAction,
 };
+use clap::error::ErrorKind;
 use clap::Parser;
 use commands::auth::AuthenticationCommand;
 use commands::auth_status::AuthStatusCommand;
@@ -62,7 +63,19 @@ async fn main() -> ResultWithDefaultError<()> {
     // This ensures `cargo run` uses fake/test credentials instead of falling through
     // to macOS keychain-backed storage.
     let _ = dotenvy::from_filename_override(".env");
-    let parsed_args = Cli::parse();
+    let parsed_args = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) => {
+            if err.kind() == ErrorKind::InvalidSubcommand {
+                let mut msg = err.to_string();
+                msg.push_str("\nAvailable commands: auth, entry, project, tag, client, task, workspace, org, me, preferences, config, logout\n");
+                eprint!("{msg}");
+                std::process::exit(2);
+            }
+            // For all other errors (--help, --version, missing args, etc.), use clap's default handling
+            err.exit();
+        }
+    };
     match execute_subcommand(parsed_args).await {
         Ok(()) => Ok(()),
         Err(error) => {
@@ -169,22 +182,22 @@ async fn execute_entry_command(
     // unnecessary keychain/storage access for validation failures.
     match &action {
         EntryAction::Show { id, .. } if id.is_none() => {
-            return Err(Box::new(error::ArgumentError::ResourceNotFound(
+            return Err(Box::new(error::ArgumentError::MissingArgument(
                 "'show' requires an entry ID. Run `toggl entry list` or `toggl entry current` to find one.".to_string(),
             )));
         }
         EntryAction::Update { id, current, .. } if id.is_none() && !current => {
-            return Err(Box::new(error::ArgumentError::ResourceNotFound(
-                "'update' requires an entry ID or --current flag".to_string(),
+            return Err(Box::new(error::ArgumentError::MissingArgument(
+                "'update' requires an entry ID or --current flag. Example: toggl entry update --current -d \"New description\"".to_string(),
             )));
         }
         EntryAction::Delete { id, current } if id.is_none() && !current => {
-            return Err(Box::new(error::ArgumentError::ResourceNotFound(
-                "'delete' requires an entry ID or --current flag".to_string(),
+            return Err(Box::new(error::ArgumentError::MissingArgument(
+                "'delete' requires an entry ID or --current flag. Run `toggl entry list` to find entry IDs.".to_string(),
             )));
         }
         EntryAction::BulkEdit { json: None, .. } => {
-            return Err(Box::new(error::ArgumentError::ResourceNotFound(
+            return Err(Box::new(error::ArgumentError::MissingArgument(
                 "'bulk-edit' requires --json flag with JSON payload".to_string(),
             )));
         }
@@ -267,11 +280,9 @@ async fn execute_entry_command(
                         )
                         .await
                     }
-                    None => {
-                        Err(Box::new(error::ArgumentError::ResourceNotFound(
-                            "no time entry is currently running".to_string(),
-                        )))
-                    }
+                    None => Err(Box::new(error::ArgumentError::ResourceNotFound(
+                        "no time entry is currently running".to_string(),
+                    ))),
                 }
             } else {
                 EditCommand::execute(
@@ -293,11 +304,9 @@ async fn execute_entry_command(
                 // Get the current running entry and delete it
                 match api_client.get_current_time_entry_minimal().await? {
                     Some(entry) => DeleteCommand::execute(api_client, entry.id).await,
-                    None => {
-                        Err(Box::new(error::ArgumentError::ResourceNotFound(
-                            "no time entry is currently running".to_string(),
-                        )))
-                    }
+                    None => Err(Box::new(error::ArgumentError::ResourceNotFound(
+                        "no time entry is currently running".to_string(),
+                    ))),
                 }
             } else {
                 // id is guaranteed Some due to validation above

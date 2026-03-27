@@ -6,6 +6,13 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(name = "toggl")]
 #[command(about = "Toggl command line app.", long_about = None)]
+#[command(subcommand_required = true, arg_required_else_help = true)]
+#[command(after_long_help = "\
+Examples:
+  toggl entry start -d \"Working on feature\"
+  toggl entry stop
+  toggl entry current
+  toggl entry list")]
 pub struct Cli {
     #[command(subcommand)]
     pub cmd: Command,
@@ -41,6 +48,12 @@ pub enum Command {
     /// Show current user profile information.
     Me,
     /// Manage time entries.
+    #[command(after_long_help = "\
+Examples:
+  toggl entry start -d \"Working on feature\"
+  toggl entry current
+  toggl entry stop
+  toggl entry list --since yesterday")]
     Entry {
         #[command(subcommand)]
         action: EntryAction,
@@ -102,6 +115,11 @@ pub enum EntryAction {
     /// Show the current time entry.
     Current,
     /// List time entries.
+    #[command(after_long_help = "\
+Examples:
+  toggl entry list
+  toggl entry list --since 2024-01-01 --number 5
+  toggl entry list --json | jq '.[].description'")]
     List {
         #[arg(short, long, help = "Maximum number of items to print")]
         number: Option<usize>,
@@ -123,6 +141,11 @@ pub enum EntryAction {
     /// Stop the currently running time entry.
     Stop,
     /// Start a new time entry, call with no arguments to start in interactive mode.
+    #[command(after_long_help = "\
+Examples:
+  toggl entry start -d \"Writing docs\" -p MyProject
+  toggl entry start -i
+  toggl entry start -d \"Meeting\" --start 09:00 --end 10:00")]
     Start {
         #[arg(
             short,
@@ -130,7 +153,7 @@ pub enum EntryAction {
             help = "Launch interactive mode to select project, description, and tags"
         )]
         interactive: bool,
-        #[arg(short, help = "Description of the time entry")]
+        #[arg(short, long, help = "Description of the time entry")]
         description: Option<String>,
         #[arg(
             short,
@@ -153,12 +176,12 @@ pub enum EntryAction {
         billable: bool,
         #[arg(
             long,
-            help = "Start date/time. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD"
+            help = "Start date/time. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD, HH:MM[:SS]"
         )]
         start: Option<String>,
         #[arg(
             long,
-            help = "End date/time. Requires --start. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD"
+            help = "End date/time. Requires --start. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD, HH:MM[:SS]"
         )]
         end: Option<String>,
     },
@@ -172,6 +195,10 @@ pub enum EntryAction {
         interactive: bool,
     },
     /// Show details of a single time entry by ID.
+    #[command(after_long_help = "\
+Examples:
+  toggl entry show 12345
+  toggl entry current        (alternative for running entry)")]
     Show {
         #[arg(help = "ID of the time entry to show")]
         id: Option<i64>,
@@ -179,6 +206,10 @@ pub enum EntryAction {
         json: bool,
     },
     /// Edit a time entry's description, billable state, project, task, or tags.
+    #[command(after_long_help = "\
+Examples:
+  toggl entry update --current -d \"New description\"
+  toggl entry update 12345 -p NewProject")]
     Update {
         #[arg(help = "ID of the time entry to edit")]
         id: Option<i64>,
@@ -204,12 +235,12 @@ pub enum EntryAction {
         tags: Option<Vec<String>>,
         #[arg(
             long,
-            help = "New start date/time. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD"
+            help = "New start date/time. Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD, HH:MM[:SS]"
         )]
         start: Option<String>,
         #[arg(
             long,
-            help = "New end date/time (use empty string \"\" to clear end time). Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD"
+            help = "New end date/time (use empty string \"\" to clear end time). Accepted formats: RFC3339, YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS], YYYY-MM-DD, HH:MM[:SS]"
         )]
         end: Option<String>,
     },
@@ -233,6 +264,10 @@ pub enum EntryAction {
 #[derive(Subcommand, Debug)]
 pub enum ProjectAction {
     /// List projects.
+    #[command(after_long_help = "\
+Examples:
+  toggl project list
+  toggl project list --json | jq '.[].name'")]
     List {
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
@@ -266,6 +301,10 @@ pub enum ProjectAction {
 #[derive(Subcommand, Debug)]
 pub enum TagAction {
     /// List tags in the current workspace.
+    #[command(after_long_help = "\
+Examples:
+  toggl tag list
+  toggl tag list --json")]
     List {
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
@@ -292,6 +331,10 @@ pub enum TagAction {
 #[derive(Subcommand, Debug)]
 pub enum ClientAction {
     /// List clients in the current workspace.
+    #[command(after_long_help = "\
+Examples:
+  toggl client list
+  toggl client list --json")]
     List {
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,

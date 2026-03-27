@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use chrono::{DateTime, Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use colored::Colorize;
 use directories::BaseDirs;
 
@@ -113,6 +113,19 @@ pub fn parse_datetime_input(input: &str) -> ResultWithDefaultError<DateTime<Utc>
             LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc)),
             _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
         };
+    }
+
+    // Time-only formats: HH:MM or HH:MM:SS (interpreted as today in local time)
+    let time_formats = ["%H:%M:%S", "%H:%M"];
+    for format in time_formats {
+        if let Ok(time) = NaiveTime::parse_from_str(value, format) {
+            let today = Local::now().date_naive();
+            let naive = NaiveDateTime::new(today, time);
+            return match Local.from_local_datetime(&naive) {
+                LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc)),
+                _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+            };
+        }
     }
 
     Err(Box::new(ArgumentError::InvalidDateTime(input.to_string())))

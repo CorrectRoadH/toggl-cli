@@ -62,24 +62,24 @@ The API token is stored securely in your Operating System's keychain using the [
 
 ```shell
 # Start and stop time tracking
-toggl start "Write code" -p MyProject -t dev cli
-toggl stop
-toggl current
+toggl entry start -d "Write code" -p MyProject -t dev cli
+toggl entry stop
+toggl entry current
 
 # List entries
-toggl list -n 10
-toggl list --since 2026-03-06 --until 2026-03-06
-toggl list --since "2026-03-06 09:00" --until "2026-03-06 18:30"
+toggl entry list -n 10
+toggl entry list --since 2026-03-06 --until 2026-03-06
+toggl entry list --since "2026-03-06 09:00" --until "2026-03-06 18:30"
 
 # Workspace resources
-toggl create project "New Project"
-toggl create task --project MyProject "Code Review"
-toggl create tag "deep-work"
+toggl project create "New Project"
+toggl task create --project MyProject "Code Review"
+toggl tag create "deep-work"
 ```
 
-For `toggl list`, date-only values are interpreted in local time. `--since YYYY-MM-DD` means the start of that day, and `--until YYYY-MM-DD` includes the full day.
+For `toggl entry list`, date-only values are interpreted in local time. `--since YYYY-MM-DD` means the start of that day, and `--until YYYY-MM-DD` includes the full day.
 
-Run `toggl help` to see all commands.
+Run `toggl --help` to see all commands.
 
 ---
 
