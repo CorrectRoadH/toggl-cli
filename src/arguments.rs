@@ -93,6 +93,11 @@ Examples:
         #[command(subcommand)]
         action: PreferencesAction,
     },
+    /// Generate reports (summary, detailed, weekly)
+    Report {
+        #[command(subcommand)]
+        action: ReportAction,
+    },
     /// Manage configuration.
     Config {
         #[arg(
@@ -488,6 +493,62 @@ pub enum AuthAction {
     },
     /// Show current authentication status, provider, and credential source.
     Status,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ReportAction {
+    /// Summary report grouped by project
+    #[command(after_long_help = "\
+Examples:
+  toggl report summary --since 2026-03-01 --until 2026-03-27
+  toggl report summary --since 2026-03-01 --until 2026-03-27 --json")]
+    Summary {
+        #[arg(long, help = "Start date (YYYY-MM-DD)")]
+        since: String,
+        #[arg(long, help = "End date (YYYY-MM-DD)")]
+        until: String,
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
+        #[arg(long, help = "Group by: projects, clients, users (default: projects)")]
+        group_by: Option<String>,
+        #[arg(long, help = "Sub-group by: time_entries, tasks, projects, users")]
+        sub_group_by: Option<String>,
+    },
+    /// Detailed report listing individual time entries
+    #[command(after_long_help = "\
+Examples:
+  toggl report detailed --since 2026-03-01 --until 2026-03-27
+  toggl report detailed --since 2026-03-01 --until 2026-03-27 --json -n 100")]
+    Detailed {
+        #[arg(long, help = "Start date (YYYY-MM-DD)")]
+        since: String,
+        #[arg(long, help = "End date (YYYY-MM-DD)")]
+        until: String,
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
+        #[arg(short, long, help = "Maximum number of entries per page")]
+        number: Option<i64>,
+        #[arg(
+            long,
+            help = "Order by: date, user, duration, description (default: date)"
+        )]
+        order_by: Option<String>,
+        #[arg(long, help = "Order direction: ASC or DESC")]
+        order_dir: Option<String>,
+    },
+    /// Weekly report with daily breakdown
+    #[command(after_long_help = "\
+Examples:
+  toggl report weekly --since 2026-03-17 --until 2026-03-23
+  toggl report weekly --since 2026-03-17 --until 2026-03-23 --json")]
+    Weekly {
+        #[arg(long, help = "Start date (YYYY-MM-DD)")]
+        since: String,
+        #[arg(long, help = "End date (YYYY-MM-DD)")]
+        until: String,
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
 }
 
 /// Entity types for list command (used internally by list.rs)

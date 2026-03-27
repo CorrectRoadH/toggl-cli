@@ -75,6 +75,11 @@ toggl entry list --since "2026-03-06 09:00" --until "2026-03-06 18:30"
 toggl project create "New Project"
 toggl task create --project MyProject "Code Review"
 toggl tag create "deep-work"
+
+# Reports
+toggl report summary --since 2026-03-01 --until 2026-03-31
+toggl report detailed --since 2026-03-01 --until 2026-03-31
+toggl report weekly --since 2026-03-17 --until 2026-03-23
 ```
 
 For `toggl entry list`, date-only values are interpreted in local time. `--since YYYY-MM-DD` means the start of that day, and `--until YYYY-MM-DD` includes the full day.

@@ -75,6 +75,11 @@ toggl entry list --since "2026-03-06 09:00" --until "2026-03-06 18:30"
 toggl project create "新项目"
 toggl task create --project 我的项目 "代码评审"
 toggl tag create "deep-work"
+
+# 报告
+toggl report summary --since 2026-03-01 --until 2026-03-31
+toggl report detailed --since 2026-03-01 --until 2026-03-31
+toggl report weekly --since 2026-03-17 --until 2026-03-23
 ```
 
 对于 `toggl entry list`，纯日期值会按本地时间解释。`--since YYYY-MM-DD` 表示当天开始时间，`--until YYYY-MM-DD` 表示包含整天。

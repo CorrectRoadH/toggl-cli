@@ -52,6 +52,11 @@ Resources:
 - `toggl preferences update '<json>'`
 - `toggl config init|active|-e|-p|-d`
 
+Reports:
+- `toggl report summary --since YYYY-MM-DD --until YYYY-MM-DD [-j] [--group-by projects|clients|users] [--sub-group-by time_entries|tasks|projects|users]`
+- `toggl report detailed --since YYYY-MM-DD --until YYYY-MM-DD [-j] [-n NUMBER] [--order-by date|user|duration|description] [--order-dir ASC|DESC]`
+- `toggl report weekly --since YYYY-MM-DD --until YYYY-MM-DD [-j]`
+
 ## Know-How
 
 - Multiple tags: pass multiple values to `-t`, for example `-t dev review`, not one quoted string like `-t "dev review"` if you want two separate tags.
@@ -90,6 +95,12 @@ toggl project create "App" --color "#06aaf5"
 toggl task delete -p "App" "Code Review"
 toggl task update -p "App" "Code Review" --new-name "CR"
 toggl preferences update '{"time_format":"H:mm"}'
+
+# Reports
+toggl report summary --since 2026-03-01 --until 2026-03-31
+toggl report summary --since 2026-03-01 --until 2026-03-31 --json
+toggl report detailed --since 2026-03-25 --until 2026-03-27 -n 50
+toggl report weekly --since 2026-03-17 --until 2026-03-23
 ```
 
 ## Output And Time

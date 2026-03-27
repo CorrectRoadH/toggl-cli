@@ -68,7 +68,7 @@ async fn main() -> ResultWithDefaultError<()> {
         Err(err) => {
             if err.kind() == ErrorKind::InvalidSubcommand {
                 let mut msg = err.to_string();
-                msg.push_str("\nAvailable commands: auth, entry, project, tag, client, task, workspace, org, me, preferences, config, logout\n");
+                msg.push_str("\nAvailable commands: auth, entry, project, tag, client, task, workspace, org, me, preferences, report, config, logout\n");
                 eprint!("{msg}");
                 std::process::exit(2);
             }
@@ -150,6 +150,10 @@ async fn execute_subcommand(args: Cli) -> ResultWithDefaultError<()> {
         Command::Preferences { action } => {
             let api_client = get_api_client(args.proxy.clone())?;
             execute_preferences_command(action, api_client).await
+        }
+        Command::Report { action } => {
+            let api_client = get_api_client(args.proxy.clone())?;
+            commands::report::execute_report_command(action, api_client).await
         }
         Command::Config {
             edit,

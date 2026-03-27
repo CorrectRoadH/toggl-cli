@@ -190,6 +190,24 @@ pub trait ApiClient {
         project_id: i64,
         task_id: i64,
     ) -> ResultWithDefaultError<()>;
+
+    async fn get_summary_report(
+        &self,
+        workspace_id: i64,
+        body: Value,
+    ) -> ResultWithDefaultError<Value>;
+
+    async fn get_detailed_report(
+        &self,
+        workspace_id: i64,
+        body: Value,
+    ) -> ResultWithDefaultError<Value>;
+
+    async fn get_weekly_report(
+        &self,
+        workspace_id: i64,
+        body: Value,
+    ) -> ResultWithDefaultError<Value>;
 }
 
 pub struct V9ApiClient {
@@ -683,6 +701,10 @@ impl V9ApiClient {
                     "{error}; response body: {body}"
                 ))) as Box<dyn std::error::Error + Send>
             })
+    }
+
+    fn reports_base_url(&self) -> String {
+        self.base_url.replace("/api/v9", "/reports/api/v3")
     }
 
     async fn send_raw(
@@ -1746,6 +1768,66 @@ impl ApiClient for V9ApiClient {
             self.base_url, workspace_id, project_id, task_id
         );
         self.delete(url).await
+    }
+
+    async fn get_summary_report(
+        &self,
+        workspace_id: i64,
+        body: Value,
+    ) -> ResultWithDefaultError<Value> {
+        let url = format!(
+            "{}/workspace/{}/summary/time_entries",
+            self.reports_base_url(),
+            workspace_id
+        );
+        let response_body = self
+            .send_raw(self.http_client.post(&url).json(&body), &url)
+            .await?;
+        serde_json::from_str(&response_body).map_err(|e| {
+            Box::new(ApiError::NetworkWithMessage(format!(
+                "{e}; response body: {response_body}"
+            ))) as Box<dyn std::error::Error + Send>
+        })
+    }
+
+    async fn get_detailed_report(
+        &self,
+        workspace_id: i64,
+        body: Value,
+    ) -> ResultWithDefaultError<Value> {
+        let url = format!(
+            "{}/workspace/{}/search/time_entries",
+            self.reports_base_url(),
+            workspace_id
+        );
+        let response_body = self
+            .send_raw(self.http_client.post(&url).json(&body), &url)
+            .await?;
+        serde_json::from_str(&response_body).map_err(|e| {
+            Box::new(ApiError::NetworkWithMessage(format!(
+                "{e}; response body: {response_body}"
+            ))) as Box<dyn std::error::Error + Send>
+        })
+    }
+
+    async fn get_weekly_report(
+        &self,
+        workspace_id: i64,
+        body: Value,
+    ) -> ResultWithDefaultError<Value> {
+        let url = format!(
+            "{}/workspace/{}/weekly/time_entries",
+            self.reports_base_url(),
+            workspace_id
+        );
+        let response_body = self
+            .send_raw(self.http_client.post(&url).json(&body), &url)
+            .await?;
+        serde_json::from_str(&response_body).map_err(|e| {
+            Box::new(ApiError::NetworkWithMessage(format!(
+                "{e}; response body: {response_body}"
+            ))) as Box<dyn std::error::Error + Send>
+        })
     }
 
     async fn get_entities(&self) -> ResultWithDefaultError<Entities> {

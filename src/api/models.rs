@@ -233,6 +233,138 @@ impl From<TimeEntry> for NetworkTimeEntry {
     }
 }
 
+// === Report API models ===
+
+#[allow(dead_code)]
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct ReportBasePost {
+    pub start_date: String,
+    pub end_date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_ids: Option<Vec<i64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_ids: Option<Vec<i64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag_ids: Option<Vec<i64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub billable: Option<bool>,
+}
+
+#[allow(dead_code)]
+#[derive(Serialize, Clone, Debug)]
+pub struct SummaryReportPost {
+    #[serde(flatten)]
+    pub base: ReportBasePost,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grouping: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub_grouping: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Serialize, Clone, Debug)]
+pub struct DetailedReportPost {
+    #[serde(flatten)]
+    pub base: ReportBasePost,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_row_number: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_dir: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Serialize, Clone, Debug)]
+pub struct WeeklyReportPost {
+    #[serde(flatten)]
+    pub base: ReportBasePost,
+}
+
+// Summary response
+#[allow(dead_code)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct SummaryReportGroup {
+    #[serde(default)]
+    pub id: Option<i64>,
+    #[serde(default)]
+    pub sub_groups: Option<Vec<SummarySubGroup>>,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct SummarySubGroup {
+    #[serde(default)]
+    pub id: Option<i64>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub seconds: Option<i64>,
+}
+
+// Detailed response
+#[allow(dead_code)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct DetailedReportTimeEntry {
+    #[serde(default)]
+    pub user_id: Option<i64>,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub project_id: Option<i64>,
+    #[serde(default)]
+    pub project_name: Option<String>,
+    #[serde(default)]
+    pub task_id: Option<i64>,
+    #[serde(default)]
+    pub task_name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub billable: Option<bool>,
+    #[serde(default)]
+    pub tag_names: Option<Vec<String>>,
+    #[serde(default)]
+    pub time_entries: Option<Vec<DetailedSingleTimeEntry>>,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct DetailedSingleTimeEntry {
+    #[serde(default)]
+    pub id: Option<i64>,
+    #[serde(default)]
+    pub seconds: Option<i64>,
+    #[serde(default)]
+    pub start: Option<String>,
+    #[serde(default)]
+    pub stop: Option<String>,
+}
+
+// Weekly response
+#[allow(dead_code)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct WeeklyReportRow {
+    #[serde(default)]
+    pub user_id: Option<i64>,
+    #[serde(default)]
+    pub user_name: Option<String>,
+    #[serde(default)]
+    pub project_id: Option<i64>,
+    #[serde(default)]
+    pub project_name: Option<String>,
+    #[serde(default)]
+    pub client_name: Option<String>,
+    #[serde(default)]
+    pub seconds: Option<Vec<Option<i64>>>,
+    #[serde(default)]
+    pub billable_seconds: Option<Vec<Option<i64>>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{NetworkProject, NetworkTimeEntry};
