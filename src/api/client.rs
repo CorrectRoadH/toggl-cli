@@ -781,7 +781,7 @@ fn deserialize_optional_response_body<T: de::DeserializeOwned>(
 }
 
 fn cache_root_dir() -> Option<PathBuf> {
-    directories::ProjectDirs::from("studio.watercooler", "labs", "toggl-cli")
+    directories::ProjectDirs::from("com.github", "CorrectRoadH", "toggl-cli")
         .map(|dirs| dirs.cache_dir().join("http"))
 }
 

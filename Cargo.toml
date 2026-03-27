@@ -2,8 +2,8 @@
 name = "toggl"
 version = "0.6.10"
 authors = [
+  "CorrectRoadH <tylerchc92@gmail.com>",
   "Shantanu Raj <s@sraj.me>",
-  "Tyler <tylerchc92@gmail.com>",
   "William Barbosa <heytherewill@gmail.com>"
 ]
 categories = [
@@ -12,7 +12,7 @@ categories = [
   "date-and-time",
 ]
 description = "Unofficial command-line interface for Toggl Track using the v9 API."
-homepage = "https://toggl.com/track"
+homepage = "https://github.com/CorrectRoadH/toggl-cli"
 keywords = ["cli", "time", "time-tracking", "toggl", "track"]
 license = "MIT"
 readme = "README.md"

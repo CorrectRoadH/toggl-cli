@@ -38,7 +38,7 @@ toggl auth <YOUR_API_TOKEN>
 ### 搭配 [OpenToggl](https://opentoggl.com) 使用
 
 ```shell
-toggl auth <YOUR_API_TOKEN> --type opentoggl --api-url https://your-instance.com/api/v9
+toggl auth <YOUR_API_TOKEN> --api-type opentoggl --api-url https://your-instance.com/api/v9
 ```
 
 你也可以运行交互式认证：

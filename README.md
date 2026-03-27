@@ -38,7 +38,7 @@ toggl auth <YOUR_API_TOKEN>
 ### Use with [OpenToggl](https://opentoggl.com)
 
 ```shell
-toggl auth <YOUR_API_TOKEN> --type opentoggl --api-url https://your-instance.com/api/v9
+toggl auth <YOUR_API_TOKEN> --api-type opentoggl --api-url https://your-instance.com/api/v9
 ```
 
 You can also run interactive auth:

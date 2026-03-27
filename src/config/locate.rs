@@ -46,7 +46,7 @@ pub fn get_config_path_for_current_dir() -> ResultWithDefaultError<PathBuf> {
 }
 
 fn get_config_root() -> PathBuf {
-    directories::ProjectDirs::from("studio.watercooler", "labs", "toggl-cli")
+    directories::ProjectDirs::from("com.github", "CorrectRoadH", "toggl-cli")
         .unwrap()
         .config_local_dir()
         .to_path_buf()
