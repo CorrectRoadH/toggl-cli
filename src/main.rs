@@ -169,27 +169,23 @@ async fn execute_entry_command(
     // unnecessary keychain/storage access for validation failures.
     match &action {
         EntryAction::Show { id, .. } if id.is_none() => {
-            eprintln!("error: 'show' requires an entry ID");
             return Err(Box::new(error::ArgumentError::ResourceNotFound(
-                "entry ID is required".to_string(),
+                "'show' requires an entry ID. Run `toggl entry list` or `toggl entry current` to find one.".to_string(),
             )));
         }
         EntryAction::Update { id, current, .. } if id.is_none() && !current => {
-            eprintln!("error: 'update' requires an entry ID or --current flag");
             return Err(Box::new(error::ArgumentError::ResourceNotFound(
-                "entry ID or --current is required".to_string(),
+                "'update' requires an entry ID or --current flag".to_string(),
             )));
         }
         EntryAction::Delete { id, current } if id.is_none() && !current => {
-            eprintln!("error: 'delete' requires an entry ID or --current flag");
             return Err(Box::new(error::ArgumentError::ResourceNotFound(
-                "entry ID or --current is required".to_string(),
+                "'delete' requires an entry ID or --current flag".to_string(),
             )));
         }
         EntryAction::BulkEdit { json: None, .. } => {
-            eprintln!("error: 'bulk-edit' requires --json flag with JSON payload");
             return Err(Box::new(error::ArgumentError::ResourceNotFound(
-                "--json flag is required".to_string(),
+                "'bulk-edit' requires --json flag with JSON payload".to_string(),
             )));
         }
         _ => {}
@@ -272,9 +268,8 @@ async fn execute_entry_command(
                         .await
                     }
                     None => {
-                        eprintln!("error: no time entry is currently running");
                         Err(Box::new(error::ArgumentError::ResourceNotFound(
-                            "no running time entry".to_string(),
+                            "no time entry is currently running".to_string(),
                         )))
                     }
                 }
@@ -299,9 +294,8 @@ async fn execute_entry_command(
                 match api_client.get_current_time_entry_minimal().await? {
                     Some(entry) => DeleteCommand::execute(api_client, entry.id).await,
                     None => {
-                        eprintln!("error: no time entry is currently running");
                         Err(Box::new(error::ArgumentError::ResourceNotFound(
-                            "no running time entry".to_string(),
+                            "no time entry is currently running".to_string(),
                         )))
                     }
                 }

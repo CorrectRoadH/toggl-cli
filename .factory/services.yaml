@@ -1,9 +1,0 @@
-commands:
-  install: 'set -a; [ -f ./.env ] && . ./.env; set +a; cargo fetch'
-  build: 'set -a; [ -f ./.env ] && . ./.env; set +a; cargo build'
-  typecheck: 'set -a; [ -f ./.env ] && . ./.env; set +a; cargo check'
-  test: 'set -a; [ -f ./.env ] && . ./.env; set +a; cargo test --bin toggl'
-  lint: 'set -a; [ -f ./.env ] && . ./.env; set +a; cargo fmt --check && cargo clippy --bin toggl -- -D warnings'
-  test_live: 'set -a; [ -f ./.env ] && . ./.env; set +a; cargo test --test live_cli -- --test-threads=1'
-
-services: {}

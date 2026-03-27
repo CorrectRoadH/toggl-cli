@@ -124,7 +124,11 @@ pub enum EntryAction {
     Stop,
     /// Start a new time entry, call with no arguments to start in interactive mode.
     Start {
-        #[arg(short, long)]
+        #[arg(
+            short,
+            long,
+            help = "Launch interactive mode to select project, description, and tags"
+        )]
         interactive: bool,
         #[arg(short, help = "Description of the time entry")]
         description: Option<String>,
@@ -145,7 +149,7 @@ pub enum EntryAction {
             help = "Space separated list of tags to associate with the time entry, e.g. 'tag1 tag2 tag3'"
         )]
         tags: Option<Vec<String>>,
-        #[arg(short, long)]
+        #[arg(short, long, help = "Mark the time entry as billable")]
         billable: bool,
         #[arg(
             long,
@@ -160,7 +164,11 @@ pub enum EntryAction {
     },
     /// Continue a previous time entry.
     Resume {
-        #[arg(short, long)]
+        #[arg(
+            short,
+            long,
+            help = "Launch interactive mode to select which entry to resume"
+        )]
         interactive: bool,
     },
     /// Show details of a single time entry by ID.
