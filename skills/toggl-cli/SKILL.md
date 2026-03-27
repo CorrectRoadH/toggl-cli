@@ -22,6 +22,7 @@ Time entries:
 - `toggl entry show <ID> [-j]`
 - `toggl entry update [ID] [--current] [-d DESCRIPTION] [--billable true|false] [-p PROJECT] [--task TASK] [-t TAG...] [--start DATETIME] [--end DATETIME|""] [-j]`
 - `toggl entry delete <ID> [--current]`
+- `toggl entry bulk-edit <ID...> --json '<JSON_PATCH>'`
 - `toggl entry list [--since DATETIME] [--until DATETIME] [-n NUMBER] [-j]`
 
 Resources:
@@ -75,6 +76,7 @@ Reports (--since/--until are optional, default to this_week/today):
 - `--end` requires `--start`, and end time must be later than start time.
 - `entry update --current` edits the currently running entry without needing its ID.
 - `entry update` with no field flags (-d, -p, -t, etc.) exits 1 with a helpful message listing valid flags.
+- **Bulk edit**: `entry bulk-edit` accepts multiple IDs and a `--json` flag with a JSON Patch array. All entries must belong to the same workspace. Example: `toggl entry bulk-edit 123 456 789 --json '[{"op":"replace","path":"/description","value":"standup"}]'`.
 - `entry start` uses config defaults when flags are omitted, including default project, task, tags, and billable state.
 - For `entry list`, a date-only `--since YYYY-MM-DD` means local `00:00:00` at the start of that day.
 - For `entry list`, a date-only `--until YYYY-MM-DD` includes the whole local day by using the next day's `00:00:00` as the exclusive upper bound.
@@ -96,6 +98,7 @@ toggl entry list --since today
 toggl entry list --since yesterday --until today
 toggl entry list --since this_week --json | jq '.[].description'
 toggl entry list --since last_week --until yesterday
+toggl entry bulk-edit 123 456 --json '[{"op":"replace","path":"/description","value":"standup"}]'
 
 # Reports (no args = current week)
 toggl report summary

@@ -303,7 +303,6 @@ Examples:
         json: bool,
     },
     /// Bulk edit multiple time entries with a JSON Patch payload.
-    #[clap(hide = true)]
     BulkEdit {
         #[arg(help = "IDs of the time entries to update")]
         ids: Vec<i64>,
@@ -1582,6 +1581,35 @@ mod tests {
                 action: EntryAction::BulkEdit { ids, json: None },
             } => {
                 assert_eq!(ids, vec![1, 2, 3]);
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_bulk_edit_parses_json_flag() {
+        let payload = r#"[{"op":"replace","path":"/description","value":"test"}]"#;
+        let cmd = Cli::try_parse_from(["toggl", "entry", "bulk-edit", "1", "2", "--json", payload])
+            .expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action: EntryAction::BulkEdit { ids, json: Some(j) },
+            } => {
+                assert_eq!(ids, vec![1, 2]);
+                assert_eq!(j, payload);
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_bulk_edit_no_ids_parses_empty() {
+        let cmd = Cli::try_parse_from(["toggl", "entry", "bulk-edit"]).expect("should parse");
+        match cmd.cmd {
+            Command::Entry {
+                action: EntryAction::BulkEdit { ids, json: None },
+            } => {
+                assert!(ids.is_empty());
             }
             other => panic!("unexpected parse result: {other:?}"),
         }
