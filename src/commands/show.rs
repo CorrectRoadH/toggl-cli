@@ -1,4 +1,5 @@
 use crate::api::client::ApiClient;
+use crate::error::ApiError;
 use crate::models::ResultWithDefaultError;
 use colored::Colorize;
 use std::io::{self, BufWriter, Write};
@@ -14,7 +15,9 @@ impl ShowCommand {
         match api_client.get_time_entry(id).await {
             Err(_) => {
                 eprintln!("{}", format!("Time entry not found (ID: {id})").yellow());
-                std::process::exit(1);
+                return Err(Box::new(ApiError::HttpErrorWithMessage(format!(
+                    "Time entry not found (ID: {id})"
+                ))));
             }
             Ok(entry) => {
                 let stdout = io::stdout();
