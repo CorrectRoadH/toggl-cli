@@ -175,6 +175,30 @@ pub fn parse_datetime_input(input: &str) -> ResultWithDefaultError<DateTime<Utc>
     Err(Box::new(ArgumentError::InvalidDateTime(input.to_string())))
 }
 
+/// Like `parse_datetime_input`, but time-only values (HH:MM, HH:MM:SS) are
+/// interpreted relative to `reference_date` instead of today.
+pub fn parse_datetime_input_with_reference(
+    input: &str,
+    reference_date: NaiveDate,
+) -> ResultWithDefaultError<DateTime<Utc>> {
+    let value = input.trim();
+
+    // Time-only formats: use reference_date instead of today
+    let time_formats = ["%H:%M:%S", "%H:%M"];
+    for format in time_formats {
+        if let Ok(time) = NaiveTime::parse_from_str(value, format) {
+            let naive = NaiveDateTime::new(reference_date, time);
+            return match Local.from_local_datetime(&naive) {
+                LocalResult::Single(parsed) => Ok(parsed.with_timezone(&Utc)),
+                _ => Err(Box::new(ArgumentError::InvalidDateTime(input.to_string()))),
+            };
+        }
+    }
+
+    // Fall back to the standard parser for all other formats
+    parse_datetime_input(input)
+}
+
 pub fn normalize_time_entry_list_filters(
     since: Option<String>,
     until: Option<String>,

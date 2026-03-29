@@ -66,7 +66,7 @@ Reports (--since/--until are optional, default to this_week/today):
 - **`entry current --json`** returns `{"running": false}` when nothing is running (not null). Same for `entry stop --json` when idle.
 - **Report defaults**: `toggl report summary` with no args defaults to current week (this_week to today). No date flags required.
 - **Project by name**: `-p "ProjectName"` resolves by name first, then by numeric ID. Non-existent names show available projects. Project is validated before stopping any running timer.
-- **Entry list output**: Human mode shows `ID DATE TIME [duration] – description @project`. Use IDs directly for `entry show`, `entry update`, `entry delete`.
+- **Entry list output**: Human mode shows `ID DATE HH:MM–HH:MM [duration] – description @project`. Cross-day entries show the end date (e.g. `23:35–03-29 12:01`). Entries are sorted by start time. Use IDs directly for `entry show`, `entry update`, `entry delete`.
 - **Names with spaces**: Quote names containing spaces in all commands: `toggl tag create "2 象限"`, `toggl project create "My Project"`, `-p "My Project"`, `-d "Fix login bug"`. Without quotes, each word is treated as a separate argument.
 - Multiple tags: pass multiple values to `-t`, for example `-t dev review`, not one quoted string like `-t "dev review"` if you want two separate tags.
 - Clear tags on update: use `toggl entry update [ID] -t ""`.
@@ -117,7 +117,9 @@ toggl me --json
 
 ## Output And Time
 
-- Time-entry list format: `ID DATE TIME [$] [HH:MM:SS]* – description @Project #[tag1, tag2]`
+- Time-entry list format: `ID DATE HH:MM–HH:MM [$] [HH:MM:SS]* – description @Project #[tag1, tag2]`
+- Start–end time range is shown inline. Cross-day entries show the end date (e.g. `23:35–03-29 12:01`).
+- Running entries show `HH:MM–…` for the end time.
 - `$` means billable; `*` means currently running.
 - JSON single-entry output includes `"running": true/false` and hydrated `"project"` object.
 - Accepted datetime input for `--start`, `--end`, `--since`, `--until`:
@@ -126,3 +128,4 @@ toggl me --json
   - Local datetime: `2026-03-05 09:00` or `2026-03-05T09:00:00`
   - Date only: `2026-03-05` meaning local `00:00:00`
   - Time only: `09:00` or `14:30:00` meaning that time today in local timezone
+- **`entry update` time-only resolution**: When editing with `--start` or `--end` using time-only values (e.g. `18:30`), the date is inferred from the entry's existing start date, not today. Use a full datetime to specify a different date.

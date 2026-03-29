@@ -2,7 +2,7 @@ use crate::api::client::ApiClient;
 use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
 use crate::utilities;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use colored::Colorize;
 
 pub struct EditCommand;
@@ -39,13 +39,22 @@ impl EditCommand {
         match time_entry {
             None => println!("{}", "No matching time entry found".yellow()),
             Some(entry) => {
+                let entry_start_date = entry.start.with_timezone(&Local).date_naive();
                 let parsed_start = match start {
-                    Some(value) => Some(utilities::parse_datetime_input(&value)?),
+                    Some(value) => Some(utilities::parse_datetime_input_with_reference(
+                        &value,
+                        entry_start_date,
+                    )?),
                     None => None,
                 };
+                let effective_start = parsed_start.unwrap_or(entry.start);
+                let effective_start_date = effective_start.with_timezone(&Local).date_naive();
                 let parsed_end = match end {
                     Some(value) if value.is_empty() => None,
-                    Some(value) => Some(utilities::parse_datetime_input(&value)?),
+                    Some(value) => Some(utilities::parse_datetime_input_with_reference(
+                        &value,
+                        effective_start_date,
+                    )?),
                     None => entry.stop,
                 };
 
@@ -96,7 +105,7 @@ impl EditCommand {
                     None => entry.tags.clone(),
                 };
 
-                let start = parsed_start.unwrap_or(entry.start);
+                let start = effective_start;
                 let (stop, duration) = compute_stop_and_duration(start, parsed_end)?;
 
                 let updated = crate::models::TimeEntry {
@@ -136,7 +145,7 @@ fn compute_stop_and_duration(
         Some(end) => {
             if end <= start {
                 return Err(Box::new(ArgumentError::InvalidTimeRange(
-                    "end must be later than start".to_string(),
+                    "end must be later than start. For cross-day entries, use a full datetime (e.g. 2026-03-29 12:00)".to_string(),
                 )));
             }
             Ok((Some(end), (end - start).num_seconds()))
@@ -480,5 +489,28 @@ mod tests {
         let result = compute_stop_and_duration(start, stop);
 
         assert_err!(result);
+    }
+
+    #[test]
+    fn compute_stop_and_duration_error_suggests_full_datetime() {
+        let start = fixed_time(1_700_000_000);
+        let stop = Some(fixed_time(1_699_990_000)); // before start
+
+        let err = compute_stop_and_duration(start, stop).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("full datetime"),
+            "error should hint about full datetime for cross-day, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn compute_stop_and_duration_valid_range() {
+        let start = fixed_time(1_700_000_000);
+        let stop = Some(fixed_time(1_700_003_600)); // 1 hour later
+
+        let (end, duration) = compute_stop_and_duration(start, stop).unwrap();
+        assert_eq!(end, Some(fixed_time(1_700_003_600)));
+        assert_eq!(duration, 3600);
     }
 }

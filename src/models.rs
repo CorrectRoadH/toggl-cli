@@ -336,12 +336,31 @@ impl Default for TimeEntry {
 impl std::fmt::Display for TimeEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let local_start: DateTime<Local> = self.start.with_timezone(&Local);
-        let start_str = local_start.format("%Y-%m-%d %H:%M");
+        let time_str = match self.stop {
+            Some(stop) => {
+                let local_stop: DateTime<Local> = stop.with_timezone(&Local);
+                let cross_day = local_stop.date_naive() != local_start.date_naive();
+                if cross_day {
+                    format!(
+                        "{} ~ {}",
+                        local_start.format("%Y-%m-%d %H:%M"),
+                        local_stop.format("%m-%d %H:%M")
+                    )
+                } else {
+                    format!(
+                        "{}~{}",
+                        local_start.format("%Y-%m-%d %H:%M"),
+                        local_stop.format("%H:%M")
+                    )
+                }
+            }
+            None => format!("{}~…", local_start.format("%Y-%m-%d %H:%M")),
+        };
         let summary = format!(
-            //{id} {start} {$/space} [{duration}]{running indicator/space} - {description/No Description}{@project/empty string} {#tags/empty string}
+            //{id} {date HH:MM–HH:MM} {$/space} [{duration}]{running indicator/space} – {description}{@project} {#tags}
             "{} {} {} [{}]{} –  {}{} {}",
             self.id,
-            start_str,
+            time_str,
             if self.billable {
                 "$".green().bold().to_string()
             } else {
@@ -365,5 +384,109 @@ impl std::fmt::Display for TimeEntry {
             }
         );
         write!(f, "{summary}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn entry_with_start_stop(start_secs: i64, stop_secs: Option<i64>) -> TimeEntry {
+        let start = Utc.timestamp_opt(start_secs, 0).single().unwrap();
+        TimeEntry {
+            id: 1,
+            description: "test".to_string(),
+            start,
+            stop: stop_secs.map(|s| Utc.timestamp_opt(s, 0).single().unwrap()),
+            duration: stop_secs.map_or(-start.timestamp(), |s| s - start_secs),
+            billable: false,
+            workspace_id: 1,
+            tags: vec![],
+            project: None,
+            task: None,
+            created_with: None,
+        }
+    }
+
+    #[test]
+    fn display_same_day_entry_shows_tilde_end_time() {
+        // 2023-11-14 15:00 UTC ~ 2023-11-14 16:00 UTC
+        let entry = entry_with_start_stop(1_700_000_000, Some(1_700_003_600));
+        let display = format!("{entry}");
+        // Should contain ~ connecting start and end, no date in end part
+        assert!(display.contains('~'), "should contain ~ separator");
+        // Should NOT contain " ~ " (space-padded) since same day
+        assert!(
+            !display.contains(" ~ "),
+            "same-day should use compact ~ without spaces, got: {display}"
+        );
+    }
+
+    #[test]
+    fn display_cross_day_entry_shows_end_date() {
+        // Use local time to construct a pair that's definitely cross-day locally:
+        // local 23:00 today ~ local 11:00 tomorrow
+        let today = Local::now().date_naive();
+        let tomorrow = today.succ_opt().unwrap();
+        let start_naive = today.and_hms_opt(23, 0, 0).unwrap();
+        let stop_naive = tomorrow.and_hms_opt(11, 0, 0).unwrap();
+        let start = Local
+            .from_local_datetime(&start_naive)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let stop = Local
+            .from_local_datetime(&stop_naive)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let entry = TimeEntry {
+            id: 1,
+            description: "test".to_string(),
+            start,
+            stop: Some(stop),
+            duration: (stop - start).num_seconds(),
+            billable: false,
+            workspace_id: 1,
+            tags: vec![],
+            project: None,
+            task: None,
+            created_with: None,
+        };
+        let display = format!("{entry}");
+        assert!(
+            display.contains(" ~ "),
+            "cross-day should use spaced ~ separator, got: {display}"
+        );
+    }
+
+    #[test]
+    fn display_running_entry_shows_ellipsis() {
+        let today = Local::now().date_naive();
+        let start_naive = today.and_hms_opt(9, 0, 0).unwrap();
+        let start = Local
+            .from_local_datetime(&start_naive)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let entry = TimeEntry {
+            id: 1,
+            description: "test".to_string(),
+            start,
+            stop: None,
+            duration: -start.timestamp(),
+            billable: false,
+            workspace_id: 1,
+            tags: vec![],
+            project: None,
+            task: None,
+            created_with: None,
+        };
+        let display = format!("{entry}");
+        assert!(
+            display.contains("~…"),
+            "running entry should show ~…, got: {display}"
+        );
     }
 }
