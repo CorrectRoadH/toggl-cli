@@ -10,17 +10,18 @@ description: >
 # Toggl CLI Skill
 
 - Install: `npm install -g @correctroadh/toggl-cli`
-- Auth: `toggl auth <TOKEN>`
+- Auth: `toggl auth login [TOKEN] [--api-type official|opentoggl] [--api-url URL]`
+- Auth (OpenToggl): `toggl auth login <TOKEN> --api-type opentoggl --api-url https://your-server.com`
 
 ## Command Shapes
 
 Time entries:
 - `toggl entry start [-d DESCRIPTION] [-p PROJECT] [--task TASK] [-t TAG...] [-b] [--start DATETIME] [--end DATETIME] [-j]`
 - `toggl entry stop [-j]`
-- `toggl entry resume [-i] [-j]`
-- `toggl entry current [-j]`
-- `toggl entry show <ID> [-j]`
-- `toggl entry update [ID] [--current] [-d DESCRIPTION] [--billable true|false] [-p PROJECT] [--task TASK] [-t TAG...] [--start DATETIME] [--end DATETIME|""] [-j]`
+- `toggl entry continue [-i] [-j]`
+- `toggl entry running [-j]`
+- `toggl entry show [ID] [--current] [-j]`
+- `toggl entry edit [ID] [--current] [-d DESCRIPTION] [--billable true|false] [-p PROJECT] [--task TASK] [-t TAG...] [--start DATETIME] [--end DATETIME|""] [-j]`
 - `toggl entry delete [ID] [--current] [-j]`
 - `toggl entry bulk-edit <ID...> --json '<JSON_PATCH>'`
 - `toggl entry list [--since DATETIME] [--until DATETIME] [-n NUMBER] [-j]`
@@ -48,6 +49,8 @@ Resources:
 - `toggl workspace rename <old_name> <new_name>`
 - `toggl org list [-j]`
 - `toggl org show <id> [-j]`
+- `toggl auth login [TOKEN] [--api-type official|opentoggl] [--api-url URL]`
+- `toggl auth status [-j]`
 - `toggl me [-j]`
 - `toggl preferences read`
 - `toggl preferences update '<json>'`
@@ -62,20 +65,20 @@ Reports (--since/--until are optional, default to this_week/today):
 
 - **IMPORTANT: Always scope `entry list`** with `--since` or `-n` to avoid dumping 90 days of entries. Use `--since today`, `--since this_week`, or `-n 10`. Never run bare `toggl entry list` — the output can be hundreds of entries and waste tokens.
 - **Natural language dates**: `--since` and `--until` accept `today`, `yesterday`, `now`, `this_week`, `last_week` in addition to YYYY-MM-DD and full datetime formats. Works in both `entry list` and all `report` commands.
-- **JSON on all mutations**: `entry start`, `entry stop`, `entry update`, `entry resume` all support `-j/--json` and return the full entry with real ID, hydrated project, and `"running"` boolean.
-- **`entry current --json`** returns `{"running": false}` when nothing is running (not null). Same for `entry stop --json` when idle.
+- **JSON on all mutations**: `entry start`, `entry stop`, `entry edit`, `entry continue` all support `-j/--json` and return the full entry with real ID, hydrated project, and `"running"` boolean.
+- **`entry running --json`** returns `{"running": false}` when nothing is running (not null). Same for `entry stop --json` when idle.
 - **Report defaults**: `toggl report summary` with no args defaults to current week (this_week to today). No date flags required.
 - **Project by name**: `-p "ProjectName"` resolves by name first, then by numeric ID. Non-existent names show available projects. Project is validated before stopping any running timer.
-- **Entry list output**: Human mode shows `ID DATE HH:MM–HH:MM [duration] – description @project`. Cross-day entries show the end date (e.g. `23:35–03-29 12:01`). Entries are sorted by start time. Use IDs directly for `entry show`, `entry update`, `entry delete`.
+- **Entry list output**: Human mode shows `ID DATE HH:MM–HH:MM [duration] – description @project`. Cross-day entries show the end date (e.g. `23:35–03-29 12:01`). Entries are sorted by start time. Use IDs directly for `entry show`, `entry edit`, `entry delete`.
 - **Names with spaces**: Quote names containing spaces in all commands: `toggl tag create "2 象限"`, `toggl project create "My Project"`, `-p "My Project"`, `-d "Fix login bug"`. Without quotes, each word is treated as a separate argument.
 - Multiple tags: pass multiple values to `-t`, for example `-t dev review`, not one quoted string like `-t "dev review"` if you want two separate tags.
-- Clear tags on update: use `toggl entry update [ID] -t ""`.
+- Clear tags on update: use `toggl entry edit [ID] -t ""`.
 - Remove project or task on update: use `-p ""` or `--task ""`.
 - If `entry start` gets both `--start` and `--end`, it creates a closed historical entry and does not stop the currently running entry.
 - If `entry start` omits `--end`, it stops any currently running entry first.
 - `--end` requires `--start`, and end time must be later than start time.
-- `entry update --current` edits the currently running entry without needing its ID.
-- `entry update` with no field flags (-d, -p, -t, etc.) exits 1 with a helpful message listing valid flags.
+- `entry edit --current` edits the currently running entry without needing its ID.
+- `entry edit` with no field flags (-d, -p, -t, etc.) exits 1 with a helpful message listing valid flags.
 - **Bulk edit**: `entry bulk-edit` accepts multiple IDs and a `--json` flag with a JSON Patch array. All entries must belong to the same workspace. Example: `toggl entry bulk-edit 123 456 789 --json '[{"op":"replace","path":"/description","value":"standup"}]'`.
 - `entry start` uses config defaults when flags are omitted, including default project, task, tags, and billable state.
 - For `entry list`, a date-only `--since YYYY-MM-DD` means local `00:00:00` at the start of that day.
@@ -92,8 +95,8 @@ toggl entry start -d "Backfill" --start "2026-03-05 09:00" --end "2026-03-05 10:
 toggl entry start -d "Quick meeting" --start 09:00 --end 10:00
 toggl entry start -d "Task" -p "App" --json   # returns real ID in JSON
 toggl entry stop --json                        # returns stopped entry as JSON
-toggl entry current --json                     # check if running, get entry data
-toggl entry update --current -d "Updated" -p "" -t ""
+toggl entry running --json                     # check if running, get entry data
+toggl entry edit --current -d "Updated" -p "" -t ""
 toggl entry list --since today
 toggl entry list --since yesterday --until today
 toggl entry list --since this_week --json | jq '.[].description'
@@ -128,4 +131,4 @@ toggl me --json
   - Local datetime: `2026-03-05 09:00` or `2026-03-05T09:00:00`
   - Date only: `2026-03-05` meaning local `00:00:00`
   - Time only: `09:00` or `14:30:00` meaning that time today in local timezone
-- **`entry update` time-only resolution**: When editing with `--start` or `--end` using time-only values (e.g. `18:30`), the date is inferred from the entry's existing start date, not today. Use a full datetime to specify a different date.
+- **`entry edit` time-only resolution**: When editing with `--start` or `--end` using time-only values (e.g. `18:30`), the date is inferred from the entry's existing start date, not today. Use a full datetime to specify a different date.
