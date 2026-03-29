@@ -609,17 +609,17 @@ fn live_cli_running_commands_succeed() {
 
     ensure_test_workspace_scope();
 
+    // `entry running` may print "No running time entry" to stderr when idle,
+    // so only assert that the commands exit successfully (run_checked panics on
+    // non-zero exit). `entry list` writes "No entries found." to stderr when the
+    // workspace has no entries, leaving stdout empty, so we cannot assert non-empty
+    // stdout here.
     for args in [
         &["entry", "running"][..],
         &["entry", "running"][..],
         &["entry", "list", "--number", "1"][..],
     ] {
-        let output = run_checked(args);
-        assert!(
-            !output.trim().is_empty(),
-            "expected `toggl {}` to produce some output",
-            args.join(" ")
-        );
+        run_checked(args);
     }
 }
 
