@@ -21,7 +21,7 @@ Time entries:
 - `toggl entry current [-j]`
 - `toggl entry show <ID> [-j]`
 - `toggl entry update [ID] [--current] [-d DESCRIPTION] [--billable true|false] [-p PROJECT] [--task TASK] [-t TAG...] [--start DATETIME] [--end DATETIME|""] [-j]`
-- `toggl entry delete <ID> [--current]`
+- `toggl entry delete [ID] [--current] [-j]`
 - `toggl entry bulk-edit <ID...> --json '<JSON_PATCH>'`
 - `toggl entry list [--since DATETIME] [--until DATETIME] [-n NUMBER] [-j]`
 
