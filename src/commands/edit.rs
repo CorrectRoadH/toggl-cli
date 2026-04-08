@@ -188,6 +188,7 @@ mod tests {
             name: name.to_string(),
             workspace_id: 1,
             project,
+            active: true,
         }
     }
 

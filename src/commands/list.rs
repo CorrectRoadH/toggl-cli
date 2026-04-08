@@ -1,5 +1,5 @@
 use crate::api;
-use crate::arguments::Entity;
+use crate::arguments::{Entity, StatusFilter};
 use crate::models;
 use crate::utilities;
 use api::client::ApiClient;
@@ -120,10 +120,23 @@ impl ListCommand {
             return Ok(());
         }
 
-        if let Some(Entity::Client { json: entity_json }) = entity {
+        if let Some(Entity::Client {
+            json: entity_json,
+            status,
+        }) = entity
+        {
             let json = json_flag || entity_json;
             let user = api_client.get_user().await?;
-            match api_client.get_clients(user.default_workspace_id).await {
+            let api_status = match &status {
+                StatusFilter::Active => None,
+                StatusFilter::Archived => Some("archived".to_string()),
+                StatusFilter::All => Some("both".to_string()),
+                StatusFilter::Done => None,
+            };
+            match api_client
+                .get_clients(user.default_workspace_id, api_status)
+                .await
+            {
                 Err(error) => {
                     return Err(error);
                 }
@@ -169,15 +182,25 @@ impl ListCommand {
             return Ok(());
         }
 
-        if let Some(Entity::Project { json: entity_json }) = entity {
+        if let Some(Entity::Project {
+            json: entity_json,
+            status,
+        }) = entity
+        {
             let json = json_flag || entity_json;
             let projects = api_client.get_projects_list().await?;
             let stdout = io::stdout();
             let mut handle = BufWriter::new(stdout);
-            let projects = projects
+            let projects: Vec<_> = projects
                 .iter()
+                .filter(|p| match &status {
+                    StatusFilter::Active => p.active,
+                    StatusFilter::Archived => !p.active,
+                    StatusFilter::All => true,
+                    StatusFilter::Done => true,
+                })
                 .take(count.unwrap_or(usize::MAX))
-                .collect::<Vec<_>>();
+                .collect();
             if json {
                 let json_string =
                     serde_json::to_string(&projects).expect("failed to serialize projects to JSON");
@@ -211,15 +234,25 @@ impl ListCommand {
             return Ok(());
         }
 
-        if let Some(Entity::Task { json: entity_json }) = entity {
+        if let Some(Entity::Task {
+            json: entity_json,
+            status,
+        }) = entity
+        {
             let json = json_flag || entity_json;
             let tasks = api_client.get_tasks_list().await?;
             let stdout = io::stdout();
             let mut handle = BufWriter::new(stdout);
-            let tasks = tasks
+            let tasks: Vec<_> = tasks
                 .iter()
+                .filter(|t| match &status {
+                    StatusFilter::Active => t.active,
+                    StatusFilter::Done => !t.active,
+                    StatusFilter::All => true,
+                    StatusFilter::Archived => true,
+                })
                 .take(count.unwrap_or(usize::MAX))
-                .collect::<Vec<_>>();
+                .collect();
             if json {
                 let json_string =
                     serde_json::to_string(&tasks).expect("failed to serialize tasks to JSON");
@@ -263,13 +296,22 @@ impl ListCommand {
                         }
                     }
 
-                    Entity::Project { json: entity_json } => {
+                    Entity::Project {
+                        json: entity_json,
+                        status,
+                    } => {
                         let json = json_flag || entity_json;
-                        let projects = entities
+                        let projects: Vec<_> = entities
                             .projects
                             .values()
+                            .filter(|p| match &status {
+                                StatusFilter::Active => p.active,
+                                StatusFilter::Archived => !p.active,
+                                StatusFilter::All => true,
+                                StatusFilter::Done => true,
+                            })
                             .take(count.unwrap_or(usize::MAX))
-                            .collect::<Vec<_>>();
+                            .collect();
 
                         if json {
                             let json_string = serde_json::to_string(&projects)
@@ -301,13 +343,22 @@ impl ListCommand {
                         }
                     }
 
-                    Entity::Task { json: entity_json } => {
+                    Entity::Task {
+                        json: entity_json,
+                        status,
+                    } => {
                         let json = json_flag || entity_json;
-                        let tasks = entities
+                        let tasks: Vec<_> = entities
                             .tasks
                             .values()
+                            .filter(|t| match &status {
+                                StatusFilter::Active => t.active,
+                                StatusFilter::Done => !t.active,
+                                StatusFilter::All => true,
+                                StatusFilter::Archived => true,
+                            })
                             .take(count.unwrap_or(usize::MAX))
-                            .collect::<Vec<_>>();
+                            .collect();
 
                         if json {
                             let json_string = serde_json::to_string(&tasks)
@@ -486,12 +537,13 @@ mod tests {
             .returning(move || Ok(user.clone()));
         api_client
             .expect_get_clients()
-            .withf(|wid| *wid == 1)
-            .returning(|wid| {
+            .withf(|wid, _status| *wid == 1)
+            .returning(|wid, _| {
                 Ok(vec![Client {
                     id: 20,
                     name: "Acme".to_string(),
                     workspace_id: wid,
+                    archived: false,
                 }])
             });
 
@@ -501,7 +553,10 @@ mod tests {
             false,
             None,
             None,
-            Some(Entity::Client { json: true }),
+            Some(Entity::Client {
+                json: true,
+                status: StatusFilter::Active,
+            }),
         )
         .await;
         assert_ok!(result);
@@ -601,7 +656,10 @@ mod tests {
             false,
             None,
             None,
-            Some(Entity::Project { json: false }),
+            Some(Entity::Project {
+                json: false,
+                status: StatusFilter::Active,
+            }),
         )
         .await;
         assert_ok!(result);

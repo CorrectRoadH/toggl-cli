@@ -317,10 +317,15 @@ pub enum ProjectAction {
     #[command(after_long_help = "\
 Examples:
   toggl project list
+  toggl project list --status active
+  toggl project list --status archived
+  toggl project list --status all
   toggl project list --json | jq '.[].name'")]
     List {
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
+        #[arg(long, help = "Filter by status: active (default), archived, all")]
+        status: Option<String>,
     },
     /// Create a new project in your workspace.
     Create {
@@ -384,10 +389,15 @@ pub enum ClientAction {
     #[command(after_long_help = "\
 Examples:
   toggl client list
+  toggl client list --status active
+  toggl client list --status archived
+  toggl client list --status all
   toggl client list --json")]
     List {
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
+        #[arg(long, help = "Filter by status: active (default), archived, all")]
+        status: Option<String>,
     },
     /// Create a new client in your workspace.
     Create {
@@ -411,9 +421,17 @@ Examples:
 #[derive(Subcommand, Debug)]
 pub enum TaskAction {
     /// List tasks.
+    #[command(after_long_help = "\
+Examples:
+  toggl task list
+  toggl task list --status active
+  toggl task list --status done
+  toggl task list --status all")]
     List {
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
+        #[arg(long, help = "Filter by status: active (default), done, all")]
+        status: Option<String>,
     },
     /// Create a task inside a project.
     Create {
@@ -641,7 +659,7 @@ impl Command {
                 EntryAction::BulkEdit { .. } => false,
             },
             Command::Project { action } => match action {
-                ProjectAction::List { json } => *json,
+                ProjectAction::List { json, .. } => *json,
                 _ => false,
             },
             Command::Tag { action } => match action {
@@ -649,11 +667,11 @@ impl Command {
                 _ => false,
             },
             Command::Client { action } => match action {
-                ClientAction::List { json } => *json,
+                ClientAction::List { json, .. } => *json,
                 _ => false,
             },
             Command::Task { action } => match action {
-                TaskAction::List { json } => *json,
+                TaskAction::List { json, .. } => *json,
                 _ => false,
             },
             Command::Workspace { action } => match action {
@@ -677,16 +695,60 @@ impl Command {
     }
 }
 
+/// Status filter for list commands.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StatusFilter {
+    Active,
+    Archived,
+    Done,
+    All,
+}
+
+impl StatusFilter {
+    pub fn from_str_for_project(s: &str) -> Result<Self, String> {
+        match s.to_lowercase().as_str() {
+            "active" => Ok(StatusFilter::Active),
+            "archived" => Ok(StatusFilter::Archived),
+            "all" => Ok(StatusFilter::All),
+            other => Err(format!(
+                "invalid status '{other}': expected active, archived, or all"
+            )),
+        }
+    }
+
+    pub fn from_str_for_client(s: &str) -> Result<Self, String> {
+        match s.to_lowercase().as_str() {
+            "active" => Ok(StatusFilter::Active),
+            "archived" => Ok(StatusFilter::Archived),
+            "all" => Ok(StatusFilter::All),
+            other => Err(format!(
+                "invalid status '{other}': expected active, archived, or all"
+            )),
+        }
+    }
+
+    pub fn from_str_for_task(s: &str) -> Result<Self, String> {
+        match s.to_lowercase().as_str() {
+            "active" => Ok(StatusFilter::Active),
+            "done" => Ok(StatusFilter::Done),
+            "all" => Ok(StatusFilter::All),
+            other => Err(format!(
+                "invalid status '{other}': expected active, done, or all"
+            )),
+        }
+    }
+}
+
 /// Entity types for list command (used internally by list.rs)
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum Entity {
-    Project { json: bool },
+    Project { json: bool, status: StatusFilter },
     TimeEntry { json: bool },
     Tag { json: bool },
-    Client { json: bool },
+    Client { json: bool, status: StatusFilter },
     Workspace { json: bool },
-    Task { json: bool },
+    Task { json: bool, status: StatusFilter },
     Organization { json: bool },
 }
 
@@ -771,7 +833,7 @@ mod tests {
         let cmd = Cli::try_parse_from(["toggl", "project", "list"]).expect("should parse");
         match cmd.cmd {
             Command::Project {
-                action: ProjectAction::List { json: false },
+                action: ProjectAction::List { json: false, .. },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
@@ -805,7 +867,7 @@ mod tests {
         let cmd = Cli::try_parse_from(["toggl", "client", "list"]).expect("should parse");
         match cmd.cmd {
             Command::Client {
-                action: ClientAction::List { json: false },
+                action: ClientAction::List { json: false, .. },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
@@ -817,7 +879,7 @@ mod tests {
             Cli::try_parse_from(["toggl", "project", "list", "--json"]).expect("should parse");
         match cmd.cmd {
             Command::Project {
-                action: ProjectAction::List { json: true },
+                action: ProjectAction::List { json: true, .. },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
@@ -896,7 +958,7 @@ mod tests {
         let cmd = Cli::try_parse_from(["toggl", "client", "list", "--json"]).expect("should parse");
         match cmd.cmd {
             Command::Client {
-                action: ClientAction::List { json: true },
+                action: ClientAction::List { json: true, .. },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
         }
@@ -1049,7 +1111,7 @@ mod tests {
         let cmd = Cli::try_parse_from(["toggl", "task", "list"]).expect("should parse");
         match cmd.cmd {
             Command::Task {
-                action: TaskAction::List { json: false },
+                action: TaskAction::List { json: false, .. },
             } => {}
             other => panic!("unexpected parse result: {other:?}"),
         }

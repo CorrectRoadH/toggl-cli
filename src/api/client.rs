@@ -123,7 +123,11 @@ pub trait ApiClient {
 
     async fn delete_tag(&self, workspace_id: i64, tag_id: i64) -> ResultWithDefaultError<()>;
 
-    async fn get_clients(&self, workspace_id: i64) -> ResultWithDefaultError<Vec<models::Client>>;
+    async fn get_clients(
+        &self,
+        workspace_id: i64,
+        status: Option<String>,
+    ) -> ResultWithDefaultError<Vec<models::Client>>;
 
     async fn create_client(
         &self,
@@ -296,6 +300,7 @@ impl V9ApiClient {
             name: network_task.name,
             project,
             workspace_id: network_task.workspace_id,
+            active: network_task.active.unwrap_or(true),
         }
     }
 
@@ -309,6 +314,7 @@ impl V9ApiClient {
                         id: client.id,
                         name: client.name,
                         workspace_id: client.wid,
+                        archived: client.archived,
                     },
                 )
             })
@@ -370,6 +376,7 @@ impl V9ApiClient {
                             name: task.name,
                             project: project.clone(),
                             workspace_id: task.workspace_id,
+                            active: task.active.unwrap_or(true),
                         },
                     )
                 })
@@ -1342,6 +1349,7 @@ impl ApiClient for V9ApiClient {
                         id: c.id,
                         name: c.name,
                         workspace_id: c.wid,
+                        archived: c.archived,
                     },
                 )
             })
@@ -1381,6 +1389,7 @@ impl ApiClient for V9ApiClient {
                             name: t.name,
                             project: project.clone(),
                             workspace_id: t.workspace_id,
+                            active: t.active.unwrap_or(true),
                         },
                     )
                 })
@@ -1563,8 +1572,15 @@ impl ApiClient for V9ApiClient {
         self.delete(url).await
     }
 
-    async fn get_clients(&self, workspace_id: i64) -> ResultWithDefaultError<Vec<models::Client>> {
-        let url = format!("{}/workspaces/{}/clients", self.base_url, workspace_id);
+    async fn get_clients(
+        &self,
+        workspace_id: i64,
+        status: Option<String>,
+    ) -> ResultWithDefaultError<Vec<models::Client>> {
+        let mut url = format!("{}/workspaces/{}/clients", self.base_url, workspace_id);
+        if let Some(status) = &status {
+            url = format!("{}?status={}", url, status);
+        }
         let network_clients = self.get::<Vec<NetworkClient>>(url).await?;
         Ok(network_clients
             .into_iter()
@@ -1572,6 +1588,7 @@ impl ApiClient for V9ApiClient {
                 id: c.id,
                 name: c.name,
                 workspace_id: c.wid,
+                archived: c.archived,
             })
             .collect())
     }
@@ -1593,6 +1610,7 @@ impl ApiClient for V9ApiClient {
             id: network_client.id,
             name: network_client.name,
             workspace_id: network_client.wid,
+            archived: network_client.archived,
         })
     }
 
@@ -1617,6 +1635,7 @@ impl ApiClient for V9ApiClient {
             id: network_client.id,
             name: network_client.name,
             workspace_id: network_client.wid,
+            archived: network_client.archived,
         })
     }
 
@@ -1885,6 +1904,7 @@ impl ApiClient for V9ApiClient {
                         id: c.id,
                         name: c.name.clone(),
                         workspace_id: c.wid,
+                        archived: c.archived,
                     },
                 )
             })
@@ -1923,6 +1943,7 @@ impl ApiClient for V9ApiClient {
                         name: t.name.clone(),
                         project: projects.get(&t.project_id).unwrap().clone(),
                         workspace_id: t.workspace_id,
+                        active: t.active.unwrap_or(true),
                     },
                 )
             })

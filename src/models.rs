@@ -199,24 +199,25 @@ impl Project {
 
 impl std::fmt::Display for Project {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match Rgb::from_hex_str(self.color.as_str()) {
-                Ok(color) => {
-                    let red = color.get_red().round() as u8;
-                    let green = color.get_green().round() as u8;
-                    let blue = color.get_blue().round() as u8;
+        let colored_name = match Rgb::from_hex_str(self.color.as_str()) {
+            Ok(color) => {
+                let red = color.get_red().round() as u8;
+                let green = color.get_green().round() as u8;
+                let blue = color.get_blue().round() as u8;
 
-                    if HAS_TRUECOLOR_SUPPORT.to_owned() {
-                        self.name.truecolor(red, green, blue).bold()
-                    } else {
-                        self.name_in_closest_terminal_color(red, green, blue).bold()
-                    }
+                if HAS_TRUECOLOR_SUPPORT.to_owned() {
+                    self.name.truecolor(red, green, blue).bold()
+                } else {
+                    self.name_in_closest_terminal_color(red, green, blue).bold()
                 }
-                Err(_) => self.name.bold(),
             }
-        )
+            Err(_) => self.name.bold(),
+        };
+        if self.active {
+            write!(f, "{colored_name}")
+        } else {
+            write!(f, "{colored_name} (archived)")
+        }
     }
 }
 
@@ -225,11 +226,17 @@ pub struct Client {
     pub id: i64,
     pub name: String,
     pub workspace_id: i64,
+    #[serde(default)]
+    pub archived: bool,
 }
 
 impl std::fmt::Display for Client {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
+        if self.archived {
+            write!(f, "{} (archived)", self.name)
+        } else {
+            write!(f, "{}", self.name)
+        }
     }
 }
 
@@ -258,11 +265,21 @@ pub struct Task {
     pub name: String,
     pub workspace_id: i64,
     pub project: Project,
+    #[serde(default = "default_true")]
+    pub active: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl std::fmt::Display for Task {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} @{}", self.name, self.project.name)
+        if self.active {
+            write!(f, "{} @{}", self.name, self.project.name)
+        } else {
+            write!(f, "{} @{} (done)", self.name, self.project.name)
+        }
     }
 }
 

@@ -91,6 +91,7 @@ mod tests {
                     name,
                     project: project.clone(),
                     workspace_id: 1,
+                    active: true,
                 })
             });
 

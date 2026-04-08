@@ -86,11 +86,13 @@ mod tests {
                 id: 1,
                 name: "Acme".to_string(),
                 workspace_id: 1,
+                archived: false,
             },
             Client {
                 id: 2,
                 name: "Globex".to_string(),
                 workspace_id: 1,
+                archived: false,
             },
         ];
 
@@ -107,6 +109,7 @@ mod tests {
             id: 1,
             name: "Acme".to_string(),
             workspace_id: 1,
+            archived: false,
         }];
 
         let result =

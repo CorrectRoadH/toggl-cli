@@ -7,7 +7,7 @@ pub struct DeleteClientCommand;
 impl DeleteClientCommand {
     pub async fn execute(api_client: impl ApiClient, name: String) -> ResultWithDefaultError<()> {
         let workspace_id = CommandUtils::get_workspace_id(&api_client).await?;
-        let clients = api_client.get_clients(workspace_id).await?;
+        let clients = api_client.get_clients(workspace_id, None).await?;
 
         let client = CommandUtils::find_resource_by_name(clients, &name, "client", |c| &c.name)?;
 
@@ -47,11 +47,13 @@ mod tests {
                 id: 10,
                 name: "Acme".to_string(),
                 workspace_id: 1,
+                archived: false,
             },
             Client {
                 id: 20,
                 name: "Globex".to_string(),
                 workspace_id: 1,
+                archived: false,
             },
         ]
     }
@@ -65,7 +67,7 @@ mod tests {
             .returning(move || Ok(user.clone()));
         api_client
             .expect_get_clients()
-            .returning(|_| Ok(mock_clients()));
+            .returning(|_, _| Ok(mock_clients()));
         api_client
             .expect_delete_client()
             .withf(|wid, cid| *wid == 1 && *cid == 10)
@@ -84,7 +86,7 @@ mod tests {
             .returning(move || Ok(user.clone()));
         api_client
             .expect_get_clients()
-            .returning(|_| Ok(mock_clients()));
+            .returning(|_, _| Ok(mock_clients()));
 
         let result = DeleteClientCommand::execute(api_client, "NonExistent".to_string()).await;
         assert_err!(result);
@@ -99,7 +101,7 @@ mod tests {
             .returning(move || Ok(user.clone()));
         api_client
             .expect_get_clients()
-            .returning(|_| Ok(mock_clients()));
+            .returning(|_, _| Ok(mock_clients()));
         api_client
             .expect_delete_client()
             .returning(|_, _| Err(Box::new(ApiError::Network)));

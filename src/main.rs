@@ -378,14 +378,25 @@ async fn execute_project_command(
     api_client: impl ApiClient,
 ) -> ResultWithDefaultError<()> {
     match action {
-        ProjectAction::List { json } => {
+        ProjectAction::List { json, status } => {
+            let status_filter = match status {
+                Some(s) => arguments::StatusFilter::from_str_for_project(&s).map_err(
+                    |e| -> Box<dyn std::error::Error + Send> {
+                        Box::<dyn std::error::Error + Send + Sync>::from(e)
+                    },
+                )?,
+                None => arguments::StatusFilter::Active,
+            };
             ListCommand::execute(
                 api_client,
                 None,
                 json,
                 None,
                 None,
-                Some(arguments::Entity::Project { json }),
+                Some(arguments::Entity::Project {
+                    json,
+                    status: status_filter,
+                }),
             )
             .await
         }
@@ -428,14 +439,25 @@ async fn execute_client_command(
     api_client: impl ApiClient,
 ) -> ResultWithDefaultError<()> {
     match action {
-        ClientAction::List { json } => {
+        ClientAction::List { json, status } => {
+            let status_filter = match status {
+                Some(s) => arguments::StatusFilter::from_str_for_client(&s).map_err(
+                    |e| -> Box<dyn std::error::Error + Send> {
+                        Box::<dyn std::error::Error + Send + Sync>::from(e)
+                    },
+                )?,
+                None => arguments::StatusFilter::Active,
+            };
             ListCommand::execute(
                 api_client,
                 None,
                 json,
                 None,
                 None,
-                Some(arguments::Entity::Client { json }),
+                Some(arguments::Entity::Client {
+                    json,
+                    status: status_filter,
+                }),
             )
             .await
         }
@@ -452,14 +474,25 @@ async fn execute_task_command(
     api_client: impl ApiClient,
 ) -> ResultWithDefaultError<()> {
     match action {
-        TaskAction::List { json } => {
+        TaskAction::List { json, status } => {
+            let status_filter = match status {
+                Some(s) => arguments::StatusFilter::from_str_for_task(&s).map_err(
+                    |e| -> Box<dyn std::error::Error + Send> {
+                        Box::<dyn std::error::Error + Send + Sync>::from(e)
+                    },
+                )?,
+                None => arguments::StatusFilter::Active,
+            };
             ListCommand::execute(
                 api_client,
                 None,
                 json,
                 None,
                 None,
-                Some(arguments::Entity::Task { json }),
+                Some(arguments::Entity::Task {
+                    json,
+                    status: status_filter,
+                }),
             )
             .await
         }

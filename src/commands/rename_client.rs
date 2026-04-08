@@ -11,7 +11,7 @@ impl RenameClientCommand {
         new_name: String,
     ) -> ResultWithDefaultError<()> {
         let workspace_id = api_client.get_user().await?.default_workspace_id;
-        let clients = api_client.get_clients(workspace_id).await?;
+        let clients = api_client.get_clients(workspace_id, None).await?;
 
         let client = clients
             .into_iter()
@@ -60,6 +60,7 @@ mod tests {
             id: 10,
             name: "OldName".to_string(),
             workspace_id: 1,
+            archived: false,
         }]
     }
 
@@ -72,7 +73,7 @@ mod tests {
             .returning(move || Ok(user.clone()));
         api_client
             .expect_get_clients()
-            .returning(|_| Ok(mock_clients()));
+            .returning(|_, _| Ok(mock_clients()));
         api_client
             .expect_rename_client()
             .withf(|wid, cid, name| *wid == 1 && *cid == 10 && name == "NewName")
@@ -81,6 +82,7 @@ mod tests {
                     id: 10,
                     name,
                     workspace_id: wid,
+                    archived: false,
                 })
             });
 
@@ -99,7 +101,7 @@ mod tests {
             .returning(move || Ok(user.clone()));
         api_client
             .expect_get_clients()
-            .returning(|_| Ok(mock_clients()));
+            .returning(|_, _| Ok(mock_clients()));
 
         let result = RenameClientCommand::execute(
             api_client,
@@ -119,7 +121,7 @@ mod tests {
             .returning(move || Ok(user.clone()));
         api_client
             .expect_get_clients()
-            .returning(|_| Ok(mock_clients()));
+            .returning(|_, _| Ok(mock_clients()));
         api_client
             .expect_rename_client()
             .returning(|_, _, _| Err(Box::new(ApiError::Network)));

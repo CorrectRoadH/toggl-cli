@@ -52,6 +52,7 @@ mod tests {
                     id: 100,
                     name,
                     workspace_id: wid,
+                    archived: false,
                 })
             });
 

@@ -91,6 +91,8 @@ pub struct NetworkClient {
     pub id: i64,
     pub name: String,
     pub wid: i64,
+    #[serde(default)]
+    pub archived: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

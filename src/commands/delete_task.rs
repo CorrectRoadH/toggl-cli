@@ -61,6 +61,7 @@ mod tests {
             name: "Review".to_string(),
             project: mock_project(),
             workspace_id: 1,
+            active: true,
         }
     }
 
