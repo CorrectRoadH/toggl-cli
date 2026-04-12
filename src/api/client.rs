@@ -578,14 +578,13 @@ impl V9ApiClient {
             return None;
         }
 
+        let now = chrono::Utc::now().timestamp();
+
         // Skip cache for time entry requests if there was a recent mutation
         if url.contains("/me/time_entries") {
             if let Ok(last_mutation) = self.last_time_entry_mutation.lock() {
                 if let Some(last_mutation_time) = *last_mutation {
-                    let now = chrono::Utc::now().timestamp();
-                    // Skip cache for 10 seconds after a time entry mutation
-                    // Only for time entry related endpoints, not all /me endpoints
-                    if now - last_mutation_time < 10 {
+                    if now - last_mutation_time < MUTATION_BYPASS_WINDOW_SECONDS {
                         return None;
                     }
                 }
@@ -594,11 +593,26 @@ impl V9ApiClient {
 
         // Skip cache for related endpoints if there was a recent mutation affecting them
         if let Ok(related_mutations) = self.last_related_mutation.lock() {
-            let now = chrono::Utc::now().timestamp();
             for (endpoint_pattern, last_mutation_time) in related_mutations.iter() {
-                if url.contains(endpoint_pattern) && now - last_mutation_time < 10 {
+                if url.contains(endpoint_pattern)
+                    && now - last_mutation_time < MUTATION_BYPASS_WINDOW_SECONDS
+                {
                     return None;
                 }
+            }
+        }
+
+        // Cross-process bypass: a *previous* CLI invocation may have just mutated one of
+        // these endpoints. Its in-memory state is gone, but it left a breadcrumb in
+        // `last_mutations.json`. Consulting it lets poll loops (`wait_for_entry_on_day`
+        // etc. in live tests) actually see fresh server state after the mutation
+        // completes and Toggl's own eventual-consistency window settles.
+        let journal = self.load_recent_mutation_journal(now);
+        for (endpoint_pattern, last_mutation_time) in journal.iter() {
+            if url.contains(endpoint_pattern)
+                && now - last_mutation_time < MUTATION_BYPASS_WINDOW_SECONDS
+            {
+                return None;
             }
         }
 
@@ -689,23 +703,77 @@ impl V9ApiClient {
     fn invalidate_caches_for_mutation(&self, mutation_url: &str) {
         let invalidation = cache_invalidation_for_mutation(&self.base_url, mutation_url);
         self.invalidate_cached_urls(&invalidation.exact_urls);
+        let now = chrono::Utc::now().timestamp();
+        let mut journal_patterns: Vec<String> = Vec::new();
+
         if invalidation.invalidate_time_entries {
             self.invalidate_cached_urls_matching(|url| url.contains("/me/time_entries"));
-            // Record the time of this time entry mutation
+            // Record the time of this time entry mutation (in-memory, same process)
             if let Ok(mut last_mutation) = self.last_time_entry_mutation.lock() {
-                *last_mutation = Some(chrono::Utc::now().timestamp());
+                *last_mutation = Some(now);
             }
+            // And persist it so subsequent CLI processes also bypass the cache.
+            journal_patterns.push("/me/time_entries".to_string());
         }
 
         // Record mutations for related endpoints that should bypass cache temporarily
         if !invalidation.bypass_related_endpoints.is_empty() {
             if let Ok(mut related_mutations) = self.last_related_mutation.lock() {
-                let now = chrono::Utc::now().timestamp();
                 for endpoint in &invalidation.bypass_related_endpoints {
                     related_mutations.insert(endpoint.clone(), now);
                 }
             }
+            journal_patterns.extend(invalidation.bypass_related_endpoints.iter().cloned());
         }
+
+        if !journal_patterns.is_empty() {
+            self.record_mutation_journal(&journal_patterns, now);
+        }
+    }
+
+    /// Persist the patterns just mutated to `last_mutations.json` inside the cache namespace
+    /// directory, so that a fresh CLI process (with empty in-memory state) still knows to
+    /// bypass disk cache for those endpoints during the bypass window.
+    ///
+    /// Read-modify-write is intentionally best-effort and not locked: timestamps for the
+    /// same pattern are monotonically useful (newer wins), and a lost write only costs
+    /// us a redundant network fetch.
+    fn record_mutation_journal(&self, patterns: &[String], now: i64) {
+        let Some(path) = self.mutation_journal_path() else {
+            return;
+        };
+        let Some(dir) = path.parent() else {
+            return;
+        };
+        if fs::create_dir_all(dir).is_err() {
+            return;
+        }
+
+        let mut journal = read_mutation_journal_from(&path).unwrap_or_default();
+        // Compact: drop entries that are outside the bypass window and thus no longer load-bearing.
+        journal.retain(|_, ts| now - *ts < MUTATION_BYPASS_WINDOW_SECONDS);
+        for pattern in patterns {
+            journal.insert(pattern.clone(), now);
+        }
+
+        if let Ok(serialized) = serde_json::to_string(&journal) {
+            let _ = fs::write(&path, serialized);
+        }
+    }
+
+    fn mutation_journal_path(&self) -> Option<PathBuf> {
+        cache_root_dir().map(|root| root.join(&self.cache_namespace).join("last_mutations.json"))
+    }
+
+    /// Load the persisted mutation journal and return only entries still within the
+    /// bypass window. Older entries are ignored (and will be compacted out on the next write).
+    fn load_recent_mutation_journal(&self, now: i64) -> HashMap<String, i64> {
+        let Some(path) = self.mutation_journal_path() else {
+            return HashMap::new();
+        };
+        let mut journal = read_mutation_journal_from(&path).unwrap_or_default();
+        journal.retain(|_, ts| now - *ts < MUTATION_BYPASS_WINDOW_SECONDS);
+        journal
     }
 
     async fn put<T: de::DeserializeOwned, Body: Serialize>(
@@ -900,6 +968,16 @@ fn deserialize_optional_response_body<T: de::DeserializeOwned>(
         })
 }
 
+/// How long after a mutation to force-bypass the HTTP cache for endpoints affected by it.
+/// This absorbs Toggl's eventual-consistency window where a just-written resource doesn't
+/// appear in the next list-GET immediately.
+const MUTATION_BYPASS_WINDOW_SECONDS: i64 = 10;
+
+fn read_mutation_journal_from(path: &std::path::Path) -> Option<HashMap<String, i64>> {
+    let contents = fs::read_to_string(path).ok()?;
+    serde_json::from_str::<HashMap<String, i64>>(&contents).ok()
+}
+
 fn cache_root_dir() -> Option<PathBuf> {
     directories::ProjectDirs::from("com.github", "CorrectRoadH", "toggl-cli")
         .map(|dirs| dirs.cache_dir().join("http"))
@@ -922,63 +1000,27 @@ fn is_http_cache_disabled() -> bool {
     )
 }
 
-fn cache_ttl_seconds() -> i64 {
-    std::env::var("TOGGL_HTTP_CACHE_TTL_SECONDS")
-        .ok()
-        .and_then(|value| value.parse::<i64>().ok())
-        .filter(|value| *value >= 0)
-        .unwrap_or(30)
-}
-
+/// Per-endpoint cache TTL in seconds. Values are hardcoded on purpose: they were tuned
+/// to how often each resource actually changes on Toggl, and exposing them as env vars
+/// just invited tuning that no real user has asked for. The single remaining escape
+/// hatch is `TOGGL_DISABLE_HTTP_CACHE=1` for disabling caching entirely.
 fn cache_ttl_seconds_for_url(url: &str) -> i64 {
-    // Check for specific TTL environment variables first
     if url.contains("/me/preferences") || url.contains("/me") && url.ends_with("/me") {
-        // User profile data changes rarely
-        return std::env::var("TOGGL_HTTP_CACHE_TTL_USER_PROFILE_SECONDS")
-            .ok()
-            .and_then(|value| value.parse::<i64>().ok())
-            .filter(|value| *value >= 0)
-            .unwrap_or(300); // 5 minutes default
+        return 300; // user profile: 5 minutes
     }
-
     if url.contains("/organizations/") && !url.contains("/workspaces") {
-        // Organization data changes rarely
-        return std::env::var("TOGGL_HTTP_CACHE_TTL_ORGANIZATIONS_SECONDS")
-            .ok()
-            .and_then(|value| value.parse::<i64>().ok())
-            .filter(|value| *value >= 0)
-            .unwrap_or(180); // 3 minutes default
+        return 180; // organizations: 3 minutes
     }
-
     if url.contains("/me/workspaces") || url.contains("/workspaces/") && url.contains("/tags") {
-        // Workspace and tags data changes less frequently
-        return std::env::var("TOGGL_HTTP_CACHE_TTL_WORKSPACES_SECONDS")
-            .ok()
-            .and_then(|value| value.parse::<i64>().ok())
-            .filter(|value| *value >= 0)
-            .unwrap_or(120); // 2 minutes default
+        return 120; // workspaces + tags: 2 minutes
     }
-
     if url.contains("/me/projects") || url.contains("/me/clients") || url.contains("/me/tasks") {
-        // Project-related data changes moderately
-        return std::env::var("TOGGL_HTTP_CACHE_TTL_PROJECTS_SECONDS")
-            .ok()
-            .and_then(|value| value.parse::<i64>().ok())
-            .filter(|value| *value >= 0)
-            .unwrap_or(60); // 1 minute default
+        return 60; // projects/clients/tasks: 1 minute
     }
-
     if url.contains("/time_entries") {
-        // Time entries change frequently
-        return std::env::var("TOGGL_HTTP_CACHE_TTL_TIME_ENTRIES_SECONDS")
-            .ok()
-            .and_then(|value| value.parse::<i64>().ok())
-            .filter(|value| *value >= 0)
-            .unwrap_or(15); // 15 seconds default
+        return 15; // time entries change frequently
     }
-
-    // Default TTL for other endpoints
-    cache_ttl_seconds()
+    30 // default
 }
 
 fn is_cacheable_get_url(url: &str) -> bool {
@@ -2043,5 +2085,58 @@ mod tests {
             error,
             ApiError::HttpErrorWithMessage("HTTP 402 payment required".to_string())
         );
+    }
+
+    fn unique_scratch_dir(label: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let path = std::env::temp_dir().join(format!(
+            "toggl-cli-test-{label}-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).expect("create scratch dir");
+        path
+    }
+
+    #[test]
+    fn mutation_journal_round_trips_through_disk() {
+        let dir = unique_scratch_dir("journal-roundtrip");
+        let path = dir.join("last_mutations.json");
+        let mut journal: HashMap<String, i64> = HashMap::new();
+        journal.insert("/me/time_entries".to_string(), 1_700_000_000);
+        journal.insert("/me/projects".to_string(), 1_700_000_005);
+        fs::write(&path, serde_json::to_string(&journal).unwrap()).unwrap();
+
+        let loaded = read_mutation_journal_from(&path).expect("journal parses");
+        assert_eq!(loaded.get("/me/time_entries").copied(), Some(1_700_000_000));
+        assert_eq!(loaded.get("/me/projects").copied(), Some(1_700_000_005));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mutation_journal_returns_none_for_missing_file() {
+        let dir = unique_scratch_dir("journal-missing");
+        let path = dir.join("does_not_exist.json");
+        assert!(read_mutation_journal_from(&path).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mutation_journal_returns_none_for_corrupt_file() {
+        let dir = unique_scratch_dir("journal-corrupt");
+        let path = dir.join("last_mutations.json");
+        fs::write(&path, "not json").unwrap();
+        assert!(read_mutation_journal_from(&path).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bypass_window_is_ten_seconds() {
+        // Pin the constant so changing it becomes a conscious decision — the live
+        // test polling loop (wait_for_entry_on_day) waits 5s total, so the window
+        // must be strictly greater than that to cover Toggl's eventual-consistency window.
+        assert_eq!(MUTATION_BYPASS_WINDOW_SECONDS, 10);
     }
 }

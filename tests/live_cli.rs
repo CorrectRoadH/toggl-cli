@@ -258,6 +258,24 @@ fn find_item_by_name<'a>(items: &'a [Value], name: &str) -> Option<&'a Value> {
         .find(|item| item["name"].as_str() == Some(name))
 }
 
+/// Poll `list_args` until an item with `name` appears, or panic with `message`.
+///
+/// Exists because the self-hosted OpenToggl instance used in CI has a measurable
+/// write-then-list propagation delay. Without this wait, a `project create` / `tag
+/// create` followed immediately by a command that resolves names to IDs (e.g.
+/// `entry start -p NAME`) sees an empty list and fails with "No project found.
+/// Available projects:" even though the create actually succeeded.
+fn wait_for_named_resource(message: &str, list_args: &[&str], name: &str) {
+    for _ in 0..30 {
+        let items = run_json_array_command(list_args);
+        if find_item_by_name(&items, name).is_some() {
+            return;
+        }
+        sleep(std::time::Duration::from_millis(500));
+    }
+    panic!("{message}");
+}
+
 fn parse_workspaces(output: &str) -> Vec<WorkspaceRecord> {
     serde_json::from_str(output).expect("failed to parse workspace list JSON")
 }
@@ -340,7 +358,10 @@ fn wait_for_entry_on_day<F>(message: &str, day: &str, mut predicate: F) -> Optio
 where
     F: FnMut(&TimeEntryRecord) -> bool,
 {
-    for _ in 0..10 {
+    // Up to 30 * 500ms = 15s. The self-hosted OpenToggl instance used in CI has a
+    // write -> list propagation delay that occasionally exceeds 5s, so we allow more
+    // headroom than the other wait loops.
+    for _ in 0..30 {
         let entries = list_entries_on_day(day);
         if let Some(entry) = entries.into_iter().find(|entry| predicate(entry)) {
             return Some(entry);
@@ -699,8 +720,11 @@ fn live_cli_workspace_resource_crud_succeeds() {
     run_checked(&["project", "create", &project_name]);
     cleanup.project_name = Some(project_name.clone());
 
-    let projects_after_create = run_json_array_command(&["project", "list", "--json"]);
-    assert!(find_item_by_name(&projects_after_create, &project_name).is_some());
+    wait_for_named_resource(
+        "created project missing from project list",
+        &["project", "list", "--json"],
+        &project_name,
+    );
 
     run_checked(&["project", "rename", &project_name, &renamed_project_name]);
     cleanup.project_name = Some(renamed_project_name.clone());
@@ -1316,8 +1340,20 @@ fn live_cli_entry_search_filters_by_description_project_and_tag() {
     let tag_name = unique_description("search-tag");
     run_checked(&["project", "create", &project_name]);
     cleanup.project_name = Some(project_name.clone());
+    // OpenToggl's /me/projects can lag behind project creation; wait for the
+    // resource to be resolvable before any subsequent `entry start -p NAME`.
+    wait_for_named_resource(
+        "fixture project missing from project list",
+        &["project", "list", "--json"],
+        &project_name,
+    );
     run_checked(&["tag", "create", &tag_name]);
     cleanup.tag_name = Some(tag_name.clone());
+    wait_for_named_resource(
+        "fixture tag missing from tag list",
+        &["tag", "list", "--json"],
+        &tag_name,
+    );
 
     // Shared token so a single description query surfaces all four entries.
     let token = unique_description("search-token");

@@ -86,7 +86,7 @@ Reports (--since/--until are optional, default to this_week/today):
 - For `entry list`, a date-only `--since YYYY-MM-DD` means local `00:00:00` at the start of that day.
 - For `entry list`, a date-only `--until YYYY-MM-DD` includes the whole local day by using the next day's `00:00:00` as the exclusive upper bound.
 - Empty results: human mode prints "No entries found." to stderr; JSON mode returns `[]`.
-- **Performance**: Read-only API responses are cached for 30 seconds by default. Cache can be disabled with `TOGGL_HTTP_CACHE_DISABLED=1` or TTL customized with `TOGGL_HTTP_CACHE_TTL_SECONDS`.
+- **Performance**: Read-only API responses are cached on disk (per-endpoint TTL, e.g. 15s for time entries, 60s for projects). Cache can be disabled with `TOGGL_DISABLE_HTTP_CACHE=1`.
 
 ## Minimal Examples
 
