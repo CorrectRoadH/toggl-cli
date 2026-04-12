@@ -1285,3 +1285,510 @@ fn live_cli_mutation_json_flags_work() {
         "expected running: false from stop when nothing running"
     );
 }
+
+// =================================================================
+// `toggl entry search` — live integration tests
+//
+// Contract under test:
+//   - `entry search [QUERY]` hits Reports API v3 /search/time_entries,
+//     filters server-side by description / project_ids / tag_ids.
+//   - `--no-project` / `--no-tag` pass [null] to filter "missing" values.
+//   - `-p NAME|ID` and `-t NAME` resolve names in the default workspace.
+//   - `-p` vs `--no-project` and `-t` vs `--no-tag` are clap-mutex.
+//   - Bad dates and missing project/tag names short-circuit before any API.
+//
+// Fixture strategy: create one project + one tag + 4 entries on TEST_DAY
+// with every (project, tag) combination. Descriptions share a unique token
+// so a single `search <token>` can surface all four; each entry's full
+// description is unique so we can distinguish which rows came back.
+// =================================================================
+
+/// Collect all `description` string values anywhere in the Reports v3
+/// response JSON. Reports responses can be flat arrays, nested
+/// `{ time_entries: [...] }` groups, or wrapped in `{ report: [...] }`.
+/// We walk the whole tree to avoid coupling to one shape.
+fn collect_descriptions(value: &Value, out: &mut Vec<String>) {
+    match value {
+        Value::Object(map) => {
+            if let Some(Value::String(s)) = map.get("description") {
+                out.push(s.clone());
+            }
+            for (_, v) in map {
+                collect_descriptions(v, out);
+            }
+        }
+        Value::Array(arr) => {
+            for v in arr {
+                collect_descriptions(v, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn search_descriptions(args: &[&str]) -> Vec<String> {
+    let parsed: Value = parse_json_output(args);
+    let mut out = Vec::new();
+    collect_descriptions(&parsed, &mut out);
+    out
+}
+
+/// Poll `entry search --json <args>` until the predicate holds.
+/// Reports API v3 is eventually consistent after entry creation.
+fn wait_for_search<F>(message: &str, args: &[&str], predicate: F) -> Vec<String>
+where
+    F: Fn(&[String]) -> bool,
+{
+    for _ in 0..20 {
+        let descs = search_descriptions(args);
+        if predicate(&descs) {
+            return descs;
+        }
+        sleep(std::time::Duration::from_millis(500));
+    }
+    panic!("{message}");
+}
+
+fn create_historical_entry(
+    cleanup: &mut CleanupState,
+    description: &str,
+    start: &str,
+    end: &str,
+    project: Option<&str>,
+    tag: Option<&str>,
+) -> i64 {
+    let mut args: Vec<String> = vec![
+        "entry".into(),
+        "start".into(),
+        "-d".into(),
+        description.into(),
+        "--start".into(),
+        start.into(),
+        "--end".into(),
+        end.into(),
+        "--json".into(),
+    ];
+    if let Some(p) = project {
+        args.push("-p".into());
+        args.push(p.into());
+    }
+    if let Some(t) = tag {
+        args.push("-t".into());
+        args.push(t.into());
+    }
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let started: Value = parse_json_output(&arg_refs);
+    let id = started["id"]
+        .as_i64()
+        .expect("expected entry start --json to return numeric id");
+    cleanup.extra_time_entry_ids.push(id);
+    id
+}
+
+#[test]
+fn live_cli_entry_search_filters_by_description_project_and_tag() {
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
+    if should_skip_live_tests() {
+        return;
+    }
+    ensure_test_workspace_scope();
+
+    let mut cleanup = CleanupState::default();
+
+    // Fixture resources: unique project and tag so we don't collide with
+    // anything else in the workspace.
+    let project_name = unique_description("search-proj");
+    let tag_name = unique_description("search-tag");
+    run_checked(&["project", "create", &project_name]);
+    cleanup.project_name = Some(project_name.clone());
+    run_checked(&["tag", "create", &tag_name]);
+    cleanup.tag_name = Some(tag_name.clone());
+
+    // Shared token so a single description query surfaces all four entries.
+    let token = unique_description("search-token");
+    let desc_both = format!("{token}-both");
+    let desc_plain = format!("{token}-plain");
+    let desc_project_only = format!("{token}-projonly");
+    let desc_tag_only = format!("{token}-tagonly");
+
+    // Four entries on TEST_DAY, each with a distinct (project?, tag?) combo.
+    // 5-minute slots so they don't overlap.
+    let base = TEST_DAY; // "2026-03-05"
+    let slots = [
+        ("09:00:00Z", "09:05:00Z"),
+        ("09:10:00Z", "09:15:00Z"),
+        ("09:20:00Z", "09:25:00Z"),
+        ("09:30:00Z", "09:35:00Z"),
+    ];
+    let mk = |idx: usize| {
+        (
+            format!("{base}T{}", slots[idx].0),
+            format!("{base}T{}", slots[idx].1),
+        )
+    };
+    let (s0, e0) = mk(0);
+    let (s1, e1) = mk(1);
+    let (s2, e2) = mk(2);
+    let (s3, e3) = mk(3);
+
+    create_historical_entry(
+        &mut cleanup,
+        &desc_both,
+        &s0,
+        &e0,
+        Some(&project_name),
+        Some(&tag_name),
+    );
+    create_historical_entry(&mut cleanup, &desc_plain, &s1, &e1, None, None);
+    create_historical_entry(
+        &mut cleanup,
+        &desc_project_only,
+        &s2,
+        &e2,
+        Some(&project_name),
+        None,
+    );
+    create_historical_entry(
+        &mut cleanup,
+        &desc_tag_only,
+        &s3,
+        &e3,
+        None,
+        Some(&tag_name),
+    );
+
+    // Wait for all four to surface via search (eventual consistency).
+    let search_all_args = &[
+        "entry", "search", &token, "--since", TEST_DAY, "--until", TEST_DAY, "--json",
+    ];
+    let descs_all = wait_for_search(
+        "expected all 4 fixture entries to be searchable by shared token",
+        search_all_args,
+        |descs| {
+            [&desc_both, &desc_plain, &desc_project_only, &desc_tag_only]
+                .iter()
+                .all(|d| descs.iter().any(|got| got.contains(d.as_str())))
+        },
+    );
+    // Sanity: the token query should not leak unrelated noise in the fixture window.
+    assert!(
+        descs_all.iter().any(|d| d.contains(&desc_both)),
+        "baseline search missing expected description {desc_both}"
+    );
+
+    // Helper: assert which fixture descriptions are present / absent.
+    let assert_set = |ctx: &str, got: &[String], expected: &[&str], forbidden: &[&str]| {
+        for d in expected {
+            assert!(
+                got.iter().any(|g| g.contains(d)),
+                "[{ctx}] expected description containing {d:?} in results, got:\n{got:#?}"
+            );
+        }
+        for d in forbidden {
+            assert!(
+                !got.iter().any(|g| g.contains(d)),
+                "[{ctx}] unexpected description containing {d:?} in results, got:\n{got:#?}"
+            );
+        }
+    };
+
+    // 1. `-p NAME` → entries in that project only (E1, E3).
+    let got = search_descriptions(&[
+        "entry",
+        "search",
+        &token,
+        "-p",
+        &project_name,
+        "--since",
+        TEST_DAY,
+        "--until",
+        TEST_DAY,
+        "--json",
+    ]);
+    assert_set(
+        "-p NAME",
+        &got,
+        &[&desc_both, &desc_project_only],
+        &[&desc_plain, &desc_tag_only],
+    );
+
+    // 2. `--no-project` → entries without a project (E2, E4).
+    let got = search_descriptions(&[
+        "entry",
+        "search",
+        &token,
+        "--no-project",
+        "--since",
+        TEST_DAY,
+        "--until",
+        TEST_DAY,
+        "--json",
+    ]);
+    assert_set(
+        "--no-project",
+        &got,
+        &[&desc_plain, &desc_tag_only],
+        &[&desc_both, &desc_project_only],
+    );
+
+    // 3. `-t NAME` → entries with that tag (E1, E4).
+    let got = search_descriptions(&[
+        "entry", "search", &token, "-t", &tag_name, "--since", TEST_DAY, "--until", TEST_DAY,
+        "--json",
+    ]);
+    assert_set(
+        "-t NAME",
+        &got,
+        &[&desc_both, &desc_tag_only],
+        &[&desc_plain, &desc_project_only],
+    );
+
+    // 4. `--no-tag` → entries without any tag (E2, E3).
+    let got = search_descriptions(&[
+        "entry", "search", &token, "--no-tag", "--since", TEST_DAY, "--until", TEST_DAY, "--json",
+    ]);
+    assert_set(
+        "--no-tag",
+        &got,
+        &[&desc_plain, &desc_project_only],
+        &[&desc_both, &desc_tag_only],
+    );
+
+    // 5. `-p NAME -t NAME` → only E1 (has both).
+    let got = search_descriptions(&[
+        "entry",
+        "search",
+        &token,
+        "-p",
+        &project_name,
+        "-t",
+        &tag_name,
+        "--since",
+        TEST_DAY,
+        "--until",
+        TEST_DAY,
+        "--json",
+    ]);
+    assert_set(
+        "-p NAME -t NAME",
+        &got,
+        &[&desc_both],
+        &[&desc_plain, &desc_project_only, &desc_tag_only],
+    );
+
+    // 6. `-p NAME --no-tag` → only E3 (project, but no tag).
+    let got = search_descriptions(&[
+        "entry",
+        "search",
+        &token,
+        "-p",
+        &project_name,
+        "--no-tag",
+        "--since",
+        TEST_DAY,
+        "--until",
+        TEST_DAY,
+        "--json",
+    ]);
+    assert_set(
+        "-p NAME --no-tag",
+        &got,
+        &[&desc_project_only],
+        &[&desc_both, &desc_plain, &desc_tag_only],
+    );
+
+    // 7. `--no-project -t NAME` → only E4 (tag, but no project).
+    let got = search_descriptions(&[
+        "entry",
+        "search",
+        &token,
+        "--no-project",
+        "-t",
+        &tag_name,
+        "--since",
+        TEST_DAY,
+        "--until",
+        TEST_DAY,
+        "--json",
+    ]);
+    assert_set(
+        "--no-project -t NAME",
+        &got,
+        &[&desc_tag_only],
+        &[&desc_both, &desc_plain, &desc_project_only],
+    );
+
+    // 8. Project-by-numeric-ID resolves the same as project-by-name.
+    let projects = run_json_array_command(&["project", "list", "--json"]);
+    let project_id = find_item_by_name(&projects, &project_name)
+        .and_then(|p| p["id"].as_i64())
+        .expect("fixture project missing from project list");
+    let got = search_descriptions(&[
+        "entry",
+        "search",
+        &token,
+        "-p",
+        &project_id.to_string(),
+        "--since",
+        TEST_DAY,
+        "--until",
+        TEST_DAY,
+        "--json",
+    ]);
+    assert_set(
+        "-p <numeric id>",
+        &got,
+        &[&desc_both, &desc_project_only],
+        &[&desc_plain, &desc_tag_only],
+    );
+
+    // 9. Human-readable output surfaces the results too (not just JSON).
+    let human = run_checked(&[
+        "entry",
+        "search",
+        &token,
+        "-p",
+        &project_name,
+        "--since",
+        TEST_DAY,
+        "--until",
+        TEST_DAY,
+    ]);
+    assert!(
+        human.contains("Search results"),
+        "expected search header in human output, got:\n{human}"
+    );
+    assert!(
+        human.contains(&desc_both) && human.contains(&desc_project_only),
+        "expected human output to list project entries, got:\n{human}"
+    );
+    assert!(
+        !human.contains(&desc_plain) && !human.contains(&desc_tag_only),
+        "human output leaked filtered-out entries:\n{human}"
+    );
+    assert!(
+        human.contains("Total"),
+        "expected Total line in human search output, got:\n{human}"
+    );
+
+    // 10. Empty-result search renders the "No entries found." footer without crashing.
+    let empty = run_checked(&[
+        "entry",
+        "search",
+        "toggl-cli-search-no-such-description-xyz-8f7a",
+        "--since",
+        TEST_DAY,
+        "--until",
+        TEST_DAY,
+    ]);
+    assert!(
+        empty.contains("No entries found."),
+        "expected empty-result footer, got:\n{empty}"
+    );
+}
+
+#[test]
+fn live_cli_entry_search_argument_validation() {
+    // This test does not touch real data — it only exercises clap-level
+    // argument validation and the pre-API short-circuits. Still gated
+    // behind live env so it doesn't run with fake creds (project/tag
+    // lookup failures would hang or timeout).
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
+    if should_skip_live_tests() {
+        return;
+    }
+    ensure_test_workspace_scope();
+
+    // -p and --no-project are mutually exclusive (clap exit 2).
+    let out = try_run_toggl(&["entry", "search", "-p", "anything", "--no-project"])
+        .expect("failed to execute toggl");
+    assert!(
+        !out.status.success(),
+        "expected -p and --no-project to conflict"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("--no-project") && stderr.contains("--project"),
+        "expected clap mutex error mentioning both flags, got:\n{stderr}"
+    );
+
+    // -t and --no-tag are mutually exclusive.
+    let out = try_run_toggl(&["entry", "search", "-t", "anything", "--no-tag"])
+        .expect("failed to execute toggl");
+    assert!(
+        !out.status.success(),
+        "expected -t and --no-tag to conflict"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("--no-tag") && stderr.contains("--tags"),
+        "expected clap mutex error mentioning both flags, got:\n{stderr}"
+    );
+
+    // Bad --since value fails fast with a clear error.
+    let out = try_run_toggl(&["entry", "search", "--since", "not-a-date"])
+        .expect("failed to execute toggl");
+    assert!(
+        !out.status.success(),
+        "expected bad --since to fail, got success"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.to_lowercase().contains("invalid") || stderr.to_lowercase().contains("date"),
+        "expected bad-date error, got:\n{stderr}"
+    );
+
+    // Inverted date range (--since > --until) fails with a readable message.
+    let out = try_run_toggl(&[
+        "entry",
+        "search",
+        "--since",
+        "2025-06-30",
+        "--until",
+        "2025-01-01",
+    ])
+    .expect("failed to execute toggl");
+    assert!(
+        !out.status.success(),
+        "expected inverted date range to fail"
+    );
+
+    // Unknown project name short-circuits before hitting the reports API
+    // and prints a helpful "No project found" message.
+    let out = try_run_toggl(&[
+        "entry",
+        "search",
+        "-p",
+        "toggl-cli-search-no-such-project-xyz-8f7a",
+    ])
+    .expect("failed to execute toggl");
+    assert!(
+        !out.status.success(),
+        "expected search with unknown project to fail"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("No project found"),
+        "expected 'No project found' error, got:\n{stderr}"
+    );
+
+    // Unknown tag name short-circuits too.
+    let out = try_run_toggl(&[
+        "entry",
+        "search",
+        "-t",
+        "toggl-cli-search-no-such-tag-xyz-8f7a",
+    ])
+    .expect("failed to execute toggl");
+    assert!(
+        !out.status.success(),
+        "expected search with unknown tag to fail"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("No tag found"),
+        "expected 'No tag found' error, got:\n{stderr}"
+    );
+}

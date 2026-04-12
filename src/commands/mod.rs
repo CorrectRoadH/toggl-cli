@@ -24,6 +24,7 @@ pub mod rename_tag;
 pub mod rename_workspace;
 pub mod report;
 pub mod running;
+pub mod search;
 pub mod show;
 pub mod start;
 pub mod stop;

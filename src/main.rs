@@ -365,6 +365,25 @@ async fn execute_entry_command(
                 DeleteCommand::execute(api_client, id.unwrap(), json).await
             }
         }
+        EntryAction::Search {
+            query,
+            project,
+            no_project,
+            tags,
+            no_tag,
+            since,
+            until,
+            number,
+            order_by,
+            order_dir,
+            json,
+        } => {
+            commands::search::execute(
+                api_client, query, project, no_project, tags, no_tag, since, until, number,
+                order_by, order_dir, json,
+            )
+            .await
+        }
         EntryAction::BulkEdit { ids, json } => {
             // json is guaranteed Some due to validation above
             BulkEditTimeEntriesCommand::execute(api_client, ids.clone(), json.clone().unwrap())

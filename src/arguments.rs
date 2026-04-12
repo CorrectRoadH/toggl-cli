@@ -302,6 +302,69 @@ Examples:
         #[arg(short, long, help = "Output in JSON format")]
         json: bool,
     },
+    /// Search past time entries by description, project, or tag.
+    #[command(after_long_help = "\
+Examples:
+  toggl entry search \"login bug\"                Search descriptions containing \"login bug\"
+  toggl entry search --no-project                 Find entries without a project
+  toggl entry search --no-tag --since last_week   Find untagged entries from last week
+  toggl entry search \"meeting\" -p \"Work\"      Search \"meeting\" within project Work
+  toggl entry search -t urgent -t dev             Filter by tags urgent OR dev
+  toggl entry search --since 2025-01-01 -n 100    Wider time range, 100 results per page
+
+Notes:
+  - Uses Toggl Reports API v3 (server-side search); no local DB required.
+  - Default date range is the last 365 days.
+  - --no-project / --no-tag are mutually exclusive with -p / -t.")]
+    Search {
+        #[arg(help = "Text to search for in time entry descriptions")]
+        query: Option<String>,
+        #[arg(
+            short,
+            long,
+            conflicts_with = "no_project",
+            help = "Filter by project name or numeric ID"
+        )]
+        project: Option<String>,
+        #[arg(
+            long = "no-project",
+            help = "Only return entries without a project (mutex with -p)"
+        )]
+        no_project: bool,
+        #[arg(
+            short,
+            long,
+            conflicts_with = "no_tag",
+            help = "Filter by tag name (repeatable). Entries matching any of the tags are returned."
+        )]
+        tags: Option<Vec<String>>,
+        #[arg(
+            long = "no-tag",
+            help = "Only return entries without any tags (mutex with -t)"
+        )]
+        no_tag: bool,
+        #[arg(
+            long,
+            help = "Start date (default: 1 year ago). Accepts today, yesterday, this_week, last_week, or YYYY-MM-DD"
+        )]
+        since: Option<String>,
+        #[arg(
+            long,
+            help = "End date (default: today). Accepts today, yesterday, this_week, last_week, or YYYY-MM-DD"
+        )]
+        until: Option<String>,
+        #[arg(short, long, help = "Page size (default 50)")]
+        number: Option<i64>,
+        #[arg(
+            long,
+            help = "Order by field: date|user|duration|description|last_update"
+        )]
+        order_by: Option<String>,
+        #[arg(long, help = "Order direction: ASC or DESC")]
+        order_dir: Option<String>,
+        #[arg(short, long, help = "Output in JSON format")]
+        json: bool,
+    },
     /// Bulk edit multiple time entries with a JSON Patch payload.
     BulkEdit {
         #[arg(help = "IDs of the time entries to update")]
@@ -655,7 +718,8 @@ impl Command {
                 | EntryAction::Resume { json, .. }
                 | EntryAction::Show { json, .. }
                 | EntryAction::Update { json, .. }
-                | EntryAction::Delete { json, .. } => *json,
+                | EntryAction::Delete { json, .. }
+                | EntryAction::Search { json, .. } => *json,
                 EntryAction::BulkEdit { .. } => false,
             },
             Command::Project { action } => match action {

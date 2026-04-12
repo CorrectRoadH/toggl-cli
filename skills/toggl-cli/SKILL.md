@@ -25,6 +25,7 @@ Time entries:
 - `toggl entry delete [ID] [--current] [-j]`
 - `toggl entry bulk-edit <ID...> --json '<JSON_PATCH>'`
 - `toggl entry list [--since DATETIME] [--until DATETIME] [-n NUMBER] [-j]`
+- `toggl entry search [QUERY] [-p PROJECT|--no-project] [-t TAG...|--no-tag] [--since DATE] [--until DATE] [-n NUMBER] [--order-by FIELD] [--order-dir ASC|DESC] [-j]`
 
 Resources:
 - `toggl project list [-j]`
@@ -63,6 +64,7 @@ Reports (--since/--until are optional, default to this_week/today):
 
 ## Know-How
 
+- **`entry search` for finding past entries**: Server-side search via Reports API v3. Filters combine (AND): positional `QUERY` matches description (substring); `-p NAME|ID` restricts to a project (or `--no-project` for entries missing a project); `-t NAME` restricts to a tag (repeatable, or `--no-tag` for untagged entries). `--no-project`/`--no-tag` are mutually exclusive with `-p`/`-t`. Project/tag names are resolved to IDs in the default workspace; pass numeric IDs to skip lookup. Default date range is the last 365 days — use `--since 2024-01-01` to reach further back. Prefer this over `entry list | grep` when searching history.
 - **IMPORTANT: Always scope `entry list`** with `--since` or `-n` to avoid dumping 90 days of entries. Use `--since today`, `--since this_week`, or `-n 10`. Never run bare `toggl entry list` — the output can be hundreds of entries and waste tokens.
 - **Natural language dates**: `--since` and `--until` accept `today`, `yesterday`, `now`, `this_week`, `last_week` in addition to YYYY-MM-DD and full datetime formats. Works in both `entry list` and all `report` commands.
 - **JSON on all mutations**: `entry start`, `entry stop`, `entry edit`, `entry continue` all support `-j/--json` and return the full entry with real ID, hydrated project, and `"running"` boolean.
@@ -101,6 +103,10 @@ toggl entry list --since today
 toggl entry list --since yesterday --until today
 toggl entry list --since this_week --json | jq '.[].description'
 toggl entry list --since last_week --until yesterday
+toggl entry search "login bug"                          # description search, last 365 days
+toggl entry search --no-project --since last_week       # untriaged entries from last week
+toggl entry search "standup" -p "Work" -t daily         # combine description + project + tag
+toggl entry search --no-tag --since 2025-01-01 -j       # JSON, all untagged entries this year
 toggl entry bulk-edit 123 456 --json '[{"op":"replace","path":"/description","value":"standup"}]'
 
 # Reports (no args = current week)
