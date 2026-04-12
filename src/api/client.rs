@@ -507,7 +507,14 @@ impl V9ApiClient {
             header::HeaderValue::from_str(header_content.as_str()).expect("Invalid header value");
         headers.insert(header::AUTHORIZATION, auth_header);
 
-        let base_client = Client::builder().default_headers(headers);
+        // Set an explicit User-Agent. Cloudflare Bot Fight Mode (enabled by default
+        // on Free plans) returns HTTP 403 "managed challenge" for requests with an
+        // empty UA, which otherwise takes down any self-hosted OpenToggl instance
+        // sitting behind Cloudflare (including our CI target track.opentoggl.com).
+        let user_agent = concat!("toggl-cli/", env!("CARGO_PKG_VERSION"));
+        let base_client = Client::builder()
+            .default_headers(headers)
+            .user_agent(user_agent);
         let http_client = {
             if let Some(proxy) = proxy {
                 base_client.proxy(reqwest::Proxy::all(proxy).expect("Invalid proxy"))
