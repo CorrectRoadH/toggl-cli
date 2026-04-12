@@ -737,7 +737,7 @@ fn live_cli_workspace_resource_crud_succeeds() {
     ]);
     cleanup.task_name = Some(renamed_task_name.clone());
 
-    let tasks_after_update = run_json_array_command(&["task", "list", "--json"]);
+    let tasks_after_update = run_json_array_command(&["task", "list", "--json", "--status", "all"]);
     assert!(find_item_by_name(&tasks_after_update, &task_name).is_none());
     assert!(find_item_by_name(&tasks_after_update, &renamed_task_name).is_some());
 

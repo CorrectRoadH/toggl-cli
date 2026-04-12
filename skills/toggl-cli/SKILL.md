@@ -25,7 +25,7 @@ Time entries:
 - `toggl entry delete [ID] [--current] [-j]`
 - `toggl entry bulk-edit <ID...> --json '<JSON_PATCH>'`
 - `toggl entry list [--since DATETIME] [--until DATETIME] [-n NUMBER] [-j]`
-- `toggl entry search [QUERY] [-p PROJECT|--no-project] [-t TAG...|--no-tag] [--since DATE] [--until DATE] [-n NUMBER] [--order-by FIELD] [--order-dir ASC|DESC] [-j]`
+- `toggl entry search [QUERY] [-p PROJECT|--no-project] [-t TAG...|--no-tag] [--since DATE] [--until DATE] [-n NUMBER] [--order-by date|duration|description|last_update|user] [--order-dir ASC|DESC] [-j]`
 
 Resources:
 - `toggl project list [-j]`
@@ -107,6 +107,7 @@ toggl entry search "login bug"                          # description search, la
 toggl entry search --no-project --since last_week       # untriaged entries from last week
 toggl entry search "standup" -p "Work" -t daily         # combine description + project + tag
 toggl entry search --no-tag --since 2025-01-01 -j       # JSON, all untagged entries this year
+toggl entry search --order-by duration --order-dir DESC -n 20  # longest entries in the last year
 toggl entry bulk-edit 123 456 --json '[{"op":"replace","path":"/description","value":"standup"}]'
 
 # Reports (no args = current week)
