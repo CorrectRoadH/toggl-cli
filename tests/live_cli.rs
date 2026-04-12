@@ -234,12 +234,6 @@ fn list_entries_on_test_day() -> Vec<TimeEntryRecord> {
     serde_json::from_str(&output).expect("failed to parse time entry list JSON")
 }
 
-fn list_entries_on_day(day: &str) -> Vec<TimeEntryRecord> {
-    let output =
-        try_run_toggl_checked(&["entry", "list", "--json", "--since", day, "--until", day]);
-    serde_json::from_str(&output).expect("failed to parse time entry list JSON")
-}
-
 fn run_json_array_command(args: &[&str]) -> Vec<Value> {
     let parsed: Value = parse_json_output(args);
     parsed
@@ -258,22 +252,46 @@ fn find_item_by_name<'a>(items: &'a [Value], name: &str) -> Option<&'a Value> {
         .find(|item| item["name"].as_str() == Some(name))
 }
 
-/// Poll `list_args` until an item with `name` appears, or panic with `message`.
+/// Poll `list_args` until an item with `name` appears, or panic with a diagnostic
+/// dump so a CI failure can be debugged without a second run.
 ///
 /// Exists because the self-hosted OpenToggl instance used in CI has a measurable
 /// write-then-list propagation delay. Without this wait, a `project create` / `tag
 /// create` followed immediately by a command that resolves names to IDs (e.g.
 /// `entry start -p NAME`) sees an empty list and fails with "No project found.
 /// Available projects:" even though the create actually succeeded.
+///
+/// On failure we dump: the elapsed polling time, the final list contents (JSON),
+/// and the names extracted from it. That lets us tell apart "server never returned
+/// this item" vs "server returned a different name/shape" vs "list endpoint empty".
 fn wait_for_named_resource(message: &str, list_args: &[&str], name: &str) {
+    let start = std::time::Instant::now();
+    let mut last_raw: String = String::new();
+    let mut last_names: Vec<String> = Vec::new();
     for _ in 0..30 {
-        let items = run_json_array_command(list_args);
+        let raw = try_run_toggl_checked(list_args);
+        last_raw = raw.clone();
+        let items: Vec<Value> = serde_json::from_str(raw.trim()).unwrap_or_default();
+        last_names = items
+            .iter()
+            .filter_map(|v| v["name"].as_str().map(String::from))
+            .collect();
         if find_item_by_name(&items, name).is_some() {
             return;
         }
         sleep(std::time::Duration::from_millis(500));
     }
-    panic!("{message}");
+    panic!(
+        "{message}\n\
+         waited for: {name:?}\n\
+         elapsed: {:?}\n\
+         list command: `toggl {}`\n\
+         names seen in final list ({}): {last_names:?}\n\
+         raw final response:\n{last_raw}",
+        start.elapsed(),
+        list_args.join(" "),
+        last_names.len(),
+    );
 }
 
 fn parse_workspaces(output: &str) -> Vec<WorkspaceRecord> {
@@ -361,13 +379,35 @@ where
     // Up to 30 * 500ms = 15s. The self-hosted OpenToggl instance used in CI has a
     // write -> list propagation delay that occasionally exceeds 5s, so we allow more
     // headroom than the other wait loops.
+    let start = std::time::Instant::now();
+    let mut last_summary: Vec<(i64, String)> = Vec::new();
+    let mut last_raw = String::new();
     for _ in 0..30 {
-        let entries = list_entries_on_day(day);
+        last_raw =
+            try_run_toggl_checked(&["entry", "list", "--json", "--since", day, "--until", day]);
+        let entries: Vec<TimeEntryRecord> =
+            serde_json::from_str(last_raw.trim()).unwrap_or_default();
+        last_summary = entries
+            .iter()
+            .map(|e| (e.id, e.description.clone()))
+            .collect();
         if let Some(entry) = entries.into_iter().find(|entry| predicate(entry)) {
             return Some(entry);
         }
         sleep(std::time::Duration::from_millis(500));
     }
+    // Diagnostics: dump what the list endpoint actually returned so CI failures
+    // are self-explanatory instead of just saying "missing from list".
+    eprintln!(
+        "wait_for_entry_on_day timed out\n\
+         message: {message}\n\
+         day: {day}\n\
+         elapsed: {:?}\n\
+         entries seen on final poll ({}): {last_summary:?}\n\
+         raw final response:\n{last_raw}",
+        start.elapsed(),
+        last_summary.len(),
+    );
 
     panic!("{message}");
 }
