@@ -77,32 +77,6 @@ fn unique_description(prefix: &str) -> String {
     format!("toggl-cli-{prefix}-{nonce}")
 }
 
-/// Returns true if we detect fake local-debug credentials that would cause
-/// live tests to fail or hang when trying to reach an invalid endpoint.
-fn is_using_fake_credentials() -> bool {
-    if let Ok(token) = std::env::var("TOGGL_API_TOKEN") {
-        let trimmed = token.trim();
-        if trimmed.is_empty() || trimmed.starts_with("fake-") || trimmed.contains("local-debug") {
-            return true;
-        }
-    }
-
-    if let Ok(url) = std::env::var("TOGGL_API_URL") {
-        let trimmed = url.trim().to_ascii_lowercase();
-        if trimmed.is_empty()
-            || trimmed.contains("invalid")
-            || trimmed.contains("local-debug")
-            || trimmed.contains("localhost")
-            || trimmed.contains("127.0.0.1")
-            || trimmed.contains("0.0.0.0")
-        {
-            return true;
-        }
-    }
-
-    false
-}
-
 /// Attempt to load .env file if present. Returns true if dotenv was loaded.
 fn try_load_dotenv() -> bool {
     if let Some(loaded) = DOTENV_LOADED.get() {
@@ -125,21 +99,6 @@ fn require_live_test_env() {
         !token.trim().is_empty(),
         "TOGGL_API_TOKEN must not be empty when running live CLI tests"
     );
-
-    if is_using_fake_credentials() {
-        eprintln!(
-            "Skipping live CLI test because fake local-debug credentials are detected; live tests require real OpenToggl credentials."
-        );
-    }
-}
-
-fn should_skip_live_tests() -> bool {
-    try_load_dotenv();
-
-    match std::env::var("TOGGL_API_TOKEN") {
-        Ok(token) if !token.trim().is_empty() => is_using_fake_credentials(),
-        _ => false,
-    }
 }
 
 #[test]
@@ -400,9 +359,6 @@ fn current_utc_day() -> String {
 fn live_cli_round_trip_covers_time_entry_lifecycle() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     let description = unique_description("entry");
     let renamed_description = format!("{description}-edited");
@@ -519,9 +475,6 @@ fn live_cli_round_trip_covers_time_entry_lifecycle() {
 fn live_cli_list_commands_cover_workspace_resources() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     ensure_test_workspace_scope();
 
@@ -548,9 +501,6 @@ fn live_cli_list_commands_cover_workspace_resources() {
 fn live_cli_default_time_entry_listing_succeeds() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     ensure_test_workspace_scope();
 
@@ -566,9 +516,6 @@ fn live_cli_default_time_entry_listing_succeeds() {
 fn live_cli_read_only_profile_commands_succeed() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     let me_output = run_checked(&["me"]);
     assert!(
@@ -603,9 +550,6 @@ fn live_cli_read_only_profile_commands_succeed() {
 fn live_cli_running_commands_succeed() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     ensure_test_workspace_scope();
 
@@ -627,9 +571,6 @@ fn live_cli_running_commands_succeed() {
 fn live_cli_start_and_stop_running_entry_succeeds() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     let description = unique_description("running");
     let mut cleanup = CleanupState::default();
@@ -674,9 +615,6 @@ fn live_cli_start_and_stop_running_entry_succeeds() {
 fn live_cli_continue_succeeds() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     let description = unique_description("continue");
     let mut cleanup = CleanupState::default();
@@ -742,9 +680,6 @@ fn live_cli_continue_succeeds() {
 fn live_cli_workspace_resource_crud_succeeds() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     let mut cleanup = CleanupState::default();
     ensure_test_workspace_scope();
@@ -868,9 +803,6 @@ fn live_cli_workspace_resource_crud_succeeds() {
 fn live_cli_preferences_round_trip_succeeds() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     let preferences_json: Value = parse_json_output(&["preferences", "read"]);
     assert!(preferences_json.is_object());
@@ -888,9 +820,6 @@ fn live_cli_preferences_round_trip_succeeds() {
 fn live_cli_workspace_rename_round_trip_succeeds() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     let mut cleanup = CleanupState::default();
     let me_output = run_checked(&["me"]);
@@ -936,9 +865,6 @@ fn live_cli_workspace_rename_round_trip_succeeds() {
 fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     let Some(organization_id) = test_organization_id() else {
         eprintln!(
@@ -1016,9 +942,6 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
 fn live_cli_report_commands_succeed() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     ensure_test_workspace_scope();
 
@@ -1160,9 +1083,6 @@ fn live_cli_report_commands_succeed() {
 fn live_cli_natural_language_dates_work_for_entry_list() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     ensure_test_workspace_scope();
 
@@ -1221,9 +1141,6 @@ fn live_cli_natural_language_dates_work_for_entry_list() {
 fn live_cli_mutation_json_flags_work() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
 
     ensure_test_workspace_scope();
     let mut cleanup = CleanupState::default();
@@ -1389,9 +1306,6 @@ fn create_historical_entry(
 fn live_cli_entry_search_filters_by_description_project_and_tag() {
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
     ensure_test_workspace_scope();
 
     let mut cleanup = CleanupState::default();
@@ -1696,9 +1610,6 @@ fn live_cli_entry_search_argument_validation() {
     // lookup failures would hang or timeout).
     let _guard = acquire_live_test_guard();
     require_live_test_env();
-    if should_skip_live_tests() {
-        return;
-    }
     ensure_test_workspace_scope();
 
     // -p and --no-project are mutually exclusive (clap exit 2).
