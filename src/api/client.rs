@@ -37,6 +37,7 @@ use super::models::NetworkProject;
 use super::models::NetworkRenameClient;
 use super::models::NetworkRenameProject;
 use super::models::NetworkRenameTag;
+use super::models::NetworkSetProjectActive;
 use super::models::NetworkTag;
 use super::models::NetworkTask;
 use super::models::NetworkTimeEntry;
@@ -108,6 +109,13 @@ pub trait ApiClient {
         workspace_id: i64,
         project_id: i64,
         new_name: String,
+    ) -> ResultWithDefaultError<Project>;
+
+    async fn set_project_archived(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        archived: bool,
     ) -> ResultWithDefaultError<Project>;
 
     async fn get_tags(&self, workspace_id: i64) -> ResultWithDefaultError<Vec<Tag>>;
@@ -252,7 +260,10 @@ impl V9ApiClient {
     }
 
     async fn get_projects(&self) -> ResultWithDefaultError<Vec<NetworkProject>> {
-        let url = format!("{}/me/projects", self.base_url);
+        // `include_archived=true` is required for `/me/projects` to return archived
+        // projects; without it the endpoint silently filters them out, so client-side
+        // `--status archived`/`all` filtering would never see them.
+        let url = format!("{}/me/projects?include_archived=true", self.base_url);
         self.get::<Vec<NetworkProject>>(url).await
     }
 
@@ -1026,6 +1037,7 @@ fn cache_ttl_seconds_for_url(url: &str) -> i64 {
 fn is_cacheable_get_url(url: &str) -> bool {
     if url.ends_with("/me")
         || url.ends_with("/me/projects")
+        || url.ends_with("/me/projects?include_archived=true")
         || url.ends_with("/me/tasks")
         || url.ends_with("/me/clients")
         || url.ends_with("/me/workspaces")
@@ -1547,6 +1559,34 @@ impl ApiClient for V9ApiClient {
         let body = NetworkRenameProject { name: new_name };
         let network_project = self
             .put::<NetworkProject, NetworkRenameProject>(url, &body)
+            .await?;
+        Ok(Project {
+            id: network_project.id,
+            name: network_project.name,
+            workspace_id: network_project.workspace_id,
+            client: None,
+            is_private: network_project.is_private,
+            active: network_project.active,
+            at: network_project.at,
+            created_at: network_project.created_at,
+            color: network_project.color,
+            billable: network_project.billable,
+        })
+    }
+
+    async fn set_project_archived(
+        &self,
+        workspace_id: i64,
+        project_id: i64,
+        archived: bool,
+    ) -> ResultWithDefaultError<Project> {
+        let url = format!(
+            "{}/workspaces/{}/projects/{}",
+            self.base_url, workspace_id, project_id
+        );
+        let body = NetworkSetProjectActive { active: !archived };
+        let network_project = self
+            .put::<NetworkProject, NetworkSetProjectActive>(url, &body)
             .await?;
         Ok(Project {
             id: network_project.id,

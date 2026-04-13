@@ -863,6 +863,72 @@ fn live_cli_workspace_resource_crud_succeeds() {
     assert!(find_item_by_name(&projects_after_delete, &renamed_project_name).is_none());
 }
 
+/// Covers the archive/unarchive project commands and verifies that
+/// `project list --status archived` / `--status all` actually surface archived
+/// projects. Regression guard for the bug where `/me/projects` was called
+/// without `include_archived=true`, so client-side status filtering never saw
+/// archived rows.
+#[test]
+fn live_cli_project_archive_round_trip_succeeds() {
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
+
+    let mut cleanup = CleanupState::default();
+    ensure_test_workspace_scope();
+    let project_name = unique_description("archive-proj");
+
+    run_checked(&["project", "create", &project_name]);
+    cleanup.project_name = Some(project_name.clone());
+    wait_for_named_resource(
+        "created project missing from project list",
+        &["project", "list", "--json"],
+        &project_name,
+    );
+
+    // Default list (active) must include it; archived list must not.
+    let active_before = run_json_array_command(&["project", "list", "--json"]);
+    assert!(find_item_by_name(&active_before, &project_name).is_some());
+    let archived_before =
+        run_json_array_command(&["project", "list", "--json", "--status", "archived"]);
+    assert!(find_item_by_name(&archived_before, &project_name).is_none());
+
+    // Archive it.
+    run_checked(&["project", "archive", &project_name]);
+
+    // After archiving: must disappear from active, appear under archived + all.
+    // Poll archived because mutations propagate asynchronously in OpenToggl.
+    wait_for_named_resource(
+        "archived project missing from --status archived list",
+        &["project", "list", "--json", "--status", "archived"],
+        &project_name,
+    );
+    let active_after_archive = run_json_array_command(&["project", "list", "--json"]);
+    assert!(
+        find_item_by_name(&active_after_archive, &project_name).is_none(),
+        "archived project should not appear in default (active) list"
+    );
+    let all_after_archive =
+        run_json_array_command(&["project", "list", "--json", "--status", "all"]);
+    assert!(find_item_by_name(&all_after_archive, &project_name).is_some());
+
+    // Unarchive it.
+    run_checked(&["project", "unarchive", &project_name]);
+    wait_for_named_resource(
+        "unarchived project missing from active list",
+        &["project", "list", "--json"],
+        &project_name,
+    );
+    let archived_after_unarchive =
+        run_json_array_command(&["project", "list", "--json", "--status", "archived"]);
+    assert!(
+        find_item_by_name(&archived_after_unarchive, &project_name).is_none(),
+        "unarchived project should not appear in archived list"
+    );
+
+    run_checked(&["project", "delete", &project_name]);
+    cleanup.project_name = None;
+}
+
 #[test]
 fn live_cli_preferences_round_trip_succeeds() {
     let _guard = acquire_live_test_guard();

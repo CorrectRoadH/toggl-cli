@@ -168,6 +168,11 @@ pub struct NetworkRenameProject {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NetworkSetProjectActive {
+    pub active: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NetworkCreateClient {
     pub name: String,
     pub wid: i64,

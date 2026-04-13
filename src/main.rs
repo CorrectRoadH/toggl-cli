@@ -20,6 +20,7 @@ use arguments::{
 };
 use clap::error::ErrorKind;
 use clap::Parser;
+use commands::archive_project::ArchiveProjectCommand;
 use commands::auth::AuthenticationCommand;
 use commands::auth_status::AuthStatusCommand;
 use commands::bulk_edit_time_entries::BulkEditTimeEntriesCommand;
@@ -426,6 +427,12 @@ async fn execute_project_command(
             RenameProjectCommand::execute(api_client, old_name, new_name).await
         }
         ProjectAction::Delete { name } => DeleteProjectCommand::execute(api_client, name).await,
+        ProjectAction::Archive { name } => {
+            ArchiveProjectCommand::execute(api_client, name, true).await
+        }
+        ProjectAction::Unarchive { name } => {
+            ArchiveProjectCommand::execute(api_client, name, false).await
+        }
     }
 }
 

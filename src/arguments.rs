@@ -414,6 +414,16 @@ Examples:
         #[arg(help = "Name of the project to delete")]
         name: String,
     },
+    /// Archive a project (sets active=false) without deleting it.
+    Archive {
+        #[arg(help = "Name of the project to archive")]
+        name: String,
+    },
+    /// Unarchive a project (sets active=true).
+    Unarchive {
+        #[arg(help = "Name of the project to unarchive")]
+        name: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]

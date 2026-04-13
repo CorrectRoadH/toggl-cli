@@ -1,3 +1,4 @@
+pub mod archive_project;
 pub mod auth;
 pub mod auth_status;
 pub mod bulk_edit_time_entries;
