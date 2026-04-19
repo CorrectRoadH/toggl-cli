@@ -1845,3 +1845,110 @@ fn live_cli_entry_search_argument_validation() {
         "expected 'No tag found' error, got:\n{stderr}"
     );
 }
+
+/// Regression for the "`entry bulk-edit` silently drops /project_id and /tags"
+/// bug: the CLI reports `Bulk updated N time entries`, but readback shows the
+/// entry's project and tags are unchanged. The patch request ends up as a
+/// no-op for every path other than `/description` and `/billable`, yet the
+/// API still returns 200 so scripted callers cannot detect the failure.
+///
+/// This is a red-light test pinned to the live backend: it exercises the
+/// exact shape the user hit (`/project_id` with a numeric id, `/tags` with
+/// string names) on a single freshly created entry, then asserts via
+/// `entry show --json` that both fields actually landed. Currently fails
+/// against OpenToggl because `PatchTimeEntries` ignores those paths; will
+/// turn green once the backend honors them.
+#[test]
+fn live_cli_bulk_edit_applies_project_id_and_tags() {
+    let _guard = acquire_live_test_guard();
+    require_live_test_env();
+    ensure_test_workspace_scope();
+
+    let mut cleanup = CleanupState::default();
+
+    let project_name = unique_description("bulk-proj");
+    let tag_name = unique_description("bulk-tag");
+    run_checked(&["project", "create", &project_name]);
+    cleanup.project_name = Some(project_name.clone());
+    wait_for_named_resource(
+        "fixture project missing from project list",
+        &["project", "list", "--json"],
+        &project_name,
+    );
+    run_checked(&["tag", "create", &tag_name]);
+    cleanup.tag_name = Some(tag_name.clone());
+    wait_for_named_resource(
+        "fixture tag missing from tag list",
+        &["tag", "list", "--json"],
+        &tag_name,
+    );
+
+    let projects = run_json_array_command(&["project", "list", "--json"]);
+    let project_id = find_item_by_name(&projects, &project_name)
+        .and_then(|p| p["id"].as_i64())
+        .expect("fixture project missing from project list");
+
+    let description = unique_description("bulk-patch");
+    try_run_toggl_checked(&[
+        "entry",
+        "start",
+        "-d",
+        &description,
+        "--start",
+        TEST_START,
+        "--end",
+        TEST_END,
+    ]);
+    let Some(created_entry) =
+        wait_for_entry_on_day("created time entry missing from list", TEST_DAY, |entry| {
+            entry.description == description
+        })
+    else {
+        return;
+    };
+    cleanup.time_entry_id = Some(created_entry.id);
+
+    let patch = format!(
+        r#"[{{"op":"replace","path":"/project_id","value":{project_id}}},{{"op":"replace","path":"/tags","value":["{tag_name}"]}}]"#
+    );
+    try_run_toggl_checked(&[
+        "entry",
+        "bulk-edit",
+        &created_entry.id.to_string(),
+        "--json",
+        &patch,
+    ]);
+
+    // Poll readback to absorb OpenToggl's write-then-read propagation delay,
+    // then assert both fields actually landed. Fails loudly when either the
+    // project or the tag is still missing so the CI diagnostic points at the
+    // exact field that was dropped.
+    let start = std::time::Instant::now();
+    let mut last_raw = String::new();
+    for _ in 0..30 {
+        let raw =
+            try_run_toggl_checked(&["entry", "show", &created_entry.id.to_string(), "--json"]);
+        last_raw = raw.clone();
+        let entry: Value = serde_json::from_str(raw.trim()).unwrap_or(Value::Null);
+        let tag_hit = entry["tags"]
+            .as_array()
+            .map(|tags| tags.iter().any(|t| t.as_str() == Some(tag_name.as_str())))
+            .unwrap_or(false);
+        let project_hit = entry["project"]["id"].as_i64() == Some(project_id);
+        if tag_hit && project_hit {
+            return;
+        }
+        sleep(std::time::Duration::from_millis(500));
+    }
+
+    panic!(
+        "entry bulk-edit reported success but /project_id and/or /tags did not land\n\
+         entry id: {}\n\
+         expected project_id: {project_id}\n\
+         expected tag: {tag_name:?}\n\
+         elapsed: {:?}\n\
+         last `entry show --json` response:\n{last_raw}",
+        created_entry.id,
+        start.elapsed(),
+    );
+}
