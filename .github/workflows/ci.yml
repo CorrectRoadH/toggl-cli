@@ -49,11 +49,12 @@ jobs:
       # would just run everything twice. Live end-to-end tests live in their own
       # job below and are excluded here via `--bin toggl`.
       - name: Run unit tests with coverage
-        run: cargo llvm-cov --locked --bin toggl --lcov --output-path lcov.info
+        run: cargo llvm-cov --locked --bin toggl --lcov --output-path lcov-unit.info
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: lcov.info
+          files: lcov-unit.info
+          flags: unit
           fail_ci_if_error: false
           use_oidc: true
 
@@ -61,6 +62,9 @@ jobs:
     name: Live E2E
     runs-on: ubuntu-latest
     needs: lints
+    permissions:
+      contents: read
+      id-token: write
     env:
       TOGGL_API_URL: ${{ secrets.TOGGL_API_URL }}
       TOGGL_API_TOKEN: ${{ secrets.TOGGL_API_TOKEN }}
@@ -69,6 +73,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
       - name: Install build tools
         uses: awalsh128/cache-apt-pkgs-action@v1
@@ -78,13 +85,24 @@ jobs:
       # These hit a real backend, so a run can fail on transient network or
       # write-then-read propagation delays. Retry once before calling it a
       # regression; the binary is already built after the first attempt.
-      - name: Run live end-to-end tests
+      #
+      # Coverage is collected here too: the live tests drive the real binary as
+      # a subprocess and account for most of the project's covered lines, so
+      # dropping them from the report would tank the codecov project status.
+      - name: Run live end-to-end tests with coverage
         run: |
           for attempt in 1 2; do
-            if cargo test --locked --test live_cli; then
+            if cargo llvm-cov --locked --test live_cli --lcov --output-path lcov-live.info; then
               exit 0
             fi
             echo "::warning::live e2e attempt $attempt failed"
             sleep 15
           done
           exit 1
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov-live.info
+          flags: live
+          fail_ci_if_error: false
+          use_oidc: true
