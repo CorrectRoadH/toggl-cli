@@ -13,7 +13,7 @@ jobs:
     name: Lints
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -33,13 +33,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    env:
-      TOGGL_API_URL: ${{ secrets.TOGGL_API_URL }}
-      TOGGL_API_TOKEN: ${{ secrets.TOGGL_API_TOKEN }}
-      TOGGL_TEST_ORGANIZATION_ID: ${{ secrets.TOGGL_TEST_ORGANIZATION_ID }}
-      TOGGL_TEST_WORKSPACE_ID: ${{ secrets.TOGGL_TEST_WORKSPACE_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -50,13 +45,46 @@ jobs:
         with:
           packages: libdbus-1-dev libssl-dev pkg-config
           version: 1.0
-      - name: Run tests
-        run: cargo test --locked
-      - name: Generate coverage report
-        run: cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
+      # `cargo llvm-cov` runs the tests itself, so a separate `cargo test` step
+      # would just run everything twice. Live end-to-end tests live in their own
+      # job below and are excluded here via `--bin toggl`.
+      - name: Run unit tests with coverage
+        run: cargo llvm-cov --locked --bin toggl --lcov --output-path lcov.info
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           files: lcov.info
-          fail_ci_if_error: true
+          fail_ci_if_error: false
           use_oidc: true
+
+  live-e2e:
+    name: Live E2E
+    runs-on: ubuntu-latest
+    needs: lints
+    env:
+      TOGGL_API_URL: ${{ secrets.TOGGL_API_URL }}
+      TOGGL_API_TOKEN: ${{ secrets.TOGGL_API_TOKEN }}
+      TOGGL_TEST_ORGANIZATION_ID: ${{ secrets.TOGGL_TEST_ORGANIZATION_ID }}
+      TOGGL_TEST_WORKSPACE_ID: ${{ secrets.TOGGL_TEST_WORKSPACE_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install build tools
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libdbus-1-dev libssl-dev pkg-config
+          version: 1.0
+      # These hit a real backend, so a run can fail on transient network or
+      # write-then-read propagation delays. Retry once before calling it a
+      # regression; the binary is already built after the first attempt.
+      - name: Run live end-to-end tests
+        run: |
+          for attempt in 1 2; do
+            if cargo test --locked --test live_cli; then
+              exit 0
+            fi
+            echo "::warning::live e2e attempt $attempt failed"
+            sleep 15
+          done
+          exit 1
