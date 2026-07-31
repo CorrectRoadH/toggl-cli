@@ -1,6 +1,6 @@
 use crate::api::client::ApiClient;
 use crate::error::ArgumentError;
-use crate::models::ResultWithDefaultError;
+use crate::models::{Entities, ResultWithDefaultError, TimeEntry};
 use colored::Colorize;
 use serde_json::Value;
 
@@ -58,9 +58,16 @@ impl BulkEditTimeEntriesCommand {
             )));
         }
 
-        api_client
-            .bulk_update_time_entries(workspace_id, ids.clone(), patch)
-            .await?;
+        if can_apply_patch_locally(&patch) {
+            for entry in selected_entries {
+                let updated = apply_patch_to_entry(entry, &patch, &entities)?;
+                api_client.update_time_entry(updated).await?;
+            }
+        } else {
+            api_client
+                .bulk_update_time_entries(workspace_id, ids.clone(), patch)
+                .await?;
+        }
 
         println!(
             "{}",
@@ -70,13 +77,104 @@ impl BulkEditTimeEntriesCommand {
     }
 }
 
+fn can_apply_patch_locally(patch: &Value) -> bool {
+    let Some(operations) = patch.as_array() else {
+        return false;
+    };
+
+    operations.iter().all(|operation| {
+        matches!(
+            (
+                operation.get("op").and_then(Value::as_str),
+                operation.get("path").and_then(Value::as_str),
+            ),
+            (
+                Some("add" | "replace" | "remove"),
+                Some("/description" | "/billable" | "/project_id" | "/pid" | "/tags")
+            )
+        )
+    })
+}
+
+fn apply_patch_to_entry(
+    mut entry: TimeEntry,
+    patch: &Value,
+    entities: &Entities,
+) -> ResultWithDefaultError<TimeEntry> {
+    let operations = patch.as_array().ok_or_else(|| {
+        Box::new(ArgumentError::MissingArgument(
+            "bulk-edit --json must be a JSON Patch array".to_string(),
+        )) as Box<dyn std::error::Error + Send>
+    })?;
+
+    for operation in operations {
+        let op = operation
+            .get("op")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let path = operation
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let value = operation.get("value");
+
+        match (op, path) {
+            ("remove", "/description") => entry.description.clear(),
+            ("add" | "replace", "/description") => {
+                entry.description = value
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+            }
+            ("remove", "/billable") => entry.billable = false,
+            ("add" | "replace", "/billable") => {
+                entry.billable = value.and_then(Value::as_bool).unwrap_or(false);
+            }
+            ("remove", "/project_id" | "/pid") => {
+                entry.project = None;
+                entry.task = None;
+            }
+            ("add" | "replace", "/project_id" | "/pid") => {
+                let project_id = value.and_then(Value::as_i64).ok_or_else(|| {
+                    Box::new(ArgumentError::MissingArgument(
+                        "bulk-edit /project_id value must be a numeric project id".to_string(),
+                    )) as Box<dyn std::error::Error + Send>
+                })?;
+                entry.project =
+                    Some(entities.projects.get(&project_id).cloned().ok_or_else(|| {
+                        Box::new(ArgumentError::ResourceNotFound(format!(
+                            "project id {project_id}"
+                        ))) as Box<dyn std::error::Error + Send>
+                    })?);
+                entry.task = None;
+            }
+            ("remove", "/tags") => entry.tags.clear(),
+            ("add" | "replace", "/tags") => {
+                let tags = value.and_then(Value::as_array).ok_or_else(|| {
+                    Box::new(ArgumentError::MissingArgument(
+                        "bulk-edit /tags value must be an array of tag names".to_string(),
+                    )) as Box<dyn std::error::Error + Send>
+                })?;
+                entry.tags = tags
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToString::to_string)
+                    .collect();
+            }
+            _ => {}
+        }
+    }
+
+    Ok(entry)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::api::client::MockApiClient;
     use crate::error::ApiError;
-    use crate::models::{Entities, TimeEntry};
-    use chrono::Utc;
+    use crate::models::{Entities, Project, TimeEntry};
+    use chrono::{TimeZone, Utc};
     use serde_json::json;
     use std::collections::HashMap;
     use tokio_test::{assert_err, assert_ok};
@@ -88,6 +186,21 @@ mod tests {
             start: Utc::now(),
             duration: 60,
             ..Default::default()
+        }
+    }
+
+    fn mock_project(id: i64, workspace_id: i64) -> Project {
+        Project {
+            id,
+            name: format!("Project {id}"),
+            workspace_id,
+            client: None,
+            is_private: false,
+            active: true,
+            at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),
+            created_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),
+            color: "#06aaf5".to_string(),
+            billable: None,
         }
     }
 
@@ -106,25 +219,49 @@ mod tests {
     async fn bulk_edit_returns_ok_on_success() {
         let mut api_client = MockApiClient::new();
         api_client.expect_get_entities().returning(|| {
-            Ok(mock_entities(vec![
-                time_entry_with_id(1, 10),
-                time_entry_with_id(2, 10),
-            ]))
+            let mut entities =
+                mock_entities(vec![time_entry_with_id(1, 10), time_entry_with_id(2, 10)]);
+            entities.projects.insert(42, mock_project(42, 10));
+            Ok(entities)
         });
+        api_client
+            .expect_update_time_entry()
+            .times(2)
+            .withf(|entry| {
+                entry.description == "focus"
+                    && entry.tags == vec!["deep-work"]
+                    && entry.project.as_ref().map(|project| project.id) == Some(42)
+            })
+            .returning(|entry| Ok(entry.id));
+
+        let result = BulkEditTimeEntriesCommand::execute(
+            api_client,
+            vec![1, 2],
+            r#"[{"op":"replace","path":"/description","value":"focus"},{"op":"replace","path":"/project_id","value":42},{"op":"replace","path":"/tags","value":["deep-work"]}]"#.to_string(),
+        )
+        .await;
+        assert_ok!(result);
+    }
+
+    #[tokio::test]
+    async fn bulk_edit_uses_bulk_api_for_unknown_patch_paths() {
+        let mut api_client = MockApiClient::new();
+        api_client
+            .expect_get_entities()
+            .returning(|| Ok(mock_entities(vec![time_entry_with_id(1, 10)])));
         api_client
             .expect_bulk_update_time_entries()
             .withf(|workspace_id, ids, patch| {
                 *workspace_id == 10
-                    && ids == &vec![1, 2]
-                    && patch
-                        == &json!([{ "op": "replace", "path": "/description", "value": "focus" }])
+                    && ids == &vec![1]
+                    && patch == &json!([{ "op": "replace", "path": "/unknown", "value": "x" }])
             })
             .returning(|_, _, _| Ok(json!({})));
 
         let result = BulkEditTimeEntriesCommand::execute(
             api_client,
-            vec![1, 2],
-            r#"[{"op":"replace","path":"/description","value":"focus"}]"#.to_string(),
+            vec![1],
+            r#"[{"op":"replace","path":"/unknown","value":"x"}]"#.to_string(),
         )
         .await;
         assert_ok!(result);
@@ -180,8 +317,8 @@ mod tests {
             .expect_get_entities()
             .returning(|| Ok(mock_entities(vec![time_entry_with_id(1, 10)])));
         api_client
-            .expect_bulk_update_time_entries()
-            .returning(|_, _, _| Err(Box::new(ApiError::Network)));
+            .expect_update_time_entry()
+            .returning(|_| Err(Box::new(ApiError::Network)));
 
         let result = BulkEditTimeEntriesCommand::execute(
             api_client,
