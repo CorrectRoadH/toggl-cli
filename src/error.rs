@@ -15,6 +15,13 @@ pub enum ApiError {
     OfficialApiUsageLimitWithMessage(String),
     Deserialization,
     DeserializationWithMessage(String),
+    /// The bulk patch endpoint reported per-entry failures. Its contract is
+    /// explicitly non-transactional, so some entries can be updated while
+    /// others are rejected.
+    BulkEditPartiallyFailed {
+        updated: usize,
+        failed: usize,
+    },
 }
 
 impl Display for ApiError {
@@ -49,6 +56,13 @@ impl Display for ApiError {
                 constants::DESERIALIZATION_ERROR_MESSAGE.red(),
                 constants::OUTDATED_APP_ERROR_MESSAGE.blue().bold(),
                 constants::ISSUE_LINK.blue().bold().underline()
+            ),
+            ApiError::BulkEditPartiallyFailed { updated, failed } => format!(
+                "{}\n{}: {} updated, {} rejected",
+                "Bulk edit did not apply to every time entry".red(),
+                "Result".yellow().bold(),
+                updated,
+                failed
             ),
             ApiError::DeserializationWithMessage(message) => format!(
                 "{}\n{}: {}\n{} {}",
