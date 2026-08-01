@@ -13,7 +13,7 @@ jobs:
     name: Lints
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -34,7 +34,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -51,7 +51,7 @@ jobs:
       - name: Run unit tests with coverage
         run: cargo llvm-cov --locked --bin toggl --lcov --output-path lcov-unit.info
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: lcov-unit.info
           flags: unit
@@ -71,7 +71,7 @@ jobs:
       TOGGL_TEST_ORGANIZATION_ID: ${{ secrets.TOGGL_TEST_ORGANIZATION_ID }}
       TOGGL_TEST_WORKSPACE_ID: ${{ secrets.TOGGL_TEST_WORKSPACE_ID }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -100,7 +100,7 @@ jobs:
           done
           exit 1
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: lcov-live.info
           flags: live
