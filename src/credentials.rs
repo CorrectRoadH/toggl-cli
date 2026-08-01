@@ -125,6 +125,38 @@ impl CredentialsStorage for EnvironmentStorage {
     }
 }
 
+/// Stands in for the keyring when the platform has no reachable credential
+/// store — a headless Linux box with no Secret Service, a container, CI.
+///
+/// Reads report the same "you need to authenticate" error a missing entry
+/// would, so those environments fall back to `TOGGL_API_TOKEN` instead of
+/// aborting the whole command.
+pub struct UnavailableStorage {
+    reason: String,
+}
+
+impl UnavailableStorage {
+    pub fn new(reason: String) -> UnavailableStorage {
+        Self { reason }
+    }
+}
+
+impl CredentialsStorage for UnavailableStorage {
+    fn read(&self) -> ResultWithDefaultError<Credentials> {
+        Err(Box::new(StorageError::Read))
+    }
+
+    fn persist(&self, _api_token: String, _api_url: Option<String>) -> ResultWithDefaultError<()> {
+        eprintln!("No credential store is available: {}", self.reason);
+        Err(Box::new(StorageError::Write))
+    }
+
+    fn clear(&self) -> ResultWithDefaultError<()> {
+        eprintln!("No credential store is available: {}", self.reason);
+        Err(Box::new(StorageError::Delete))
+    }
+}
+
 /// In test builds, ensure `.env` is loaded so unit tests see `TOGGL_API_TOKEN`
 /// instead of falling through to macOS keychain.
 #[cfg(test)]
@@ -144,7 +176,49 @@ pub fn get_storage() -> Box<dyn CredentialsStorage> {
         return Box::new(EnvironmentStorage::new(api_token));
     }
 
-    let keyring = Entry::new("togglcli", "default")
-        .unwrap_or_else(|err| panic!("Couldn't create credentials_storage: {err}"));
-    Box::new(KeyringStorage::new(keyring))
+    match Entry::new("togglcli", "default") {
+        Ok(keyring) => Box::new(KeyringStorage::new(keyring)),
+        Err(err) => Box::new(UnavailableStorage::new(err.to_string())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_storage_reports_a_read_error_instead_of_panicking() {
+        let storage = UnavailableStorage::new("no secret service".to_string());
+
+        let error = match storage.read() {
+            Ok(_) => panic!("read must not succeed"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.to_string(), StorageError::Read.to_string());
+    }
+
+    #[test]
+    fn unavailable_storage_refuses_to_persist_or_clear() {
+        let storage = UnavailableStorage::new("no secret service".to_string());
+
+        let persist_error = storage
+            .persist("token".to_string(), None)
+            .expect_err("persist must not succeed");
+        let clear_error = storage.clear().expect_err("clear must not succeed");
+
+        assert_eq!(persist_error.to_string(), StorageError::Write.to_string());
+        assert_eq!(clear_error.to_string(), StorageError::Delete.to_string());
+    }
+
+    #[test]
+    fn get_storage_returns_a_storage_when_no_keyring_is_reachable() {
+        // Exercised for real on headless Linux, where `Entry::new` fails: the
+        // CLI must still get a storage back so it can report the error itself.
+        let storage = get_storage();
+
+        // Any of the three storages is acceptable here; the point is that
+        // building one never aborts the process.
+        let _ = storage.read();
+    }
 }
