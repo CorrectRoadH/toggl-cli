@@ -4,7 +4,7 @@ use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
 use chrono::{Datelike, Local, NaiveDate};
 use colored::Colorize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Resolve a natural language date string to YYYY-MM-DD format.
 /// Supports: today, yesterday, now, this_week (Monday of current week),
@@ -235,10 +235,9 @@ fn print_summary_report(data: &Value, since: &str, until: &str) {
         .get("totals")
         .and_then(|t| t.get("seconds"))
         .and_then(|s| s.as_i64())
+        && grand_total == 0
     {
-        if grand_total == 0 {
-            grand_total = totals_seconds;
-        }
+        grand_total = totals_seconds;
     }
 
     println!("{}", "-".repeat(50));

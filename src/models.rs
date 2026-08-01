@@ -1,3 +1,4 @@
+use std::sync::LazyLock;
 use std::{cmp, env};
 
 use crate::constants;
@@ -6,7 +7,6 @@ use std::collections::HashMap;
 use chrono::{DateTime, Duration, Local, Utc};
 use colored::{ColoredString, Colorize};
 use colors_transform::{Color, Rgb};
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 pub type ResultWithDefaultError<T> = Result<T, Box<dyn std::error::Error + Send>>;
@@ -128,13 +128,13 @@ pub struct Organization {
     pub permissions: Vec<String>,
 }
 
-lazy_static! {
-    pub static ref HAS_TRUECOLOR_SUPPORT: bool = if let Ok(truecolor) = env::var("COLORTERM") {
+pub static HAS_TRUECOLOR_SUPPORT: LazyLock<bool> = LazyLock::new(|| {
+    if let Ok(truecolor) = env::var("COLORTERM") {
         truecolor == "truecolor" || truecolor == "24bit"
     } else {
         false
-    };
-}
+    }
+});
 
 impl Project {
     /// Gets the closest plain color to the TrueColor

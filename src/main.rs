@@ -18,8 +18,8 @@ use arguments::{
     AuthAction, ClientAction, Command, ConfigAction, EntryAction, OrganizationAction,
     PreferencesAction, ProjectAction, TagAction, TaskAction, WorkspaceAction,
 };
-use clap::error::ErrorKind;
 use clap::Parser;
+use clap::error::ErrorKind;
 use commands::archive_project::ArchiveProjectCommand;
 use commands::auth::AuthenticationCommand;
 use commands::auth_status::AuthStatusCommand;
@@ -50,13 +50,13 @@ use commands::start::StartCommand;
 use commands::stop::{StopCommand, StopCommandOrigin};
 use commands::update_preferences::UpdatePreferencesCommand;
 use commands::update_task::UpdateTaskCommand;
-use credentials::get_storage;
 use credentials::Credentials;
+use credentials::get_storage;
 use models::ResultWithDefaultError;
-use once_cell::sync::OnceCell;
 use std::io::{self};
+use std::sync::OnceLock;
 
-static CACHED_CREDENTIALS: OnceCell<Credentials> = OnceCell::new();
+static CACHED_CREDENTIALS: OnceLock<Credentials> = OnceLock::new();
 
 #[tokio::main]
 async fn main() -> ResultWithDefaultError<()> {
@@ -729,9 +729,15 @@ async fn execute_logout_command() -> ResultWithDefaultError<()> {
 }
 
 fn get_api_client(proxy: Option<String>) -> ResultWithDefaultError<impl ApiClient> {
-    let credentials = CACHED_CREDENTIALS.get_or_try_init(|| {
-        let storage = get_storage();
-        storage.read()
-    })?;
-    V9ApiClient::from_credentials(credentials.clone(), proxy)
+    let credentials = match CACHED_CREDENTIALS.get() {
+        Some(cached) => cached.clone(),
+        None => {
+            let credentials = get_storage().read()?;
+            // Losing the race is harmless: every initializer reads the same
+            // storage, so whichever value lands first is the right one.
+            let _ = CACHED_CREDENTIALS.set(credentials.clone());
+            credentials
+        }
+    };
+    V9ApiClient::from_credentials(credentials, proxy)
 }

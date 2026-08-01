@@ -129,12 +129,12 @@ impl StartCommand {
             )));
         }
 
-        if let (Some(start), Some(end)) = (parsed_start, parsed_end) {
-            if end <= start {
-                return Err(Box::new(ArgumentError::InvalidTimeRange(
-                    "end must be later than start".to_string(),
-                )));
-            }
+        if let (Some(start), Some(end)) = (parsed_start, parsed_end)
+            && end <= start
+        {
+            return Err(Box::new(ArgumentError::InvalidTimeRange(
+                "end must be later than start".to_string(),
+            )));
         }
 
         let workspace_id = (api_client.get_user().await?).default_workspace_id;
@@ -185,11 +185,13 @@ impl StartCommand {
                                         .values()
                                         .map(|p| format!("  - {} (id: {})", p.name, p.id))
                                         .collect();
-                                    return Err(Box::new(ArgumentError::ResourceNotFound(format!(
-                                        "No project found with name or ID '{}'. Available projects:\n{}",
-                                        name,
-                                        available.join("\n")
-                                    ))));
+                                    return Err(Box::new(ArgumentError::ResourceNotFound(
+                                        format!(
+                                            "No project found with name or ID '{}'. Available projects:\n{}",
+                                            name,
+                                            available.join("\n")
+                                        ),
+                                    )));
                                 }
                             }
                         } else {

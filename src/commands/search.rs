@@ -3,7 +3,7 @@ use crate::error::ArgumentError;
 use crate::models::ResultWithDefaultError;
 use chrono::{Datelike, Local, NaiveDate};
 use colored::Colorize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Resolve a natural language date string to YYYY-MM-DD format.
 /// Mirrors report.rs::resolve_report_date but kept local to avoid cross-module coupling.
@@ -80,10 +80,10 @@ async fn resolve_project_id(
     if let Some(p) = in_workspace.iter().find(|p| p.name == name_or_id) {
         return Ok(p.id);
     }
-    if let Ok(id) = name_or_id.parse::<i64>() {
-        if in_workspace.iter().any(|p| p.id == id) {
-            return Ok(id);
-        }
+    if let Ok(id) = name_or_id.parse::<i64>()
+        && in_workspace.iter().any(|p| p.id == id)
+    {
+        return Ok(id);
     }
     let available: Vec<String> = in_workspace
         .iter()
@@ -114,11 +114,11 @@ async fn resolve_tag_ids(
             Some(t) => ids.push(t.id),
             None => {
                 // Fall back to numeric ID
-                if let Ok(id) = name.parse::<i64>() {
-                    if tags.iter().any(|t| t.id == id) {
-                        ids.push(id);
-                        continue;
-                    }
+                if let Ok(id) = name.parse::<i64>()
+                    && tags.iter().any(|t| t.id == id)
+                {
+                    ids.push(id);
+                    continue;
                 }
                 let available: Vec<String> =
                     tags.iter().map(|t| format!("  - {}", t.name)).collect();
@@ -178,11 +178,11 @@ pub async fn execute(
     // Tag filter: --no-tag -> [null]; -t NAME... -> [ids]
     if no_tag {
         body["tag_ids"] = json!([null]);
-    } else if let Some(ref names) = tags {
-        if !names.is_empty() {
-            let ids = resolve_tag_ids(&api_client, workspace_id, names).await?;
-            body["tag_ids"] = Value::Array(ids.into_iter().map(|i| json!(i)).collect());
-        }
+    } else if let Some(ref names) = tags
+        && !names.is_empty()
+    {
+        let ids = resolve_tag_ids(&api_client, workspace_id, names).await?;
+        body["tag_ids"] = Value::Array(ids.into_iter().map(|i| json!(i)).collect());
     }
 
     if let Some(n) = number {

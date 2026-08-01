@@ -58,7 +58,7 @@ impl CredentialsStorage for KeyringStorage {
     }
 
     fn clear(&self) -> ResultWithDefaultError<()> {
-        match self.keyring.delete_password() {
+        match self.keyring.delete_credential() {
             Err(keyring_err) => {
                 eprintln!("Error deleting from keyring: {keyring_err}");
                 Err(Box::new(StorageError::Delete))

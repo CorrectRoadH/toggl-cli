@@ -8,60 +8,45 @@ use skim::prelude::*;
 
 pub struct SkimPicker;
 
-fn get_skim_configuration(items: Vec<PickableItem>) -> (SkimOptions<'static>, SkimItemReceiver) {
-    let options = SkimOptionsBuilder::default()
+fn get_skim_configuration() -> SkimOptions {
+    SkimOptionsBuilder::default()
         // Set viewport to take entire screen
-        .height(Some("100%"))
+        .height(String::from("100%"))
         // Disable multiselect
         .multi(false)
         .build()
-        .unwrap();
-
-    let (sender, source): (SkimItemSender, SkimItemReceiver) = unbounded();
-    for item in items {
-        // Send items to Skim receiver
-        let _ = sender.send(Arc::new(item));
-    }
-    // Complete sender transaction to signal no new items will be added after this
-    drop(sender);
-    (options, source)
+        .unwrap()
 }
 
 impl SkimItem for PickableItem {
-    fn text<'a>(&'a self) -> Cow<'a, str> {
+    fn text(&self) -> Cow<'_, str> {
         Cow::from(self.formatted.as_str())
     }
 
-    fn output<'a>(&'a self) -> Cow<'a, str> {
+    fn output(&self) -> Cow<'_, str> {
         Cow::from(self.key.to_string())
     }
 }
 
+fn generic_picker_error() -> Box<dyn std::error::Error + Send> {
+    Box::new(PickerError::Generic)
+}
+
 impl ItemPicker for SkimPicker {
     fn pick(&self, items: Vec<PickableItem>) -> ResultWithDefaultError<PickableItemKey> {
-        let (options, source) = get_skim_configuration(items);
-        let output = Skim::run_with(&options, Some(source));
+        // `run_items` feeds the items to skim itself; skim owns the channel and
+        // the batching, so the picker only has to describe the viewport.
+        let output =
+            Skim::run_items(get_skim_configuration(), items).map_err(|_| generic_picker_error())?;
 
-        match output {
-            None => Err(Box::new(PickerError::Cancelled)),
-            Some(item) => {
-                if item.is_abort {
-                    Err(Box::new(PickerError::Cancelled))
-                } else {
-                    let selectable_items = item
-                        .selected_items
-                        .iter()
-                        .map(|selected_items| {
-                            selected_items.output().parse::<PickableItemKey>().unwrap()
-                        })
-                        .collect::<Vec<PickableItemKey>>();
-
-                    match selectable_items.first() {
-                        None => Err(Box::new(PickerError::Generic)),
-                        Some(id) => Ok(id.clone()),
-                    }
-                }
-            }
+        if output.is_abort {
+            return Err(Box::new(PickerError::Cancelled));
         }
+
+        output
+            .selected_items
+            .first()
+            .and_then(|selected| selected.output().parse::<PickableItemKey>().ok())
+            .ok_or_else(generic_picker_error)
     }
 }

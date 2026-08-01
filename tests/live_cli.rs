@@ -1,5 +1,5 @@
-use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::process::Command;
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -971,9 +971,12 @@ fn live_cli_workspace_rename_round_trip_succeeds() {
 
     let workspaces_after_rename_output = run_checked(&["workspace", "list", "--json"]);
     let workspaces_after_rename = parse_workspaces(&workspaces_after_rename_output);
-    assert!(workspaces_after_rename
-        .iter()
-        .any(|workspace| workspace.id == default_workspace_id && workspace.name == temporary_name));
+    assert!(
+        workspaces_after_rename
+            .iter()
+            .any(|workspace| workspace.id == default_workspace_id
+                && workspace.name == temporary_name)
+    );
 
     run_checked(&[
         "workspace",
@@ -1017,9 +1020,11 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
 
     let workspaces_before = run_checked(&["workspace", "list", "--json"]);
     let workspaces_before = parse_workspaces(&workspaces_before);
-    assert!(workspaces_before
-        .iter()
-        .all(|workspace| workspace.name != workspace_name));
+    assert!(
+        workspaces_before
+            .iter()
+            .all(|workspace| workspace.name != workspace_name)
+    );
 
     let create_output = match try_run_toggl(&[
         "workspace",
@@ -1063,9 +1068,11 @@ fn live_cli_create_workspace_succeeds_when_test_org_is_configured() {
             .any(|workspace| workspace.name == workspace_name)
             .then_some(workspaces)
     });
-    assert!(workspaces_after_create
-        .iter()
-        .any(|workspace| workspace.name == workspace_name));
+    assert!(
+        workspaces_after_create
+            .iter()
+            .any(|workspace| workspace.name == workspace_name)
+    );
 }
 
 #[test]

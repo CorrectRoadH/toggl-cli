@@ -230,15 +230,15 @@ pub fn normalize_time_entry_list_filters(
     });
 
     // Validate that --since is not after --until
-    if let (Some(since_val), Some(until_val)) = (&since, &until) {
-        if since_val > until_val {
-            return Err(Box::new(ArgumentError::InvalidTimeRange(
-                "the --since date/time must not be after the --until date/time. \
+    if let (Some(since_val), Some(until_val)) = (&since, &until)
+        && since_val > until_val
+    {
+        return Err(Box::new(ArgumentError::InvalidTimeRange(
+            "the --since date/time must not be after the --until date/time. \
                  Got reversed range: --since was later than --until. \
                  Hint: swap the values or use a valid date range."
-                    .to_string(),
-            )));
-        }
+                .to_string(),
+        )));
     }
 
     Ok((since, until))

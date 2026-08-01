@@ -15,15 +15,15 @@ use crate::models::Task;
 use crate::models::TimeEntry;
 use crate::models::Workspace;
 use async_trait::async_trait;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use error::ApiError;
 #[cfg(test)]
 use mockall::automock;
 use models::{ResultWithDefaultError, User};
 use reqwest::Client;
-use reqwest::{header, RequestBuilder};
+use reqwest::{RequestBuilder, header};
 use serde::Deserialize;
-use serde::{de, Serialize};
+use serde::{Serialize, de};
 use serde_json::Value;
 
 use super::models::NetworkClient;
@@ -558,7 +558,8 @@ impl V9ApiClient {
         }
 
         let response = self.http_client.get(url.clone()).send().await;
-        let result = match response {
+
+        match response {
             Err(error) => Err(Box::new(ApiError::NetworkWithMessage(error.to_string()))
                 as Box<dyn std::error::Error + Send>),
             Ok(response) => {
@@ -579,9 +580,7 @@ impl V9ApiClient {
                     deserialize_response_body(&body)
                 }
             }
-        };
-
-        result
+        }
     }
 
     fn read_cached_body(&self, url: &str) -> Option<String> {
@@ -592,14 +591,12 @@ impl V9ApiClient {
         let now = chrono::Utc::now().timestamp();
 
         // Skip cache for time entry requests if there was a recent mutation
-        if url.contains("/me/time_entries") {
-            if let Ok(last_mutation) = self.last_time_entry_mutation.lock() {
-                if let Some(last_mutation_time) = *last_mutation {
-                    if now - last_mutation_time < MUTATION_BYPASS_WINDOW_SECONDS {
-                        return None;
-                    }
-                }
-            }
+        if url.contains("/me/time_entries")
+            && let Ok(last_mutation) = self.last_time_entry_mutation.lock()
+            && let Some(last_mutation_time) = *last_mutation
+            && now - last_mutation_time < MUTATION_BYPASS_WINDOW_SECONDS
+        {
+            return None;
         }
 
         // Skip cache for related endpoints if there was a recent mutation affecting them
@@ -1140,18 +1137,18 @@ fn cache_invalidation_for_mutation(base_url: &str, mutation_url: &str) -> CacheI
         };
     }
 
-    if mutation_url.contains("/workspaces/") && mutation_url.contains("/tags") {
-        if let Some(workspace_id) = mutation_url
+    if mutation_url.contains("/workspaces/")
+        && mutation_url.contains("/tags")
+        && let Some(workspace_id) = mutation_url
             .split("/workspaces/")
             .nth(1)
             .and_then(|suffix| suffix.split('/').next())
-        {
-            return CacheInvalidation {
-                exact_urls: vec![format!("{base_url}/workspaces/{workspace_id}/tags")],
-                invalidate_time_entries: false,
-                bypass_related_endpoints: vec![format!("/workspaces/{workspace_id}/tags")],
-            };
-        }
+    {
+        return CacheInvalidation {
+            exact_urls: vec![format!("{base_url}/workspaces/{workspace_id}/tags")],
+            invalidate_time_entries: false,
+            bypass_related_endpoints: vec![format!("/workspaces/{workspace_id}/tags")],
+        };
     }
 
     if mutation_url.contains("/workspaces/") && !mutation_url.contains("/time_entries") {

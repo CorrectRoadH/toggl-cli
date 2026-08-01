@@ -16,10 +16,10 @@ fn time_entries_to_json(entries: &[&TimeEntry]) -> String {
         .iter()
         .map(|entry| {
             let mut value = serde_json::to_value(entry).expect("failed to serialize time entry");
-            if entry.is_running() {
-                if let Some(obj) = value.as_object_mut() {
-                    obj.insert("running".to_string(), serde_json::Value::Bool(true));
-                }
+            if entry.is_running()
+                && let Some(obj) = value.as_object_mut()
+            {
+                obj.insert("running".to_string(), serde_json::Value::Bool(true));
             }
             value
         })

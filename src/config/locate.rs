@@ -1,13 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use base64::{engine::general_purpose, Engine as _};
-use lazy_static::lazy_static;
+use base64::{Engine as _, engine::general_purpose};
+use std::sync::LazyLock;
 
 use crate::{error::ConfigError, models::ResultWithDefaultError};
 
-lazy_static! {
-    pub static ref TRACKED_PATH: Option<PathBuf> = locate_tracked_path().ok();
-}
+pub static TRACKED_PATH: LazyLock<Option<PathBuf>> = LazyLock::new(|| locate_tracked_path().ok());
 
 pub fn locate_config_path() -> ResultWithDefaultError<PathBuf> {
     let config_root = get_config_root();
